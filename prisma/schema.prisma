@@ -1,0 +1,385 @@
+// Prisma Schema for QR Authenticity & Activation System
+// Stack: Next.js + PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  WAREHOUSE
+}
+
+enum ProductStatus {
+  IN_STOCK      // อยู่ในคลัง
+  PENDING_OUT   // รอส่งออก (รออนุมัติ)
+  SHIPPED       // ส่งออกแล้ว
+  ACTIVATED     // ลูกค้าเปิดใช้แล้ว
+  RETURNED      // คืนสินค้า
+}
+
+enum QRTokenStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum OutboundStatus {
+  DRAFT
+  PENDING       // รออนุมัติ
+  APPROVED      // อนุมัติแล้ว
+  REJECTED      // ปฏิเสธ
+}
+
+enum InspectionStatus {
+  OK            // ถูกต้องครบถ้วน
+  DAMAGED       // เสียหาย
+  CLAIM         // เคลม
+  BROKEN        // แตก
+  INCOMPLETE    // ไม่ครบ
+}
+
+// ============================================
+// MASTER DATA TABLES (Dropdowns)
+// ============================================
+
+model ProductCategory {
+  id        Int      @id @default(autoincrement())
+  nameTh    String   @map("name_th")
+  nameEn    String?  @map("name_en")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  products ProductItem[]
+
+  @@map("product_categories")
+}
+
+model Unit {
+  id        Int      @id @default(autoincrement())
+  nameTh    String   @map("name_th")
+  nameEn    String?  @map("name_en")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  grnLines      GRNLine[]
+  outboundLines OutboundLine[]
+
+  @@map("units")
+}
+
+model ShippingMethod {
+  id        Int      @id @default(autoincrement())
+  nameTh    String   @map("name_th")
+  nameEn    String?  @map("name_en")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  outbounds OutboundHeader[]
+
+  @@map("shipping_methods")
+}
+
+model Warehouse {
+  id        Int      @id @default(autoincrement())
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  grnHeaders      GRNHeader[]
+  outboundHeaders OutboundHeader[]
+
+  @@map("warehouses")
+}
+
+// ============================================
+// USER & CLINIC
+// ============================================
+
+model User {
+  id             Int      @id @default(autoincrement())
+  username       String   @unique
+  passwordHash   String   @map("password_hash")
+  displayName    String   @map("display_name")
+  role           UserRole
+  isActive       Boolean  @default(true) @map("is_active")
+  forcePwChange  Boolean  @default(false) @map("force_pw_change")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  grnHeadersCreated      GRNHeader[]      @relation("GRNCreatedBy")
+  grnHeadersApproved     GRNHeader[]      @relation("GRNApprovedBy")
+  grnHeadersRejected     GRNHeader[]      @relation("GRNRejectedBy")
+  outboundsCreated       OutboundHeader[] @relation("OutboundCreatedBy")
+  outboundsApproved      OutboundHeader[] @relation("OutboundApprovedBy")
+  eventLogs              EventLog[]
+
+  @@map("users")
+}
+
+model Clinic {
+  id         Int      @id @default(autoincrement())
+  name       String
+  province   String
+  branchName String?  @map("branch_name")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  products  ProductItem[]
+  outbounds OutboundHeader[]
+
+  @@map("clinics")
+}
+
+// ============================================
+// PRODUCT & QR TOKEN
+// ============================================
+
+model ProductItem {
+  id              Int           @id @default(autoincrement())
+  serial12        String        @unique @db.Char(12)
+  sku             String
+  name            String
+  categoryId      Int           @map("category_id")
+  modelSize       String?       @map("model_size") // รุ่น/ขนาด/ปริมาณบรรจุ
+  lot             String?
+  mfgDate         DateTime?     @map("mfg_date") @db.Date
+  expDate         DateTime?     @map("exp_date") @db.Date
+  status          ProductStatus @default(IN_STOCK)
+  assignedClinicId Int?         @map("assigned_clinic_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  category        ProductCategory @relation(fields: [categoryId], references: [id])
+  assignedClinic  Clinic?         @relation(fields: [assignedClinicId], references: [id])
+  qrTokens        QRToken[]
+  activation      Activation?
+  grnLine         GRNLine?
+  outboundLines   OutboundLine[]
+  scanLogs        ScanLog[]
+  eventLogs       EventLog[]
+
+  @@index([serial12])
+  @@index([status])
+  @@map("product_items")
+}
+
+model QRToken {
+  id            Int           @id @default(autoincrement())
+  productItemId Int           @map("product_item_id")
+  tokenVersion  Int           @default(1) @map("token_version")
+  token         String?       @db.Text // เก็บ encrypted token จริง (optional for migration)
+  tokenHash     String        @map("token_hash") // Hash ของ encrypted token
+  status        QRTokenStatus @default(ACTIVE)
+  issuedAt      DateTime      @default(now()) @map("issued_at")
+  revokedAt     DateTime?     @map("revoked_at")
+  revokeReason  String?       @map("revoke_reason")
+
+  productItem ProductItem @relation(fields: [productItemId], references: [id])
+  scanLogs    ScanLog[]
+
+  @@unique([productItemId, tokenVersion])
+  @@index([tokenHash])
+  @@map("qr_tokens")
+}
+
+// ============================================
+// GRN (Goods Received Note) - รับเข้าคลัง
+// ============================================
+
+model GRNHeader {
+  id                Int       @id @default(autoincrement())
+  grnNo             String    @unique @map("grn_no") // Auto: GRN-2026-000001
+  receivedAt        DateTime  @map("received_at")
+  receivedById      Int       @map("received_by_id") // พนักงานตรวจรับ
+  warehouseId       Int       @map("warehouse_id")
+  poNo              String?   @map("po_no")
+  supplierName      String    @map("supplier_name")
+  deliveryNoteNo    String?   @map("delivery_note_no")
+  supplierAddress   String?   @map("supplier_address")
+  supplierPhone     String?   @map("supplier_phone")
+  supplierContact   String?   @map("supplier_contact") // ชื่อผู้รับ
+  deliveryDocDate   DateTime? @map("delivery_doc_date")
+  approvedById      Int?      @map("approved_by_id")
+  approvedAt        DateTime? @map("approved_at")
+  rejectedById      Int?      @map("rejected_by_id")
+  rejectedAt        DateTime? @map("rejected_at")
+  rejectReason      String?   @map("reject_reason")
+  remarks           String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  receivedBy  User       @relation("GRNCreatedBy", fields: [receivedById], references: [id])
+  approvedBy  User?      @relation("GRNApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy  User?      @relation("GRNRejectedBy", fields: [rejectedById], references: [id])
+  warehouse   Warehouse  @relation(fields: [warehouseId], references: [id])
+  lines       GRNLine[]
+
+  @@map("grn_headers")
+}
+
+model GRNLine {
+  id                Int              @id @default(autoincrement())
+  grnHeaderId       Int              @map("grn_header_id")
+  productItemId     Int              @unique @map("product_item_id") // 1 line = 1 serial
+  sku               String
+  itemName          String           @map("item_name")
+  modelSize         String?          @map("model_size")
+  quantity          Int              @default(1)
+  unitId            Int              @map("unit_id")
+  lot               String?
+  mfgDate           DateTime?        @map("mfg_date") @db.Date
+  expDate           DateTime?        @map("exp_date") @db.Date
+  inspectionStatus  InspectionStatus @default(OK) @map("inspection_status")
+  remarks           String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  grnHeader   GRNHeader   @relation(fields: [grnHeaderId], references: [id])
+  productItem ProductItem @relation(fields: [productItemId], references: [id])
+  unit        Unit        @relation(fields: [unitId], references: [id])
+
+  @@map("grn_lines")
+}
+
+// ============================================
+// OUTBOUND (Delivery Note) - ส่งออก
+// ============================================
+
+model OutboundHeader {
+  id                Int            @id @default(autoincrement())
+  deliveryNoteNo    String         @unique @map("delivery_note_no") // Auto: OUT-2026-000001
+  shippedAt         DateTime?      @map("shipped_at")
+  createdById       Int            @map("created_by_id")
+  warehouseId       Int            @map("warehouse_id")
+  shippingMethodId  Int            @map("shipping_method_id")
+  salesPersonName   String?        @map("sales_person_name")
+  companyContact    String?        @map("company_contact") // ชื่อบริษัท/Line ID/เบอร์โทร/email
+  clinicId          Int            @map("clinic_id")
+  clinicAddress     String?        @map("clinic_address")
+  clinicPhone       String?        @map("clinic_phone")
+  clinicEmail       String?        @map("clinic_email")
+  clinicContactName String?        @map("clinic_contact_name")
+  poNo              String?        @map("po_no")
+  status            OutboundStatus @default(DRAFT)
+  approvedById      Int?           @map("approved_by_id")
+  approvedAt        DateTime?      @map("approved_at")
+  rejectReason      String?        @map("reject_reason")
+  remarks           String?
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  createdBy      User           @relation("OutboundCreatedBy", fields: [createdById], references: [id])
+  approvedBy     User?          @relation("OutboundApprovedBy", fields: [approvedById], references: [id])
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+  shippingMethod ShippingMethod @relation(fields: [shippingMethodId], references: [id])
+  clinic         Clinic         @relation(fields: [clinicId], references: [id])
+  lines          OutboundLine[]
+
+  @@map("outbound_headers")
+}
+
+model OutboundLine {
+  id            Int      @id @default(autoincrement())
+  outboundId    Int      @map("outbound_id")
+  productItemId Int      @map("product_item_id")
+  sku           String
+  itemName      String   @map("item_name")
+  modelSize     String?  @map("model_size")
+  quantity      Int      @default(1)
+  unitId        Int      @map("unit_id")
+  lot           String?
+  expDate       DateTime? @map("exp_date") @db.Date
+  itemStatus    String?  @map("item_status") // สภาพปกติ/มีข้อสังเกต
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  outbound    OutboundHeader @relation(fields: [outboundId], references: [id])
+  productItem ProductItem    @relation(fields: [productItemId], references: [id])
+  unit        Unit           @relation(fields: [unitId], references: [id])
+
+  @@map("outbound_lines")
+}
+
+// ============================================
+// ACTIVATION - ลูกค้าเปิดใช้งาน
+// ============================================
+
+model Activation {
+  id            Int      @id @default(autoincrement())
+  productItemId Int      @unique @map("product_item_id")
+  customerName  String   @map("customer_name")
+  age           Int
+  gender        String   // M/F/Other
+  province      String
+  phone         String?
+  consentAt     DateTime @map("consent_at")
+  policyVersion String   @map("policy_version")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  productItem ProductItem @relation(fields: [productItemId], references: [id])
+
+  @@map("activations")
+}
+
+// ============================================
+// LOGS
+// ============================================
+
+model ScanLog {
+  id            Int      @id @default(autoincrement())
+  productItemId Int      @map("product_item_id")
+  qrTokenId     Int?     @map("qr_token_id")
+  tokenVersion  Int      @map("token_version")
+  result        String   // GENUINE_IN_STOCK, GENUINE_SHIPPED, ACTIVATED, RETURNED, REPRINTED, INVALID_TOKEN, NOT_FOUND, REVOKED
+  ipHash        String?  @map("ip_hash")
+  userAgent     String?  @map("user_agent")
+  scannedAt     DateTime @default(now()) @map("scanned_at")
+
+  productItem ProductItem @relation(fields: [productItemId], references: [id])
+  qrToken     QRToken?    @relation(fields: [qrTokenId], references: [id])
+
+  @@index([scannedAt])
+  @@map("scan_logs")
+}
+
+model EventLog {
+  id            Int      @id @default(autoincrement())
+  eventType     String   @map("event_type") // INBOUND, OUTBOUND, APPROVE, REJECT, REPRINT, RETURN, ACTIVATE
+  productItemId Int?     @map("product_item_id")
+  userId        Int?     @map("user_id")
+  details       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  productItem ProductItem? @relation(fields: [productItemId], references: [id])
+  user        User?        @relation(fields: [userId], references: [id])
+
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("event_logs")
+}
+
+// ============================================
+// SEQUENCE COUNTERS (for auto-running numbers)
+// ============================================
+
+model SequenceCounter {
+  id          Int    @id @default(autoincrement())
+  name        String @unique // SERIAL, GRN, OUTBOUND
+  prefix      String // e.g., "GRN-2026-"
+  currentVal  BigInt @default(0) @map("current_val")
+
+  @@map("sequence_counters")
+}

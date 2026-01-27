@@ -1,0 +1,78 @@
+{
+  "common": {
+    "appName": "QR Authenticity",
+    "login": "เข้าสู่ระบบ",
+    "logout": "ออกจากระบบ",
+    "submit": "ส่ง",
+    "cancel": "ยกเลิก",
+    "save": "บันทึก",
+    "delete": "ลบ",
+    "edit": "แก้ไข",
+    "add": "เพิ่ม",
+    "search": "ค้นหา",
+    "loading": "กำลังโหลด...",
+    "error": "เกิดข้อผิดพลาด",
+    "success": "สำเร็จ",
+    "confirm": "ยืนยัน",
+    "back": "กลับ",
+    "next": "ถัดไป",
+    "previous": "ก่อนหน้า"
+  },
+  "auth": {
+    "username": "ชื่อผู้ใช้",
+    "password": "รหัสผ่าน",
+    "loginTitle": "เข้าสู่ระบบ",
+    "loginButton": "เข้าสู่ระบบ",
+    "loginError": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+    "logoutSuccess": "ออกจากระบบสำเร็จ"
+  },
+  "verify": {
+    "title": "ตรวจสอบสินค้า",
+    "scanning": "กำลังสแกน...",
+    "genuine": "สินค้าของแท้",
+    "fake": "สินค้าไม่ถูกต้อง",
+    "activated": "สินค้าถูกเปิดใช้งานแล้ว",
+    "productInfo": "ข้อมูลสินค้า",
+    "productName": "ชื่อสินค้า",
+    "serialNumber": "หมายเลขซีเรียล",
+    "expiryDate": "วันหมดอายุ",
+    "clinic": "คลินิก",
+    "status": "สถานะ"
+  },
+  "activate": {
+    "title": "เปิดใช้งานสินค้า",
+    "name": "ชื่อ",
+    "age": "อายุ",
+    "gender": "เพศ",
+    "genderMale": "ชาย",
+    "genderFemale": "หญิง",
+    "genderOther": "อื่นๆ",
+    "province": "จังหวัด",
+    "phone": "เบอร์โทรศัพท์ (ไม่บังคับ)",
+    "consent": "ยอมรับเงื่อนไขการใช้งานและยินยอมให้จัดเก็บข้อมูล",
+    "consentRequired": "กรุณายอมรับเงื่อนไข",
+    "activateButton": "เปิดใช้งาน",
+    "alreadyActivated": "สินค้านี้ถูกเปิดใช้งานแล้ว",
+    "activationSuccess": "เปิดใช้งานสำเร็จ"
+  },
+  "admin": {
+    "dashboard": "แดชบอร์ด",
+    "clinics": "คลินิก",
+    "users": "ผู้ใช้งาน",
+    "masterData": "ข้อมูลหลัก",
+    "categories": "หมวดหมู่สินค้า",
+    "units": "หน่วยนับ",
+    "shippingMethods": "วิธีการส่ง"
+  },
+  "warehouse": {
+    "grn": "รับเข้าคลัง",
+    "outbound": "ส่งออก",
+    "reprint": "พิมพ์ใหม่",
+    "return": "รับคืน"
+  },
+  "manager": {
+    "approvalBoard": "รายการรออนุมัติ",
+    "approve": "อนุมัติ",
+    "reject": "ปฏิเสธ"
+  }
+}

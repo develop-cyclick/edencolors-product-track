@@ -1,0 +1,78 @@
+{
+  "common": {
+    "appName": "QR Authenticity",
+    "login": "Login",
+    "logout": "Logout",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous"
+  },
+  "auth": {
+    "username": "Username",
+    "password": "Password",
+    "loginTitle": "Login",
+    "loginButton": "Sign In",
+    "loginError": "Invalid username or password",
+    "logoutSuccess": "Logged out successfully"
+  },
+  "verify": {
+    "title": "Verify Product",
+    "scanning": "Scanning...",
+    "genuine": "Genuine Product",
+    "fake": "Invalid Product",
+    "activated": "Product Already Activated",
+    "productInfo": "Product Information",
+    "productName": "Product Name",
+    "serialNumber": "Serial Number",
+    "expiryDate": "Expiry Date",
+    "clinic": "Clinic",
+    "status": "Status"
+  },
+  "activate": {
+    "title": "Activate Product",
+    "name": "Name",
+    "age": "Age",
+    "gender": "Gender",
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "genderOther": "Other",
+    "province": "Province",
+    "phone": "Phone (Optional)",
+    "consent": "I accept the terms of use and consent to data collection",
+    "consentRequired": "Please accept the terms",
+    "activateButton": "Activate",
+    "alreadyActivated": "This product has already been activated",
+    "activationSuccess": "Activation successful"
+  },
+  "admin": {
+    "dashboard": "Dashboard",
+    "clinics": "Clinics",
+    "users": "Users",
+    "masterData": "Master Data",
+    "categories": "Product Categories",
+    "units": "Units",
+    "shippingMethods": "Shipping Methods"
+  },
+  "warehouse": {
+    "grn": "Goods Received",
+    "outbound": "Outbound",
+    "reprint": "Reprint",
+    "return": "Return"
+  },
+  "manager": {
+    "approvalBoard": "Approval Board",
+    "approve": "Approve",
+    "reject": "Reject"
+  }
+}

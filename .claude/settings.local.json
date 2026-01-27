@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run db:up:*)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npm run db:push:*)",
+      "Bash(npm run db:seed:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(grep:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(Read C:UserssunthAppDataLocalTempclaudeC--Code-Work-ED-edencolorstasksb69aa05.output)",
+      "Bash(WH_TOKEN=\"auth_token=eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjIsInVzZXJuYW1lIjoid2FyZWhvdXNlMSIsInJvbGUiOiJXQVJFSE9VU0UiLCJkaXNwbGF5TmFtZSI6IuC4nuC4meC4seC4geC4h-C4suC4meC4hOC4peC4seC4hyAxIiwiaWF0IjoxNzY5MjIyODg4LCJleHAiOjE3Njk4Mjc2ODh9.LBRjSdtxE3fJXtosWlMLxjzdIs16fheb3jV0FYlRzSM\")",
+      "Bash(npx tsc:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(powershell:*)",
+      "Bash(wmic process where \"name=''node.exe''\" get processid,commandline)",
+      "Bash(tasklist:*)",
+      "Bash(dir \"C:\\\\Code\\\\Work\\\\ED\\\\edencolors\\\\node_modules\\\\@fontsource\\\\sarabun\\\\files\" /b)",
+      "Bash(unzip:*)",
+      "Bash(node:*)",
+      "Bash(npm run lint)",
+      "Bash(ls:*)",
+      "Bash(start test-thai-font.pdf)",
+      "Bash(npx tsx:*)",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__resize_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__wait_for",
+      "Bash(where:*)",
+      "Bash(npx md-to-pdf:*)",
+      "Bash(ipconfig:*)"
+    ]
+  }
+}
