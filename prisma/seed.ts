@@ -159,7 +159,41 @@ async function main() {
   console.log('✅ Sample clinics seeded')
 
   // ============================================
-  // 8. Sequence Counters
+  // 8. Product Masters (ข้อมูลหลักสินค้า)
+  // ============================================
+  const productMasters = [
+    // Filler (categoryId: 1)
+    { sku: 'FIL-001', nameTh: 'Juvederm Ultra Plus XC', nameEn: 'Juvederm Ultra Plus XC', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
+    { sku: 'FIL-002', nameTh: 'Restylane', nameEn: 'Restylane', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
+    { sku: 'FIL-003', nameTh: 'Teosyal RHA', nameEn: 'Teosyal RHA', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
+    { sku: 'FIL-004', nameTh: 'Belotero Balance', nameEn: 'Belotero Balance', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
+    // Meso (categoryId: 2)
+    { sku: 'MES-001', nameTh: 'NCTF 135HA', nameEn: 'NCTF 135HA', categoryId: 2, modelSize: '3ml', defaultUnitId: 1 },
+    { sku: 'MES-002', nameTh: 'Dermaheal SB', nameEn: 'Dermaheal SB', categoryId: 2, modelSize: '5ml', defaultUnitId: 1 },
+    { sku: 'MES-003', nameTh: 'Hyaluronic Acid Meso', nameEn: 'Hyaluronic Acid Meso', categoryId: 2, modelSize: '5ml', defaultUnitId: 3 },
+    // Skincare (categoryId: 3)
+    { sku: 'SKC-001', nameTh: 'Vitamin C Serum', nameEn: 'Vitamin C Serum', categoryId: 3, modelSize: '30ml', defaultUnitId: 3 },
+    { sku: 'SKC-002', nameTh: 'Retinol Cream', nameEn: 'Retinol Cream', categoryId: 3, modelSize: '50g', defaultUnitId: 5 },
+    { sku: 'SKC-003', nameTh: 'Sunscreen SPF50', nameEn: 'Sunscreen SPF50', categoryId: 3, modelSize: '30ml', defaultUnitId: 5 },
+    // Medicine (categoryId: 4)
+    { sku: 'MED-001', nameTh: 'Botulinum Toxin Type A', nameEn: 'Botulinum Toxin Type A', categoryId: 4, modelSize: '100 units', defaultUnitId: 1 },
+    { sku: 'MED-002', nameTh: 'Lidocaine 2%', nameEn: 'Lidocaine 2%', categoryId: 4, modelSize: '20ml', defaultUnitId: 3 },
+    // Medical Device (categoryId: 5)
+    { sku: 'DEV-001', nameTh: 'PDO Thread COG', nameEn: 'PDO Thread COG', categoryId: 5, modelSize: '19G x 100mm', defaultUnitId: 6 },
+    { sku: 'DEV-002', nameTh: 'PDO Thread Mono', nameEn: 'PDO Thread Mono', categoryId: 5, modelSize: '29G x 38mm', defaultUnitId: 6 },
+  ]
+
+  for (const pm of productMasters) {
+    await prisma.productMaster.upsert({
+      where: { sku: pm.sku },
+      update: {},
+      create: pm,
+    })
+  }
+  console.log('✅ Product masters seeded')
+
+  // ============================================
+  // 9. Sequence Counters
   // ============================================
   const year = new Date().getFullYear()
 

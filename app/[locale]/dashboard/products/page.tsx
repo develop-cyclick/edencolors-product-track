@@ -4,131 +4,211 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 
-interface ProductItem {
+interface ProductMaster {
   id: number
-  serial12: string
   sku: string
-  name: string
-  lot: string | null
-  mfgDate: string | null
-  expDate: string | null
-  status: string
+  nameTh: string
+  nameEn: string | null
+  modelSize: string | null
+  description: string | null
+  isActive: boolean
   category: { id: number; nameTh: string; nameEn: string }
-  assignedClinic: { id: number; name: string; province: string } | null
-  grnLine: {
-    id: number
-    unit: { id: number; nameTh: string }
-    grnHeader: { grnNo: string; receivedAt: string }
-  } | null
+  defaultUnit: { id: number; nameTh: string; nameEn: string } | null
+  stats: {
+    total: number
+    inStock: number
+    pendingOut: number
+    shipped: number
+    activated: number
+    returned: number
+  }
 }
 
-interface Pagination {
-  page: number
-  limit: number
-  total: number
-  totalPages: number
+interface Category {
+  id: number
+  nameTh: string
+  nameEn: string
 }
 
-export default function ProductsPage() {
+export default function ProductMasterPage() {
   const params = useParams()
   const locale = params.locale as string
 
-  const [products, setProducts] = useState<ProductItem[]>([])
-  const [pagination, setPagination] = useState<Pagination | null>(null)
+  const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [page, setPage] = useState(1)
-  const [printingItemId, setPrintingItemId] = useState<number | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<ProductMaster | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [userRole, setUserRole] = useState<string>('')
 
-  const fetchProducts = useCallback(async () => {
+  const [formData, setFormData] = useState({
+    sku: '',
+    nameTh: '',
+    nameEn: '',
+    categoryId: '',
+    modelSize: '',
+    description: '',
+    defaultUnitId: '',
+  })
+
+  const [units, setUnits] = useState<{ id: number; nameTh: string; nameEn: string }[]>([])
+
+  const fetchProductMasters = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
         ...(search && { search }),
-        ...(statusFilter && { status: statusFilter }),
+        ...(categoryFilter && { categoryId: categoryFilter }),
       })
-      const res = await fetch(`/api/warehouse/products?${params}`)
+      const res = await fetch(`/api/admin/masters/products?${params}`)
       const data = await res.json()
       if (data.success && data.data) {
-        setProducts(data.data.items || [])
-        setPagination(data.data.pagination || null)
+        setProductMasters(data.data.productMasters || [])
       }
     } catch (error) {
-      console.error('Failed to fetch products:', error)
+      console.error('Failed to fetch product masters:', error)
     } finally {
       setLoading(false)
     }
-  }, [page, search, statusFilter])
+  }, [search, categoryFilter])
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/masters/categories')
+      const data = await res.json()
+      if (data.success && data.data) {
+        setCategories(data.data.categories || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+    }
+  }, [])
+
+  const fetchUnits = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/masters/units')
+      const data = await res.json()
+      if (data.success && data.data) {
+        setUnits(data.data.units || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch units:', error)
+    }
+  }, [])
+
+  const fetchUserRole = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const data = await res.json()
+      if (data.success && data.data?.user) {
+        setUserRole(data.data.user.role)
+      }
+    } catch (error) {
+      console.error('Failed to fetch user role:', error)
+    }
+  }, [])
 
   useEffect(() => {
-    fetchProducts()
-  }, [fetchProducts])
+    fetchProductMasters()
+    fetchCategories()
+    fetchUnits()
+    fetchUserRole()
+  }, [fetchProductMasters, fetchCategories, fetchUnits, fetchUserRole])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    setPage(1)
-    fetchProducts()
+    fetchProductMasters()
   }
 
-  const handlePrintSingleLabel = async (productItemId: number, serial: string) => {
-    setPrintingItemId(productItemId)
+  const openCreateModal = () => {
+    setEditingItem(null)
+    setFormData({
+      sku: '',
+      nameTh: '',
+      nameEn: '',
+      categoryId: '',
+      modelSize: '',
+      description: '',
+      defaultUnitId: '',
+    })
+    setShowModal(true)
+  }
+
+  const openEditModal = (pm: ProductMaster) => {
+    setEditingItem(pm)
+    setFormData({
+      sku: pm.sku,
+      nameTh: pm.nameTh,
+      nameEn: pm.nameEn || '',
+      categoryId: pm.category.id.toString(),
+      modelSize: pm.modelSize || '',
+      description: pm.description || '',
+      defaultUnitId: pm.defaultUnit?.id.toString() || '',
+    })
+    setShowModal(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setActionLoading(true)
+
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
+      const method = editingItem ? 'PATCH' : 'POST'
+      const body = editingItem
+        ? { id: editingItem.id, ...formData, categoryId: parseInt(formData.categoryId), defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null }
+        : { ...formData, categoryId: parseInt(formData.categoryId), defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null }
+
+      const res = await fetch('/api/admin/masters/products', {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds: [productItemId], layout: 'grid' }),
+        body: JSON.stringify(body),
       })
 
-      if (!res.ok) {
-        const data = await res.json()
-        alert(`Error: ${data.error || 'Failed to generate label'}`)
-        return
+      const data = await res.json()
+      if (data.success) {
+        setShowModal(false)
+        fetchProductMasters()
+      } else {
+        alert(data.error || 'Failed to save')
       }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `label-${serial}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch {
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF')
+    } catch (error) {
+      console.error('Submit error:', error)
+      alert('Failed to save')
     } finally {
-      setPrintingItemId(null)
+      setActionLoading(false)
     }
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+  const handleDelete = async (pm: ProductMaster) => {
+    const confirmMsg = locale === 'th'
+      ? `ต้องการลบ "${pm.nameTh}" หรือไม่?`
+      : `Delete "${pm.nameTh}"?`
+
+    if (!confirm(confirmMsg)) return
+
+    try {
+      const res = await fetch('/api/admin/masters/products', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pm.id }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        fetchProductMasters()
+      } else {
+        alert(data.error || 'Failed to delete')
+      }
+    } catch (error) {
+      console.error('Delete error:', error)
+      alert('Failed to delete')
+    }
   }
 
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
-      IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'ในคลัง', labelEn: 'In Stock' },
-      PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending Out' },
-      SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
-      ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'คืนสินค้า', labelEn: 'Returned' },
-    }
-    const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${badge.bg}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-        {locale === 'th' ? badge.label : badge.labelEn}
-      </span>
-    )
-  }
+  const isAdmin = userRole === 'ADMIN'
 
   return (
     <div className="space-y-6">
@@ -136,12 +216,23 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">
-            {locale === 'th' ? 'สินค้าในคลัง' : 'Products in Stock'}
+            {locale === 'th' ? 'รายการสินค้า' : 'Product Catalog'}
           </h1>
           <p className="text-[var(--color-foreground-muted)] mt-1">
-            {locale === 'th' ? 'รายการสินค้าทั้งหมดในระบบ' : 'All products in the system'}
+            {locale === 'th' ? 'จัดการข้อมูลหลักสินค้าในระบบ' : 'Manage product master data'}
           </p>
         </div>
+        {isAdmin && (
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] transition-all duration-200"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {locale === 'th' ? 'เพิ่มสินค้าใหม่' : 'Add Product'}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -156,26 +247,23 @@ export default function ProductsPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อ, Lot...' : 'Search Serial, SKU, Name, Lot...'}
+                placeholder={locale === 'th' ? 'ค้นหา SKU, ชื่อสินค้า...' : 'Search SKU, Name...'}
                 className="w-full pl-10 pr-4 py-2.5 border border-[var(--color-beige)] rounded-xl focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)] transition-all bg-[var(--color-off-white)]"
               />
             </div>
           </div>
           <div className="sm:w-48">
             <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setPage(1)
-              }}
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
               className="w-full px-4 py-2.5 border border-[var(--color-beige)] rounded-xl focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)] transition-all bg-[var(--color-off-white)]"
             >
-              <option value="">{locale === 'th' ? 'ทุกสถานะ' : 'All Status'}</option>
-              <option value="IN_STOCK">{locale === 'th' ? 'ในคลัง' : 'In Stock'}</option>
-              <option value="PENDING_OUT">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</option>
-              <option value="SHIPPED">{locale === 'th' ? 'ส่งออกแล้ว' : 'Shipped'}</option>
-              <option value="ACTIVATED">{locale === 'th' ? 'เปิดใช้งานแล้ว' : 'Activated'}</option>
-              <option value="RETURNED">{locale === 'th' ? 'คืนสินค้า' : 'Returned'}</option>
+              <option value="">{locale === 'th' ? 'ทุกหมวดหมู่' : 'All Categories'}</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {locale === 'th' ? cat.nameTh : cat.nameEn}
+                </option>
+              ))}
             </select>
           </div>
           <button
@@ -187,7 +275,7 @@ export default function ProductsPage() {
         </form>
       </div>
 
-      {/* Products Table */}
+      {/* Product Masters Grid */}
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-64">
@@ -196,7 +284,7 @@ export default function ProductsPage() {
               <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
             </div>
           </div>
-        ) : products.length === 0 ? (
+        ) : productMasters.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-beige)]/50 flex items-center justify-center">
               <svg className="w-8 h-8 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,116 +294,259 @@ export default function ProductsPage() {
             <p className="text-[var(--color-foreground-muted)]">
               {locale === 'th' ? 'ไม่พบสินค้า' : 'No products found'}
             </p>
+            {isAdmin && (
+              <button
+                onClick={openCreateModal}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                {locale === 'th' ? 'เพิ่มสินค้าใหม่' : 'Add first product'}
+              </button>
+            )}
           </div>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial</th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">SKU</th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'ชื่อสินค้า' : 'Name'}
-                    </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'หมวดหมู่' : 'Category'}
-                    </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Lot</th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">EXP</th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'สถานะ' : 'Status'}
-                    </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'คลินิก' : 'Clinic'}
-                    </th>
-                    <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'พิมพ์ QR' : 'Print QR'}
-                    </th>
-                    <th className="px-5 py-4"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-beige)]">
-                  {products.map((product) => (
-                    <tr key={product.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
-                      <td className="px-5 py-4">
-                        <span className="font-mono text-sm font-medium text-[var(--color-charcoal)]">
-                          {product.serial12}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">SKU</th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}
+                  </th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'หมวดหมู่' : 'Category'}
+                  </th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'รุ่น/ขนาด' : 'Model/Size'}
+                  </th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'หน่วย' : 'Unit'}
+                  </th>
+                  <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ในคลัง' : 'In Stock'}
+                  </th>
+                  <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ทั้งหมด' : 'Total'}
+                  </th>
+                  <th className="px-5 py-4"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-beige)]">
+                {productMasters.map((pm) => (
+                  <tr key={pm.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                    <td className="px-5 py-4">
+                      <span className="font-mono text-sm font-medium text-[var(--color-charcoal)]">{pm.sku}</span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-[var(--color-charcoal)]">
+                        {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)}
+                      </div>
+                      {!pm.isActive && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 mt-1">
+                          {locale === 'th' ? 'ไม่ใช้งาน' : 'Inactive'}
                         </span>
-                      </td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-charcoal)]">{product.sku}</td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-charcoal)]">{product.name}</td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
-                        {locale === 'th' ? product.category.nameTh : product.category.nameEn}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{product.lot || '-'}</td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{formatDate(product.expDate)}</td>
-                      <td className="px-5 py-4">{getStatusBadge(product.status)}</td>
-                      <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
-                        {product.assignedClinic ? product.assignedClinic.name : '-'}
-                      </td>
-                      <td className="px-5 py-4 text-center">
-                        <button
-                          onClick={() => handlePrintSingleLabel(product.id, product.serial12)}
-                          disabled={printingItemId === product.id}
-                          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-gold)] hover:text-white disabled:opacity-50 transition-all duration-200"
-                          title={locale === 'th' ? 'พิมพ์ QR Label' : 'Print QR Label'}
-                        >
-                          {printingItemId === product.id ? (
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                            </svg>
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-5 py-4">
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
+                      {locale === 'th' ? pm.category.nameTh : pm.category.nameEn}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
+                      {pm.modelSize || '-'}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
+                      {pm.defaultUnit ? (locale === 'th' ? pm.defaultUnit.nameTh : pm.defaultUnit.nameEn) : <span className="text-red-500">-</span>}
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <span className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-1 rounded-full text-sm font-medium ${
+                        pm.stats.inStock > 0
+                          ? 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {pm.stats.inStock}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <span className="text-sm text-[var(--color-foreground-muted)]">{pm.stats.total}</span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-end gap-2">
                         <Link
-                          href={`/${locale}/dashboard/products/${product.id}`}
-                          className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors"
+                          href={`/${locale}/dashboard/products/${pm.id}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg font-medium transition-colors"
                         >
-                          {locale === 'th' ? 'ดูรายละเอียด' : 'View'}
+                          {locale === 'th' ? 'ดู Serial' : 'View Items'}
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-5 py-4 border-t border-[var(--color-beige)] bg-[var(--color-off-white)]">
-                <p className="text-sm text-[var(--color-foreground-muted)]">
-                  {locale === 'th'
-                    ? `แสดง ${(pagination.page - 1) * pagination.limit + 1} - ${Math.min(pagination.page * pagination.limit, pagination.total)} จาก ${pagination.total} รายการ`
-                    : `Showing ${(pagination.page - 1) * pagination.limit + 1} - ${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total} items`}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                    disabled={page === pagination.totalPages}
-                    className="px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {locale === 'th' ? 'ถัดไป' : 'Next'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(pm)}
+                              className="p-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] hover:bg-[var(--color-off-white)] rounded-lg transition-colors"
+                              title={locale === 'th' ? 'แก้ไข' : 'Edit'}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(pm)}
+                              className="p-2 text-[var(--color-foreground-muted)] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title={locale === 'th' ? 'ลบ' : 'Delete'}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowModal(false)} />
+            <div className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+              <h3 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4">
+                {editingItem
+                  ? (locale === 'th' ? 'แก้ไขสินค้า' : 'Edit Product')
+                  : (locale === 'th' ? 'เพิ่มสินค้าใหม่' : 'Add New Product')}
+              </h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      SKU <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.sku}
+                      onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                      required
+                      placeholder="e.g., FIL-001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'หมวดหมู่' : 'Category'} <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.categoryId}
+                      onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                      required
+                    >
+                      <option value="">{locale === 'th' ? 'เลือกหมวดหมู่' : 'Select category'}</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {locale === 'th' ? cat.nameTh : cat.nameEn}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'ชื่อสินค้า (ไทย)' : 'Product Name (Thai)'} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.nameTh}
+                    onChange={(e) => setFormData({ ...formData, nameTh: e.target.value })}
+                    className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'ชื่อสินค้า (อังกฤษ)' : 'Product Name (English)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.nameEn}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'รุ่น/ขนาด' : 'Model/Size'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.modelSize}
+                      onChange={(e) => setFormData({ ...formData, modelSize: e.target.value })}
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                      placeholder="e.g., 1ml, 50g"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'หน่วย' : 'Unit'} <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.defaultUnitId}
+                      onChange={(e) => setFormData({ ...formData, defaultUnitId: e.target.value })}
+                      required
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                    >
+                      <option value="" disabled>{locale === 'th' ? '-- เลือกหน่วย --' : '-- Select unit --'}</option>
+                      {units.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {locale === 'th' ? unit.nameTh : unit.nameEn}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'รายละเอียด' : 'Description'}
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 text-[var(--color-charcoal)] bg-[var(--color-off-white)] hover:bg-[var(--color-beige)] rounded-lg transition-colors"
+                  >
+                    {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="px-4 py-2 bg-[var(--color-gold)] text-white rounded-lg hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-colors"
+                  >
+                    {actionLoading
+                      ? (locale === 'th' ? 'กำลังบันทึก...' : 'Saving...')
+                      : (locale === 'th' ? 'บันทึก' : 'Save')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

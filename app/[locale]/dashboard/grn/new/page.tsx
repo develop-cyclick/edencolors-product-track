@@ -4,10 +4,16 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 
-interface Category {
+interface ProductMaster {
   id: number
+  sku: string
   nameTh: string
   nameEn: string | null
+  modelSize: string | null
+  categoryId: number
+  category: { id: number; nameTh: string; nameEn: string | null }
+  defaultUnitId: number | null
+  defaultUnit: { id: number; nameTh: string; nameEn: string | null } | null
 }
 
 interface Unit {
@@ -23,10 +29,8 @@ interface Warehouse {
 
 interface LineItem {
   id: string
-  sku: string
-  itemName: string
-  categoryId: number
-  modelSize: string
+  productMasterId: number
+  productMaster: ProductMaster | null  // Store selected product info
   quantity: number
   unitId: number
   lot: string
@@ -42,7 +46,7 @@ export default function NewGRNPage() {
   const locale = params.locale as string
 
   const [loading, setLoading] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
   const [units, setUnits] = useState<Unit[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
 
@@ -61,10 +65,8 @@ export default function NewGRNPage() {
   const [lines, setLines] = useState<LineItem[]>([
     {
       id: crypto.randomUUID(),
-      sku: '',
-      itemName: '',
-      categoryId: 0,
-      modelSize: '',
+      productMasterId: 0,
+      productMaster: null,
       quantity: 1,
       unitId: 0,
       lot: '',
@@ -78,11 +80,11 @@ export default function NewGRNPage() {
   useEffect(() => {
     // Fetch master data
     Promise.all([
-      fetch('/api/admin/masters/categories').then((r) => r.json()),
+      fetch('/api/admin/masters/products').then((r) => r.json()),
       fetch('/api/admin/masters/units').then((r) => r.json()),
       fetch('/api/admin/masters/warehouses').then((r) => r.json()),
-    ]).then(([catRes, unitRes, whRes]) => {
-      if (catRes.success && catRes.data?.categories) setCategories(catRes.data.categories)
+    ]).then(([pmRes, unitRes, whRes]) => {
+      if (pmRes.success && pmRes.data?.productMasters) setProductMasters(pmRes.data.productMasters)
       if (unitRes.success && unitRes.data?.units) setUnits(unitRes.data.units)
       if (whRes.success && whRes.data?.warehouses) {
         setWarehouses(whRes.data.warehouses)
@@ -96,12 +98,10 @@ export default function NewGRNPage() {
       ...lines,
       {
         id: crypto.randomUUID(),
-        sku: '',
-        itemName: '',
-        categoryId: categories[0]?.id || 0,
-        modelSize: '',
+        productMasterId: 0,
+        productMaster: null,
         quantity: 1,
-        unitId: units[0]?.id || 0,
+        unitId: 0,
         lot: '',
         mfgDate: '',
         expDate: '',
@@ -121,8 +121,39 @@ export default function NewGRNPage() {
     setLines(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)))
   }
 
+  // Handle ProductMaster selection - auto-fill unit
+  const handleProductMasterChange = (lineId: string, productMasterId: number) => {
+    const pm = productMasters.find((p) => p.id === productMasterId) || null
+    setLines(lines.map((l) => {
+      if (l.id === lineId) {
+        return {
+          ...l,
+          productMasterId,
+          productMaster: pm,
+          unitId: pm?.defaultUnitId || l.unitId || units[0]?.id || 0,
+        }
+      }
+      return l
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate all lines have ProductMaster selected
+    const invalidLines = lines.filter((l) => !l.productMasterId)
+    if (invalidLines.length > 0) {
+      alert(locale === 'th' ? 'กรุณาเลือกสินค้าให้ครบทุกรายการ' : 'Please select product for all lines')
+      return
+    }
+
+    // Validate all selected ProductMasters have unit defined
+    const noUnitLines = lines.filter((l) => !l.productMaster?.defaultUnitId)
+    if (noUnitLines.length > 0) {
+      alert(locale === 'th' ? 'สินค้าบางรายการยังไม่มีการกำหนดหน่วย กรุณาไปกำหนดที่หน้าจัดการสินค้าก่อน' : 'Some products have no unit defined. Please set unit in product management first.')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -141,10 +172,7 @@ export default function NewGRNPage() {
           deliveryDocDate: deliveryDocDate || null,
           remarks: remarks || null,
           lines: lines.map((l) => ({
-            sku: l.sku,
-            itemName: l.itemName,
-            categoryId: l.categoryId,
-            modelSize: l.modelSize || null,
+            productMasterId: l.productMasterId,
             quantity: l.quantity,
             unitId: l.unitId,
             lot: l.lot || null,
@@ -379,44 +407,23 @@ export default function NewGRNPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">SKU <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={line.sku}
-                      onChange={(e) => updateLine(line.id, 'sku', e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
-                    />
-                  </div>
-
-                  <div>
+                  {/* Product Master Dropdown - spans 2 columns */}
+                  <div className="lg:col-span-2">
                     <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                      {locale === 'th' ? 'ชื่อสินค้า' : 'Item Name'} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={line.itemName}
-                      onChange={(e) => updateLine(line.id, 'itemName', e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                      {locale === 'th' ? 'หมวดหมู่' : 'Category'} <span className="text-red-500">*</span>
+                      {locale === 'th' ? 'เลือกสินค้า' : 'Select Product'} <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <select
-                        value={line.categoryId}
-                        onChange={(e) => updateLine(line.id, 'categoryId', parseInt(e.target.value))}
+                        value={line.productMasterId}
+                        onChange={(e) => handleProductMasterChange(line.id, parseInt(e.target.value))}
                         required
                         className="appearance-none w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all pr-8"
                       >
-                        <option value={0} disabled>{locale === 'th' ? '-- เลือก --' : '-- Select --'}</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>{c.nameTh}</option>
+                        <option value={0} disabled>{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select Product --'}</option>
+                        {productMasters.map((pm) => (
+                          <option key={pm.id} value={pm.id} disabled={!pm.defaultUnitId}>
+                            {pm.sku} - {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)} {pm.modelSize ? `(${pm.modelSize})` : ''} {!pm.defaultUnitId ? (locale === 'th' ? '[ไม่มีหน่วย]' : '[No unit]') : ''}
+                          </option>
                         ))}
                       </select>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
@@ -425,18 +432,13 @@ export default function NewGRNPage() {
                         </svg>
                       </div>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                      {locale === 'th' ? 'รุ่น/ขนาด' : 'Model/Size'}
-                    </label>
-                    <input
-                      type="text"
-                      value={line.modelSize}
-                      onChange={(e) => updateLine(line.id, 'modelSize', e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
-                    />
+                    {/* Show selected product info */}
+                    {line.productMaster && (
+                      <div className="mt-1.5 text-xs text-[var(--color-foreground-muted)]">
+                        {locale === 'th' ? 'หมวดหมู่' : 'Category'}: {line.productMaster.category?.nameTh || '-'}
+                        {line.productMaster.modelSize && ` | ${locale === 'th' ? 'ขนาด' : 'Size'}: ${line.productMaster.modelSize}`}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -455,25 +457,13 @@ export default function NewGRNPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                      {locale === 'th' ? 'หน่วย' : 'Unit'} <span className="text-red-500">*</span>
+                      {locale === 'th' ? 'หน่วย' : 'Unit'}
                     </label>
-                    <div className="relative">
-                      <select
-                        value={line.unitId}
-                        onChange={(e) => updateLine(line.id, 'unitId', parseInt(e.target.value))}
-                        required
-                        className="appearance-none w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all pr-8"
-                      >
-                        <option value={0} disabled>{locale === 'th' ? '-- เลือก --' : '-- Select --'}</option>
-                        {units.map((u) => (
-                          <option key={u.id} value={u.id}>{u.nameTh}</option>
-                        ))}
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
+                    <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-[var(--color-beige)] rounded-lg text-[var(--color-charcoal)]">
+                      {line.productMaster?.defaultUnit
+                        ? (locale === 'th' ? line.productMaster.defaultUnit.nameTh : line.productMaster.defaultUnit.nameEn)
+                        : <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลือกสินค้าก่อน' : 'Select product first'}</span>
+                      }
                     </div>
                   </div>
 

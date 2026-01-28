@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -21,20 +21,41 @@ interface Warehouse {
   name: string
 }
 
-interface Product {
+interface ProductMaster {
   id: number
+  sku: string
+  nameTh: string
+  nameEn: string | null
+  modelSize: string | null
+  category: { nameTh: string; nameEn: string | null }
+  defaultUnit: { id: number; nameTh: string; nameEn: string | null } | null
+  stats: {
+    inStock: number
+  }
+}
+
+interface Reservation {
+  productMasterId: number
+  quantity: number
+  productMaster?: ProductMaster | null
+}
+
+interface LineItem {
+  id: string
+  productMasterId: number
+  productMaster: ProductMaster | null
+  quantity: number
+}
+
+interface SelectedProduct {
+  productItemId: number
   serial12: string
   sku: string
   name: string
   modelSize: string | null
   lot: string | null
   expDate: string | null
-  status: string
-  category: { nameTh: string }
-  grnLine: {
-    unitId: number
-    unit: { id: number; nameTh: string }
-  } | null
+  unitId: number
 }
 
 export default function NewOutboundPage() {
@@ -46,9 +67,13 @@ export default function NewOutboundPage() {
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [availableProducts, setAvailableProducts] = useState<Product[]>([])
-  const [productSearch, setProductSearch] = useState('')
-  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
+  const [clinicReservations, setClinicReservations] = useState<Reservation[]>([])
+
+  // Clinic search dropdown state
+  const [clinicSearch, setClinicSearch] = useState('')
+  const [clinicDropdownOpen, setClinicDropdownOpen] = useState(false)
+  const clinicDropdownRef = useRef<HTMLDivElement>(null)
 
   // Form state
   const [warehouseId, setWarehouseId] = useState<number>(0)
@@ -63,7 +88,13 @@ export default function NewOutboundPage() {
   const [poNo, setPoNo] = useState('')
   const [remarks, setRemarks] = useState('')
 
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
+  // Line items - select by SKU + quantity
+  const [lines, setLines] = useState<LineItem[]>([
+    { id: crypto.randomUUID(), productMasterId: 0, productMaster: null, quantity: 1 }
+  ])
+
+  // Selected products (FIFO result from API)
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([])
 
   useEffect(() => {
     // Fetch master data
@@ -71,7 +102,8 @@ export default function NewOutboundPage() {
       fetch('/api/admin/clinics').then((r) => r.json()),
       fetch('/api/admin/masters/shipping-methods').then((r) => r.json()),
       fetch('/api/admin/masters/warehouses').then((r) => r.json()),
-    ]).then(([clinicRes, shippingRes, whRes]) => {
+      fetch('/api/admin/masters/products?activeOnly=true').then((r) => r.json()),
+    ]).then(([clinicRes, shippingRes, whRes, pmRes]) => {
       if (clinicRes.success && clinicRes.data?.clinics) setClinics(clinicRes.data.clinics)
       if (shippingRes.success && shippingRes.data?.shippingMethods) {
         setShippingMethods(shippingRes.data.shippingMethods)
@@ -80,6 +112,9 @@ export default function NewOutboundPage() {
       if (whRes.success && whRes.data?.warehouses) {
         setWarehouses(whRes.data.warehouses)
         if (whRes.data.warehouses.length > 0) setWarehouseId(whRes.data.warehouses[0].id)
+      }
+      if (pmRes.success && pmRes.data?.productMasters) {
+        setProductMasters(pmRes.data.productMasters)
       }
     })
   }, [])
@@ -92,62 +127,108 @@ export default function NewOutboundPage() {
     }
   }, [clinicId, clinics])
 
-  // Load available products initially
+  // Fetch reservations when clinic changes
   useEffect(() => {
-    const loadInitialProducts = async () => {
-      setLoadingProducts(true)
-      try {
-        const res = await fetch('/api/warehouse/products?available=true&limit=50')
-        const data = await res.json()
-        if (data.success && data.data?.items) {
-          setAvailableProducts(data.data.items)
-        }
-      } catch (error) {
-        console.error('Failed to load products:', error)
-      } finally {
-        setLoadingProducts(false)
+    if (clinicId) {
+      fetch(`/api/admin/clinics/${clinicId}/reservations`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && res.data?.reservations) {
+            setClinicReservations(res.data.reservations)
+          } else {
+            setClinicReservations([])
+          }
+        })
+        .catch(() => setClinicReservations([]))
+    } else {
+      setClinicReservations([])
+    }
+  }, [clinicId])
+
+  // Helper to get reservation quantity for a ProductMaster
+  const getReservationQty = (productMasterId: number) => {
+    const reservation = clinicReservations.find((r) => r.productMasterId === productMasterId)
+    return reservation?.quantity || 0
+  }
+
+  // Close clinic dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clinicDropdownRef.current && !clinicDropdownRef.current.contains(event.target as Node)) {
+        setClinicDropdownOpen(false)
       }
     }
-    loadInitialProducts()
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const searchProducts = async () => {
-    setLoadingProducts(true)
-    try {
-      const params = new URLSearchParams({
-        available: 'true',
-        limit: '50',
-        ...(productSearch.trim() && { search: productSearch.trim() }),
-      })
-      const res = await fetch(`/api/warehouse/products?${params}`)
-      const data = await res.json()
-      if (data.success && data.data?.items) {
-        // Filter out already selected products
-        const selectedIds = new Set(selectedProducts.map((p) => p.id))
-        setAvailableProducts(data.data.items.filter((p: Product) => !selectedIds.has(p.id)))
-      }
-    } catch (error) {
-      console.error('Failed to search products:', error)
-    } finally {
-      setLoadingProducts(false)
+  // Filter clinics based on search
+  const filteredClinics = clinics.filter((c) => {
+    const searchLower = clinicSearch.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(searchLower) ||
+      c.province.toLowerCase().includes(searchLower) ||
+      (c.branchName && c.branchName.toLowerCase().includes(searchLower))
+    )
+  })
+
+  // Get selected clinic display text
+  const selectedClinic = clinics.find((c) => c.id === clinicId)
+  const clinicDisplayText = selectedClinic
+    ? `${selectedClinic.name} (${selectedClinic.province})`
+    : ''
+
+  const addLine = () => {
+    setLines([
+      ...lines,
+      { id: crypto.randomUUID(), productMasterId: 0, productMaster: null, quantity: 1 }
+    ])
+  }
+
+  const removeLine = (id: string) => {
+    if (lines.length > 1) {
+      setLines(lines.filter((l) => l.id !== id))
     }
   }
 
-  const addProduct = (product: Product) => {
-    setSelectedProducts([...selectedProducts, product])
-    setAvailableProducts(availableProducts.filter((p) => p.id !== product.id))
+  const updateLine = (id: string, field: string, value: number | ProductMaster | null) => {
+    setLines(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)))
   }
 
-  const removeProduct = (productId: number) => {
-    setSelectedProducts(selectedProducts.filter((p) => p.id !== productId))
+  const handleProductMasterChange = (lineId: string, productMasterId: number) => {
+    const pm = productMasters.find((p) => p.id === productMasterId) || null
+    setLines(lines.map((l) => {
+      if (l.id === lineId) {
+        return {
+          ...l,
+          productMasterId,
+          productMaster: pm,
+          // Reset quantity to 1 or max available
+          quantity: Math.min(l.quantity, pm?.stats.inStock || 1),
+        }
+      }
+      return l
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (selectedProducts.length === 0) {
-      alert(locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product')
+    // Validate lines
+    const invalidLines = lines.filter((l) => !l.productMasterId || l.quantity < 1)
+    if (invalidLines.length > 0) {
+      alert(locale === 'th' ? 'กรุณาเลือกสินค้าและระบุจำนวนให้ครบทุกรายการ' : 'Please select product and quantity for all lines')
       return
+    }
+
+    // Check stock availability
+    for (const line of lines) {
+      if (line.productMaster && line.quantity > line.productMaster.stats.inStock) {
+        alert(locale === 'th'
+          ? `สินค้า ${line.productMaster.sku} มีในคลังไม่เพียงพอ (ต้องการ ${line.quantity}, มี ${line.productMaster.stats.inStock})`
+          : `Insufficient stock for ${line.productMaster.sku} (need ${line.quantity}, have ${line.productMaster.stats.inStock})`)
+        return
+      }
     }
 
     if (!clinicId) {
@@ -173,14 +254,10 @@ export default function NewOutboundPage() {
           clinicContactName: clinicContactName || null,
           poNo: poNo || null,
           remarks: remarks || null,
-          lines: selectedProducts.map((p) => ({
-            productItemId: p.id,
-            sku: p.sku,
-            itemName: p.name,
-            modelSize: p.modelSize,
-            unitId: p.grnLine?.unitId || 1,
-            lot: p.lot,
-            expDate: p.expDate,
+          // Send productMasterId + quantity, API will do FIFO selection
+          linesByProductMaster: lines.map((l) => ({
+            productMasterId: l.productMasterId,
+            quantity: l.quantity,
           })),
         }),
       })
@@ -207,6 +284,9 @@ export default function NewOutboundPage() {
   const labelClass = "block text-sm font-medium text-[var(--color-charcoal)] mb-1.5"
   const selectClass = "appearance-none w-full px-4 py-2.5 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] pr-10"
 
+  // Calculate total items
+  const totalItems = lines.reduce((sum, l) => sum + (l.productMasterId ? l.quantity : 0), 0)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -224,7 +304,7 @@ export default function NewOutboundPage() {
           {locale === 'th' ? 'สร้างใบส่งสินค้าใหม่' : 'Create New Outbound'}
         </h1>
         <p className="text-[var(--color-foreground-muted)] mt-1">
-          {locale === 'th' ? 'กรอกข้อมูลการส่งสินค้าออกจากคลัง' : 'Fill in outbound delivery information'}
+          {locale === 'th' ? 'เลือกสินค้าตาม SKU และจำนวน ระบบจะเลือก Serial ตามหลัก FIFO อัตโนมัติ' : 'Select products by SKU and quantity. System will auto-select serials using FIFO.'}
         </p>
       </div>
 
@@ -288,25 +368,66 @@ export default function NewOutboundPage() {
               <label className={labelClass}>
                 {locale === 'th' ? 'คลินิก/ลูกค้า' : 'Clinic'} <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <select
-                  value={clinicId}
-                  onChange={(e) => setClinicId(parseInt(e.target.value))}
-                  required
-                  className={selectClass}
+              <div className="relative" ref={clinicDropdownRef}>
+                {/* Selected value / Search input */}
+                <div
+                  className={`${selectClass} cursor-pointer flex items-center`}
+                  onClick={() => setClinicDropdownOpen(!clinicDropdownOpen)}
                 >
-                  <option value={0} disabled>{locale === 'th' ? '-- เลือกคลินิก --' : '-- Select --'}</option>
-                  {clinics.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.province})
-                    </option>
-                  ))}
-                </select>
+                  {clinicDropdownOpen ? (
+                    <input
+                      type="text"
+                      value={clinicSearch}
+                      onChange={(e) => setClinicSearch(e.target.value)}
+                      placeholder={locale === 'th' ? 'พิมพ์ชื่อคลินิก...' : 'Type clinic name...'}
+                      className="w-full bg-transparent outline-none"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className={clinicId ? 'text-[var(--color-charcoal)]' : 'text-[var(--color-foreground-muted)]'}>
+                      {clinicDisplayText || (locale === 'th' ? '-- เลือกคลินิก --' : '-- Select --')}
+                    </span>
+                  )}
+                </div>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-5 h-5 transition-transform ${clinicDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
+
+                {/* Dropdown list */}
+                {clinicDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-[var(--color-beige)] rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {filteredClinics.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-[var(--color-foreground-muted)]">
+                        {locale === 'th' ? 'ไม่พบคลินิก' : 'No clinics found'}
+                      </div>
+                    ) : (
+                      filteredClinics.map((c) => (
+                        <div
+                          key={c.id}
+                          className={`px-4 py-2.5 text-sm cursor-pointer hover:bg-[var(--color-off-white)] transition-colors ${
+                            c.id === clinicId ? 'bg-[var(--color-gold)]/10 text-[var(--color-gold-dark)]' : 'text-[var(--color-charcoal)]'
+                          }`}
+                          onClick={() => {
+                            setClinicId(c.id)
+                            setClinicSearch('')
+                            setClinicDropdownOpen(false)
+                          }}
+                        >
+                          <div className="font-medium">{c.name}</div>
+                          <div className="text-xs text-[var(--color-foreground-muted)]">
+                            {c.province} {c.branchName && `• ${c.branchName}`}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Hidden input for form validation */}
+                <input type="hidden" name="clinicId" value={clinicId} required />
               </div>
             </div>
 
@@ -405,172 +526,182 @@ export default function NewOutboundPage() {
               />
             </div>
           </div>
-        </div>
 
-        {/* Product Selection */}
-        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6 mb-6">
-          <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-5">
-            {locale === 'th' ? 'เลือกสินค้า' : 'Select Products'}
-          </h2>
-
-          {/* Search */}
-          <div className="flex gap-3 mb-5">
-            <div className="relative flex-1">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-foreground-muted)]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchProducts())}
-                placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อสินค้า...' : 'Search Serial, SKU, Name...'}
-                className="w-full pl-12 pr-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 placeholder:text-[var(--color-foreground-muted)] focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={searchProducts}
-              disabled={loadingProducts}
-              className="flex items-center gap-2 px-6 py-3 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
-            >
-              {loadingProducts ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {locale === 'th' ? 'ค้นหา' : 'Search'}
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Available Products */}
-          <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden mb-5">
-            <div className="bg-[var(--color-off-white)] px-5 py-3 text-sm font-medium text-[var(--color-charcoal)] border-b border-[var(--color-beige)] flex items-center justify-between">
-              <span>{locale === 'th' ? 'สินค้าที่พร้อมส่ง' : 'Available Products'} ({availableProducts.length})</span>
-              {loadingProducts && (
-                <div className="w-4 h-4 border-2 border-[var(--color-gold)] border-t-transparent rounded-full animate-spin" />
-              )}
-            </div>
-            {loadingProducts && availableProducts.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="w-10 h-10 mx-auto mb-3 relative">
-                  <div className="absolute inset-0 rounded-full border-3 border-[var(--color-beige)]" />
-                  <div className="absolute inset-0 rounded-full border-3 border-[var(--color-gold)] border-t-transparent animate-spin" />
-                </div>
-                <p className="text-[var(--color-foreground-muted)] text-sm">
-                  {locale === 'th' ? 'กำลังโหลดสินค้า...' : 'Loading products...'}
-                </p>
-              </div>
-            ) : availableProducts.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-100 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <p className="text-[var(--color-foreground-muted)]">
-                  {locale === 'th' ? 'ไม่พบสินค้าที่พร้อมส่ง (สถานะ IN_STOCK)' : 'No available products (IN_STOCK status)'}
-                </p>
-                <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
-                  {locale === 'th' ? 'ตรวจสอบว่ามีสินค้าในคลังหรือไม่' : 'Please check if there are products in stock'}
-                </p>
-              </div>
-            ) : (
-              <div className="max-h-48 overflow-y-auto">
-                {availableProducts.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-beige)] last:border-b-0 hover:bg-[var(--color-off-white)]/50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <span className="font-mono text-sm text-[var(--color-gold)] font-medium">{p.serial12}</span>
-                      <span className="mx-2 text-[var(--color-beige)]">|</span>
-                      <span className="text-sm text-[var(--color-charcoal)]">{p.sku} - {p.name}</span>
-                      {p.lot && <span className="text-xs text-[var(--color-foreground-muted)] ml-2">Lot: {p.lot}</span>}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addProduct(p)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-[var(--color-mint-dark)] hover:text-white hover:bg-[var(--color-mint)] rounded-lg transition-all"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      {locale === 'th' ? 'เพิ่ม' : 'Add'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Selected Products */}
-          <div className="border border-[var(--color-mint)]/30 rounded-xl overflow-hidden">
-            <div className="bg-[var(--color-mint)]/10 px-5 py-3 text-sm font-medium text-[var(--color-mint-dark)] border-b border-[var(--color-mint)]/20">
-              {locale === 'th' ? `สินค้าที่เลือก (${selectedProducts.length})` : `Selected Products (${selectedProducts.length})`}
-            </div>
-            {selectedProducts.length === 0 ? (
-              <div className="p-12 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-beige)]/50 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {/* Clinic Reservations Summary */}
+          {clinicId > 0 && clinicReservations.length > 0 && (
+            <div className="mt-5 p-4 bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 rounded-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-[var(--color-gold)]/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
-                <p className="text-[var(--color-foreground-muted)]">
-                  {locale === 'th' ? 'ยังไม่ได้เลือกสินค้า' : 'No products selected'}
+                <h3 className="text-sm font-semibold text-[var(--color-gold-dark)]">
+                  {locale === 'th' ? 'สินค้าฝากของคลินิกนี้' : 'Reserved Products for this Clinic'}
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {clinicReservations.map((res) => {
+                  const pm = productMasters.find((p) => p.id === res.productMasterId) || res.productMaster
+                  if (!pm) return null
+                  return (
+                    <div key={res.productMasterId} className="flex justify-between items-center text-sm py-1.5 px-3 bg-white/50 rounded-lg">
+                      <span className="text-[var(--color-charcoal)]">
+                        {pm.sku} - {locale === 'th' ? pm.nameTh : ((pm as any).nameEn || pm.nameTh)}
+                        {pm.modelSize && ` (${pm.modelSize})`}
+                      </span>
+                      <span className="font-semibold text-[var(--color-gold-dark)]">
+                        {res.quantity} {locale === 'th' ? 'ชิ้น' : 'pcs'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-[var(--color-gold-dark)] mt-3">
+                {locale === 'th'
+                  ? 'สินค้าฝาก: คือสินค้าที่คลินิกจองไว้ล่วงหน้าแต่ยังไม่ได้ส่ง'
+                  : 'Reserved: Products pre-ordered by the clinic but not yet shipped'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Product Selection by SKU + Quantity */}
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6 mb-6">
+          <div className="flex justify-between items-center mb-5">
+            <h2 className="text-lg font-semibold text-[var(--color-charcoal)]">
+              {locale === 'th' ? 'รายการสินค้า' : 'Line Items'}
+            </h2>
+            <button
+              type="button"
+              onClick={addLine}
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-mint)] text-white rounded-xl font-medium text-sm shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 transition-all duration-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {locale === 'th' ? 'เพิ่มรายการ' : 'Add Item'}
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {lines.map((line, index) => (
+              <div key={line.id} className="border border-[var(--color-beige)] rounded-xl p-5 bg-[var(--color-off-white)]">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--color-gold)]/10 text-[var(--color-gold)] font-semibold text-sm">
+                    #{index + 1}
+                  </span>
+                  {lines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeLine(line.id)}
+                      className="flex items-center gap-1 text-red-500 hover:text-red-700 text-sm font-medium transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {locale === 'th' ? 'ลบ' : 'Remove'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Product Selection */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'เลือกสินค้า' : 'Select Product'} <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={line.productMasterId}
+                        onChange={(e) => handleProductMasterChange(line.id, parseInt(e.target.value))}
+                        required
+                        className="appearance-none w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all pr-8"
+                      >
+                        <option value={0} disabled>{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select Product --'}</option>
+                        {productMasters.map((pm) => {
+                          const reservedQty = getReservationQty(pm.id)
+                          return (
+                            <option
+                              key={pm.id}
+                              value={pm.id}
+                              disabled={pm.stats.inStock === 0}
+                            >
+                              {pm.sku} - {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)} {pm.modelSize ? `(${pm.modelSize})` : ''} [{locale === 'th' ? 'คงเหลือ' : 'Stock'}: {pm.stats.inStock}]{reservedQty > 0 ? ` [${locale === 'th' ? 'ฝาก' : 'Reserved'}: ${reservedQty}]` : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                    {/* Show selected product info */}
+                    {line.productMaster && (
+                      <div className="mt-1.5 text-xs text-[var(--color-foreground-muted)]">
+                        {locale === 'th' ? 'หมวดหมู่' : 'Category'}: {line.productMaster.category?.nameTh || '-'}
+                        {line.productMaster.defaultUnit && ` | ${locale === 'th' ? 'หน่วย' : 'Unit'}: ${line.productMaster.defaultUnit.nameTh}`}
+                        {getReservationQty(line.productMaster.id) > 0 && (
+                          <span className="ml-2 text-[var(--color-gold)]">
+                            | {locale === 'th' ? 'สินค้าฝาก' : 'Reserved'}: {getReservationQty(line.productMaster.id)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quantity */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'จำนวน' : 'Quantity'} <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={line.productMaster?.stats.inStock || 999}
+                      value={line.quantity}
+                      onChange={(e) => {
+                        const qty = parseInt(e.target.value) || 1
+                        const maxQty = line.productMaster?.stats.inStock || 999
+                        updateLine(line.id, 'quantity', Math.min(qty, maxQty))
+                      }}
+                      required
+                      className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
+                    />
+                    {line.productMaster && (
+                      <div className="mt-1.5 text-xs text-[var(--color-mint-dark)]">
+                        {locale === 'th' ? 'สูงสุด' : 'Max'}: {line.productMaster.stats.inStock} {locale === 'th' ? 'ชิ้น' : 'items'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          <div className="mt-4 p-4 bg-[var(--color-mint)]/10 border border-[var(--color-mint)]/30 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[var(--color-mint)]/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-[var(--color-mint-dark)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm text-[var(--color-mint-dark)] font-medium">
+                  {locale === 'th'
+                    ? `รวม ${totalItems} ชิ้น จาก ${lines.filter(l => l.productMasterId).length} รายการ`
+                    : `Total ${totalItems} items from ${lines.filter(l => l.productMasterId).length} line(s)`}
+                </p>
+                <p className="text-xs text-[var(--color-mint-dark)] mt-0.5">
+                  {locale === 'th'
+                    ? 'ระบบจะเลือก Serial อัตโนมัติตามหลัก FIFO (เก่าก่อน)'
+                    : 'System will auto-select serials using FIFO (oldest first)'}
                 </p>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
-                      <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial</th>
-                      <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">SKU</th>
-                      <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                        {locale === 'th' ? 'ชื่อสินค้า' : 'Name'}
-                      </th>
-                      <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">Lot</th>
-                      <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">EXP</th>
-                      <th className="px-5 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-beige)]">
-                    {selectedProducts.map((p) => (
-                      <tr key={p.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
-                        <td className="px-5 py-3">
-                          <span className="font-mono text-sm font-medium text-[var(--color-gold)]">{p.serial12}</span>
-                        </td>
-                        <td className="px-5 py-3 text-sm text-[var(--color-charcoal)]">{p.sku}</td>
-                        <td className="px-5 py-3 text-sm text-[var(--color-charcoal)]">{p.name}</td>
-                        <td className="px-5 py-3 text-sm text-[var(--color-foreground-muted)]">{p.lot || '-'}</td>
-                        <td className="px-5 py-3 text-sm text-[var(--color-foreground-muted)]">
-                          {p.expDate ? new Date(p.expDate).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US') : '-'}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => removeProduct(p.id)}
-                            className="flex items-center gap-1 text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            {locale === 'th' ? 'ลบ' : 'Remove'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -585,7 +716,7 @@ export default function NewOutboundPage() {
           </button>
           <button
             type="submit"
-            disabled={loading || selectedProducts.length === 0}
+            disabled={loading || totalItems === 0}
             className="flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--color-mint)] text-white rounded-xl shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(115,207,199,0.4)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
           >
             {loading ? (

@@ -126,6 +126,45 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
         })
       }
 
+      // Deduct from clinic reservations if any
+      const clinicData = await tx.clinic.findUnique({
+        where: { id: outbound.clinicId },
+        select: { reservations: true },
+      })
+
+      if (clinicData?.reservations && Array.isArray(clinicData.reservations)) {
+        const currentReservations = clinicData.reservations as Array<{ productMasterId: number; quantity: number }>
+
+        // Count how many of each ProductMaster we're shipping
+        const shippedByProductMaster: Record<number, number> = {}
+        for (const line of outbound.lines) {
+          const pmId = line.productItem?.productMasterId
+          if (pmId && pmId > 0) {
+            shippedByProductMaster[pmId] = (shippedByProductMaster[pmId] || 0) + 1
+          }
+        }
+
+        // Deduct from reservations
+        const updatedReservations = currentReservations
+          .map((res) => {
+            const shipped = shippedByProductMaster[res.productMasterId] || 0
+            if (shipped > 0) {
+              return {
+                productMasterId: res.productMasterId,
+                quantity: Math.max(0, res.quantity - shipped),
+              }
+            }
+            return res
+          })
+          .filter((res) => res.quantity > 0) // Remove entries with 0 quantity
+
+        // Update clinic reservations
+        await tx.clinic.update({
+          where: { id: outbound.clinicId },
+          data: { reservations: updatedReservations },
+        })
+      }
+
       return updated
     })
 

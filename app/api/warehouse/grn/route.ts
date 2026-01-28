@@ -10,10 +10,7 @@ import type { JWTPayload } from '@/lib/auth'
 type HandlerContext = { user: JWTPayload }
 
 interface GRNLineInput {
-  sku: string
-  itemName: string
-  modelSize?: string
-  categoryId: number
+  productMasterId: number  // Required - must select from ProductMaster
   quantity: number
   unitId: number
   lot?: string
@@ -132,19 +129,34 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       const createdLines = []
 
       for (const line of body.lines) {
+        // Fetch ProductMaster data
+        const productMaster = await tx.productMaster.findUnique({
+          where: { id: line.productMasterId },
+          include: { category: true, defaultUnit: true },
+        })
+
+        if (!productMaster) {
+          throw new Error(`ProductMaster not found: ${line.productMasterId}`)
+        }
+
+        if (!productMaster.isActive) {
+          throw new Error(`ProductMaster is inactive: ${productMaster.sku}`)
+        }
+
         // Each quantity creates one product item (1 serial per item)
         for (let i = 0; i < line.quantity; i++) {
           // Generate serial number
           const serialNumber = await generateSerialNumber()
 
-          // Create product item
+          // Create product item linked to ProductMaster
           const productItem = await tx.productItem.create({
             data: {
               serial12: serialNumber,
-              sku: line.sku,
-              name: line.itemName,
-              categoryId: line.categoryId,
-              modelSize: line.modelSize,
+              sku: productMaster.sku,
+              name: productMaster.nameTh,
+              categoryId: productMaster.categoryId,
+              modelSize: productMaster.modelSize,
+              productMasterId: productMaster.id,  // Link to ProductMaster
               lot: line.lot,
               mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
               expDate: line.expDate ? new Date(line.expDate) : null,
@@ -171,16 +183,16 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             },
           })
 
-          // Create GRN line
+          // Create GRN line with ProductMaster data
           const grnLine = await tx.gRNLine.create({
             data: {
               grnHeaderId: grnHeader.id,
               productItemId: productItem.id,
-              sku: line.sku,
-              itemName: line.itemName,
-              modelSize: line.modelSize,
+              sku: productMaster.sku,
+              itemName: productMaster.nameTh,
+              modelSize: productMaster.modelSize,
               quantity: 1, // Always 1 per line (1 serial)
-              unitId: line.unitId,
+              unitId: line.unitId || productMaster.defaultUnitId || 1,
               lot: line.lot,
               mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
               expDate: line.expDate ? new Date(line.expDate) : null,
@@ -204,7 +216,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               details: {
                 grnNo: grnHeader.grnNo,
                 serialNumber,
-                sku: line.sku,
+                sku: productMaster.sku,
+                productMasterId: productMaster.id,
               },
             },
           })

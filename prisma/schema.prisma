@@ -52,6 +52,28 @@ enum InspectionStatus {
 // MASTER DATA TABLES (Dropdowns)
 // ============================================
 
+model ProductMaster {
+  id            Int      @id @default(autoincrement())
+  sku           String   @unique
+  nameTh        String   @map("name_th")
+  nameEn        String?  @map("name_en")
+  categoryId    Int      @map("category_id")
+  modelSize     String?  @map("model_size")
+  description   String?  @db.Text
+  defaultUnitId Int?     @map("default_unit_id")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  category      ProductCategory @relation(fields: [categoryId], references: [id])
+  defaultUnit   Unit?           @relation(fields: [defaultUnitId], references: [id])
+  productItems  ProductItem[]
+
+  @@index([sku])
+  @@index([isActive])
+  @@map("product_masters")
+}
+
 model ProductCategory {
   id        Int      @id @default(autoincrement())
   nameTh    String   @map("name_th")
@@ -60,7 +82,8 @@ model ProductCategory {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  products ProductItem[]
+  products       ProductItem[]
+  productMasters ProductMaster[]
 
   @@map("product_categories")
 }
@@ -73,8 +96,9 @@ model Unit {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  grnLines      GRNLine[]
-  outboundLines OutboundLine[]
+  grnLines              GRNLine[]
+  outboundLines         OutboundLine[]
+  productMastersDefault ProductMaster[]
 
   @@map("units")
 }
@@ -131,13 +155,14 @@ model User {
 }
 
 model Clinic {
-  id         Int      @id @default(autoincrement())
-  name       String
-  province   String
-  branchName String?  @map("branch_name")
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement())
+  name         String
+  province     String
+  branchName   String?  @map("branch_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  reservations Json?    @default("[]") // สินค้าฝาก: [{ productMasterId: number, quantity: number }]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   products  ProductItem[]
   outbounds OutboundHeader[]
@@ -150,20 +175,22 @@ model Clinic {
 // ============================================
 
 model ProductItem {
-  id              Int           @id @default(autoincrement())
-  serial12        String        @unique @db.Char(12)
-  sku             String
-  name            String
-  categoryId      Int           @map("category_id")
-  modelSize       String?       @map("model_size") // รุ่น/ขนาด/ปริมาณบรรจุ
-  lot             String?
-  mfgDate         DateTime?     @map("mfg_date") @db.Date
-  expDate         DateTime?     @map("exp_date") @db.Date
-  status          ProductStatus @default(IN_STOCK)
-  assignedClinicId Int?         @map("assigned_clinic_id")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id               Int           @id @default(autoincrement())
+  serial12         String        @unique @db.Char(12)
+  productMasterId  Int?          @map("product_master_id")
+  sku              String
+  name             String
+  categoryId       Int           @map("category_id")
+  modelSize        String?       @map("model_size") // รุ่น/ขนาด/ปริมาณบรรจุ
+  lot              String?
+  mfgDate          DateTime?     @map("mfg_date") @db.Date
+  expDate          DateTime?     @map("exp_date") @db.Date
+  status           ProductStatus @default(IN_STOCK)
+  assignedClinicId Int?          @map("assigned_clinic_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
+  productMaster   ProductMaster?  @relation(fields: [productMasterId], references: [id])
   category        ProductCategory @relation(fields: [categoryId], references: [id])
   assignedClinic  Clinic?         @relation(fields: [assignedClinicId], references: [id])
   qrTokens        QRToken[]
@@ -175,6 +202,7 @@ model ProductItem {
 
   @@index([serial12])
   @@index([status])
+  @@index([productMasterId])
   @@map("product_items")
 }
 
