@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 
-type TabType = 'categories' | 'units' | 'shipping' | 'warehouses'
+type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display'
 
 interface MasterItem {
   id: number
@@ -11,6 +11,10 @@ interface MasterItem {
   nameEn?: string | null
   name?: string
   isActive: boolean
+}
+
+interface SystemSettings {
+  'verify.showClinicInfo': boolean
 }
 
 export default function SettingsPage() {
@@ -23,6 +27,12 @@ export default function SettingsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState<MasterItem | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+
+  // System settings state
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
+    'verify.showClinicInfo': true,
+  })
+  const [settingsLoading, setSettingsLoading] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -37,13 +47,52 @@ export default function SettingsPage() {
     { key: 'units', labelTh: 'หน่วยนับ', labelEn: 'Units', endpoint: '/api/admin/masters/units' },
     { key: 'shipping', labelTh: 'วิธีการจัดส่ง', labelEn: 'Shipping Methods', endpoint: '/api/admin/masters/shipping-methods' },
     { key: 'warehouses', labelTh: 'คลังสินค้า', labelEn: 'Warehouses', endpoint: '/api/admin/masters/warehouses' },
+    { key: 'display', labelTh: 'การแสดงผล', labelEn: 'Display', endpoint: '' },
   ]
 
   const currentTab = tabs.find((t) => t.key === activeTab)!
 
   useEffect(() => {
-    fetchItems()
+    if (activeTab === 'display') {
+      fetchSystemSettings()
+    } else {
+      fetchItems()
+    }
   }, [activeTab])
+
+  const fetchSystemSettings = async () => {
+    setSettingsLoading(true)
+    try {
+      const res = await fetch('/api/admin/system-settings')
+      const data = await res.json()
+      if (data.success && data.data?.settings) {
+        setSystemSettings(data.data.settings)
+      }
+    } catch (error) {
+      console.error('Failed to fetch system settings:', error)
+    } finally {
+      setSettingsLoading(false)
+    }
+  }
+
+  const updateSystemSetting = async (key: string, value: unknown) => {
+    try {
+      const res = await fetch('/api/admin/system-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSystemSettings((prev) => ({ ...prev, [key]: value }))
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to update system setting:', error)
+      alert('Failed to update setting')
+    }
+  }
 
   const fetchItems = async () => {
     setLoading(true)
@@ -253,21 +302,71 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="p-6">
-          {/* Add Button */}
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 transition-all duration-200"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              {locale === 'th' ? 'เพิ่ม' : 'Add'}
-            </button>
-          </div>
+          {/* Display Settings Tab */}
+          {activeTab === 'display' ? (
+            <div className="space-y-6">
+              <div className="bg-[var(--color-off-white)] rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-[var(--color-charcoal)] mb-4">
+                  {locale === 'th' ? 'หน้าตรวจสอบสินค้า (Verify)' : 'Product Verification Page'}
+                </h3>
 
-          {/* Table */}
-          {loading ? (
+                {settingsLoading ? (
+                  <div className="py-4 text-center">
+                    <div className="w-6 h-6 mx-auto relative">
+                      <div className="absolute inset-0 rounded-full border-2 border-[var(--color-beige)]" />
+                      <div className="absolute inset-0 rounded-full border-2 border-[var(--color-gold)] border-t-transparent animate-spin" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Show Clinic Info Toggle */}
+                    <div className="flex items-center justify-between py-3 border-b border-[var(--color-beige)]">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-charcoal)]">
+                          {locale === 'th' ? 'แสดงข้อมูลคลินิก/สาขา' : 'Show Clinic/Branch Info'}
+                        </p>
+                        <p className="text-xs text-[var(--color-foreground-muted)] mt-0.5">
+                          {locale === 'th'
+                            ? 'แสดงชื่อคลินิกและจังหวัดบนหน้าตรวจสอบสินค้าสาธารณะ'
+                            : 'Display clinic name and province on public verification page'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => updateSystemSetting('verify.showClinicInfo', !systemSettings['verify.showClinicInfo'])}
+                        className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                          systemSettings['verify.showClinicInfo']
+                            ? 'bg-[var(--color-gold)]'
+                            : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                            systemSettings['verify.showClinicInfo'] ? 'translate-x-6' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Add Button */}
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={openCreateModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  {locale === 'th' ? 'เพิ่ม' : 'Add'}
+                </button>
+              </div>
+
+              {/* Table */}
+              {loading ? (
             <div className="py-12 text-center">
               <div className="w-10 h-10 mx-auto mb-3 relative">
                 <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
@@ -373,6 +472,8 @@ export default function SettingsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

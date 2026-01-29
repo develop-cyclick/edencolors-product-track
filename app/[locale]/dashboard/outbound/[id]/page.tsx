@@ -61,6 +61,13 @@ export default function OutboundDetailPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [printingItemId, setPrintingItemId] = useState<number | null>(null)
 
+  // Damage states
+  const [showDamageModal, setShowDamageModal] = useState(false)
+  const [selectedLine, setSelectedLine] = useState<OutboundLine | null>(null)
+  const [damageReason, setDamageReason] = useState('')
+  const [damageNote, setDamageNote] = useState('')
+  const [damageLoading, setDamageLoading] = useState(false)
+
   const fetchOutbound = useCallback(async () => {
     try {
       const res = await fetch(`/api/warehouse/outbound/${id}`)
@@ -177,6 +184,50 @@ export default function OutboundDetailPage() {
     }
   }
 
+  const handleMarkDamaged = async () => {
+    if (!selectedLine || !damageReason.trim()) {
+      alert(locale === 'th' ? 'กรุณาระบุสาเหตุความเสียหาย' : 'Please provide damage reason')
+      return
+    }
+
+    setDamageLoading(true)
+    try {
+      const res = await fetch('/api/warehouse/damaged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productItemIds: [selectedLine.productItem.id],
+          reason: damageReason,
+          note: damageNote,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setShowDamageModal(false)
+        setSelectedLine(null)
+        setDamageReason('')
+        setDamageNote('')
+        fetchOutbound()
+        alert(locale === 'th' ? 'บันทึกสินค้าเสียหายเรียบร้อย' : 'Product marked as damaged')
+      } else {
+        alert(data.message || 'Error marking as damaged')
+      }
+    } catch (error) {
+      console.error('Failed to mark as damaged:', error)
+      alert(locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred')
+    } finally {
+      setDamageLoading(false)
+    }
+  }
+
+  const openDamageModal = (line: OutboundLine) => {
+    setSelectedLine(line)
+    setDamageReason('')
+    setDamageNote('')
+    setShowDamageModal(true)
+  }
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
     return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
@@ -210,7 +261,8 @@ export default function OutboundDetailPage() {
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending Out' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'คืนสินค้า', labelEn: 'Returned' },
+      RETURNED: { bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', label: 'คืนสินค้า', labelEn: 'Returned' },
+      DAMAGED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'เสียหาย', labelEn: 'Damaged' },
     }
     const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
     return (
@@ -305,7 +357,7 @@ export default function OutboundDetailPage() {
             {locale === 'th' ? 'ส่งออก Excel' : 'Export Excel'}
           </a>
           {/* Approve/Reject - Only for ADMIN or MANAGER */}
-          {outbound.status === 'PENDING' && canApprove && (
+          {/* {outbound.status === 'PENDING' && canApprove && (
             <>
               <button
                 onClick={() => setShowRejectModal(true)}
@@ -329,7 +381,7 @@ export default function OutboundDetailPage() {
                 )}
               </button>
             </>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -592,15 +644,27 @@ export default function OutboundDetailPage() {
                     </button>
                   </td>
                   <td className="px-5 py-4">
-                    <Link
-                      href={`/${locale}/dashboard/products/${line.productItem.id}`}
-                      className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors"
-                    >
-                      {locale === 'th' ? 'ดู' : 'View'}
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/${locale}/dashboard/products/item/${line.productItem.id}`}
+                        className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors"
+                      >
+                        {locale === 'th' ? 'ดู' : 'View'}
+                      </Link>
+                      {/* Show damage button only for SHIPPED status */}
+                      {line.productItem.status === 'SHIPPED' && (
+                        <button
+                          onClick={() => openDamageModal(line)}
+                          className="inline-flex items-center gap-1 text-sm text-red-500 hover:text-red-700 font-medium transition-colors"
+                          title={locale === 'th' ? 'แจ้งเสียหาย' : 'Mark Damaged'}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          {locale === 'th' ? 'เสียหาย' : 'Damaged'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -651,6 +715,87 @@ export default function OutboundDetailPage() {
                   </span>
                 ) : (
                   locale === 'th' ? 'ยืนยันปฏิเสธ' : 'Confirm Reject'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Damage Modal */}
+      {showDamageModal && selectedLine && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4">
+              {locale === 'th' ? 'แจ้งสินค้าเสียหาย' : 'Report Damaged Product'}
+            </h3>
+
+            {/* Product Info */}
+            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+              <p className="font-mono text-sm">{selectedLine.productItem.serial12}</p>
+              <p className="font-medium">{selectedLine.productItem.sku}</p>
+              <p className="text-sm text-[var(--color-gray-500)]">{selectedLine.productItem.name}</p>
+            </div>
+
+            {/* Damage Reason */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
+                {locale === 'th' ? 'สาเหตุความเสียหาย *' : 'Damage Reason *'}
+              </label>
+              <select
+                value={damageReason}
+                onChange={(e) => setDamageReason(e.target.value)}
+                className="w-full px-4 py-3 border border-[var(--color-beige)] rounded-xl focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)] transition-all bg-[var(--color-off-white)]"
+              >
+                <option value="">{locale === 'th' ? '-- เลือกสาเหตุ --' : '-- Select reason --'}</option>
+                <option value="ชำรุดจากการขนส่ง">{locale === 'th' ? 'ชำรุดจากการขนส่ง' : 'Shipping damage'}</option>
+                <option value="สินค้ามีตำหนิ">{locale === 'th' ? 'สินค้ามีตำหนิ' : 'Product defect'}</option>
+                <option value="บรรจุภัณฑ์เสียหาย">{locale === 'th' ? 'บรรจุภัณฑ์เสียหาย' : 'Packaging damage'}</option>
+                <option value="สินค้าหมดอายุ">{locale === 'th' ? 'สินค้าหมดอายุ' : 'Expired'}</option>
+                <option value="ลูกค้าแจ้งปัญหา">{locale === 'th' ? 'ลูกค้าแจ้งปัญหา' : 'Customer reported issue'}</option>
+                <option value="อื่นๆ">{locale === 'th' ? 'อื่นๆ' : 'Other'}</option>
+              </select>
+            </div>
+
+            {/* Additional Note */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
+                {locale === 'th' ? 'รายละเอียดเพิ่มเติม' : 'Additional Notes'}
+              </label>
+              <textarea
+                value={damageNote}
+                onChange={(e) => setDamageNote(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-3 border border-[var(--color-beige)] rounded-xl focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)] transition-all bg-[var(--color-off-white)]"
+                placeholder={locale === 'th' ? 'รายละเอียดเพิ่มเติม...' : 'Additional details...'}
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDamageModal(false)
+                  setSelectedLine(null)
+                  setDamageReason('')
+                  setDamageNote('')
+                }}
+                disabled={damageLoading}
+                className="px-4 py-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] font-medium transition-colors"
+              >
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleMarkDamaged}
+                disabled={damageLoading || !damageReason.trim()}
+                className="px-6 py-2 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {damageLoading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...'}
+                  </span>
+                ) : (
+                  locale === 'th' ? 'ยืนยันแจ้งเสียหาย' : 'Confirm Damaged'
                 )}
               </button>
             </div>

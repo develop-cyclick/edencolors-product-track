@@ -29,6 +29,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         clinic: { select: { id: true, name: true, province: true, branchName: true } },
         createdBy: { select: { id: true, displayName: true, username: true } },
         approvedBy: { select: { id: true, displayName: true, username: true } },
+        purchaseOrder: { select: { id: true, poNo: true } },
         lines: {
           include: {
             productItem: {
@@ -64,7 +65,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       ['สถานะ', statusMap[outbound.status] || outbound.status],
       ['คลังสินค้า', outbound.warehouse.name],
       ['วิธีการจัดส่ง', outbound.shippingMethod?.nameTh || '-'],
-      ['เลขที่ PO', outbound.poNo || '-'],
+      ['เลขที่ PO', outbound.purchaseOrder?.poNo || '-'],
       [],
       ['ข้อมูลคลินิก'],
       ['ชื่อคลินิก', outbound.clinic?.name || '-'],

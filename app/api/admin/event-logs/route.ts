@@ -21,6 +21,10 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
   const startDate = searchParams.get('startDate')
   const endDate = searchParams.get('endDate')
 
+  // Sorting
+  const sortBy = searchParams.get('sortBy') || 'createdAt'
+  const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc'
+
   // Build where clause
   const where: Record<string, unknown> = {}
 
@@ -51,6 +55,18 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
   }
 
   try {
+    // Build orderBy based on sortBy parameter
+    type OrderByType = Record<string, 'asc' | 'desc' | { serial12?: 'asc' | 'desc' } | { displayName?: 'asc' | 'desc' }>
+    let orderBy: OrderByType = { createdAt: sortOrder }
+
+    if (sortBy === 'eventType') {
+      orderBy = { eventType: sortOrder }
+    } else if (sortBy === 'serial') {
+      orderBy = { productItem: { serial12: sortOrder } }
+    } else if (sortBy === 'user') {
+      orderBy = { user: { displayName: sortOrder } }
+    }
+
     const [logs, total] = await Promise.all([
       prisma.eventLog.findMany({
         where,
@@ -70,7 +86,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

@@ -55,7 +55,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     include: {
       category: true,
       assignedClinic: true,
-      activation: true,
+      activations: true,
     },
   })
 
@@ -94,7 +94,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             userId: user.userId,
             details: {
               previousStatus: productItem.status,
-              wasActivated: !!productItem.activation,
+              wasActivated: productItem.activations.length > 0,
               clinicId: productItem.assignedClinicId,
               clinicName: productItem.assignedClinic?.name,
               lot: productItem.lot || null,
@@ -111,7 +111,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           serial12: result.serial12,
           previousStatus: productItem.status,
           newStatus: result.status,
-          wasActivated: !!productItem.activation,
+          wasActivated: productItem.activations.length > 0,
         })
       }
 
@@ -157,11 +157,13 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       include: {
         category: { select: { id: true, nameTh: true } },
         assignedClinic: { select: { id: true, name: true, province: true } },
-        activation: {
+        activations: {
           select: {
             customerName: true,
             createdAt: true,
           },
+          orderBy: { activationNumber: 'desc' as const },
+          take: 1,
         },
         eventLogs: {
           where: { eventType: 'RETURN' },
@@ -183,6 +185,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     items: products.map((p) => {
       const returnEvent = p.eventLogs[0]
       const details = returnEvent?.details as Record<string, unknown> | null
+      const latestActivation = p.activations[0]
 
       return {
         id: p.id,
@@ -190,9 +193,9 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         name: p.name,
         category: p.category.nameTh,
         clinic: p.assignedClinic,
-        wasActivated: !!p.activation,
-        activatedBy: p.activation?.customerName,
-        activatedAt: p.activation?.createdAt,
+        wasActivated: p.activations.length > 0,
+        activatedBy: latestActivation?.customerName,
+        activatedAt: latestActivation?.createdAt,
         returnedBy: returnEvent?.user?.displayName,
         returnedAt: returnEvent?.createdAt,
         returnReason: details?.reason as string | undefined,

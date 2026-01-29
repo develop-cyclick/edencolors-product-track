@@ -64,16 +64,25 @@ export default function EventLogsPage() {
   // Expanded log details
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null)
 
+  // Sorting
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
   const inputClass = "w-full px-4 py-2.5 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 placeholder:text-[var(--color-foreground-muted)] focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
   const labelClass = "block text-sm font-medium text-[var(--color-charcoal)] mb-1.5"
   const selectClass = "appearance-none w-full px-4 py-2.5 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] pr-10"
 
-  const loadLogs = async (page = 1) => {
+  const loadLogs = async (page = 1, newSortBy?: string, newSortOrder?: 'asc' | 'desc') => {
     setIsLoading(true)
     try {
+      const currentSortBy = newSortBy ?? sortBy
+      const currentSortOrder = newSortOrder ?? sortOrder
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '30',
+        sortBy: currentSortBy,
+        sortOrder: currentSortOrder,
       })
 
       if (eventType) params.append('eventType', eventType)
@@ -113,6 +122,32 @@ export default function EventLogsPage() {
     setStartDate('')
     setEndDate('')
     loadLogs(1)
+  }
+
+  const handleSort = (column: string) => {
+    const newOrder = sortBy === column && sortOrder === 'desc' ? 'asc' : 'desc'
+    setSortBy(column)
+    setSortOrder(newOrder)
+    loadLogs(1, column, newOrder)
+  }
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortBy !== column) {
+      return (
+        <svg className="w-4 h-4 text-[var(--color-foreground-muted)] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      )
+    }
+    return sortOrder === 'asc' ? (
+      <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    )
   }
 
   const formatDate = (dateStr: string) => {
@@ -321,17 +356,41 @@ export default function EventLogsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'เวลา' : 'Time'}
+                    <th
+                      className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] cursor-pointer hover:bg-[var(--color-beige)]/50 transition-colors select-none"
+                      onClick={() => handleSort('createdAt')}
+                    >
+                      <div className="flex items-center gap-2">
+                        {locale === 'th' ? 'เวลา' : 'Time'}
+                        <SortIcon column="createdAt" />
+                      </div>
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'ประเภท' : 'Type'}
+                    <th
+                      className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] cursor-pointer hover:bg-[var(--color-beige)]/50 transition-colors select-none"
+                      onClick={() => handleSort('eventType')}
+                    >
+                      <div className="flex items-center gap-2">
+                        {locale === 'th' ? 'ประเภท' : 'Type'}
+                        <SortIcon column="eventType" />
+                      </div>
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'สินค้า' : 'Product'}
+                    <th
+                      className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] cursor-pointer hover:bg-[var(--color-beige)]/50 transition-colors select-none"
+                      onClick={() => handleSort('serial')}
+                    >
+                      <div className="flex items-center gap-2">
+                        {locale === 'th' ? 'สินค้า' : 'Product'}
+                        <SortIcon column="serial" />
+                      </div>
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'ผู้ดำเนินการ' : 'User'}
+                    <th
+                      className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] cursor-pointer hover:bg-[var(--color-beige)]/50 transition-colors select-none"
+                      onClick={() => handleSort('user')}
+                    >
+                      <div className="flex items-center gap-2">
+                        {locale === 'th' ? 'ผู้ดำเนินการ' : 'User'}
+                        <SortIcon column="user" />
+                      </div>
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'รายละเอียด' : 'Details'}

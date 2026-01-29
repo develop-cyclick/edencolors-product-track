@@ -9,23 +9,8 @@ interface Clinic {
   province: string
   branchName: string | null
   isActive: boolean
-  reservations: Reservation[] | null
   createdAt: string
   updatedAt: string
-}
-
-interface ProductMaster {
-  id: number
-  sku: string
-  nameTh: string
-  nameEn: string | null
-  modelSize: string | null
-}
-
-interface Reservation {
-  productMasterId: number
-  quantity: number
-  productMaster?: ProductMaster | null
 }
 
 export default function ClinicsPage() {
@@ -37,13 +22,6 @@ export default function ClinicsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingClinic, setEditingClinic] = useState<Clinic | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
-
-  // Reservation modal state
-  const [showReservationModal, setShowReservationModal] = useState(false)
-  const [reservationClinic, setReservationClinic] = useState<Clinic | null>(null)
-  const [reservations, setReservations] = useState<Reservation[]>([])
-  const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
-  const [reservationLoading, setReservationLoading] = useState(false)
 
   // Import modal state
   const [showImportModal, setShowImportModal] = useState(false)
@@ -66,20 +44,7 @@ export default function ClinicsPage() {
 
   useEffect(() => {
     fetchClinics()
-    fetchProductMasters()
   }, [])
-
-  const fetchProductMasters = async () => {
-    try {
-      const res = await fetch('/api/admin/masters/products?activeOnly=true')
-      const data = await res.json()
-      if (data.success && data.data?.productMasters) {
-        setProductMasters(data.data.productMasters)
-      }
-    } catch (error) {
-      console.error('Failed to fetch product masters:', error)
-    }
-  }
 
   const fetchClinics = async () => {
     setLoading(true)
@@ -261,84 +226,6 @@ export default function ClinicsPage() {
     })
   }
 
-  // Reservation management functions
-  const openReservationModal = async (clinic: Clinic) => {
-    setReservationClinic(clinic)
-    setReservationLoading(true)
-    setShowReservationModal(true)
-
-    try {
-      const res = await fetch(`/api/admin/clinics/${clinic.id}/reservations`)
-      const data = await res.json()
-      if (data.success && data.data?.reservations) {
-        setReservations(data.data.reservations)
-      } else {
-        setReservations([])
-      }
-    } catch (error) {
-      console.error('Failed to fetch reservations:', error)
-      setReservations([])
-    } finally {
-      setReservationLoading(false)
-    }
-  }
-
-  const closeReservationModal = () => {
-    setShowReservationModal(false)
-    setReservationClinic(null)
-    setReservations([])
-  }
-
-  const addReservationLine = () => {
-    setReservations([...reservations, { productMasterId: 0, quantity: 1 }])
-  }
-
-  const removeReservationLine = (index: number) => {
-    setReservations(reservations.filter((_, i) => i !== index))
-  }
-
-  const updateReservationLine = (index: number, field: string, value: number) => {
-    setReservations(reservations.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
-  }
-
-  const saveReservations = async () => {
-    if (!reservationClinic) return
-
-    // Filter out empty lines
-    const validReservations = reservations.filter((r) => r.productMasterId > 0 && r.quantity > 0)
-
-    setReservationLoading(true)
-    try {
-      const res = await fetch(`/api/admin/clinics/${reservationClinic.id}/reservations`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservations: validReservations }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        alert(locale === 'th' ? 'บันทึกสินค้าฝากสำเร็จ' : 'Reservations saved successfully')
-        closeReservationModal()
-      } else {
-        alert(`Error: ${data.error}`)
-      }
-    } catch (error) {
-      alert('Failed to save reservations')
-    } finally {
-      setReservationLoading(false)
-    }
-  }
-
-  // Helper to get total reservation quantity for a clinic
-  const getReservationTotal = (clinic: Clinic) => {
-    if (!clinic.reservations || !Array.isArray(clinic.reservations)) return 0
-    return clinic.reservations.reduce((sum, r) => sum + (r.quantity || 0), 0)
-  }
-
-  const getReservationCount = (clinic: Clinic) => {
-    if (!clinic.reservations || !Array.isArray(clinic.reservations)) return 0
-    return clinic.reservations.length
-  }
-
   // Import functions
   const openImportModal = () => {
     setImportResult(null)
@@ -409,6 +296,7 @@ export default function ClinicsPage() {
         <div className="flex items-center gap-3">
           <a
             href="/api/admin/clinics/export"
+            download
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-charcoal)]/30 text-[var(--color-charcoal)] rounded-xl font-medium hover:bg-[var(--color-charcoal)]/5 transition-all duration-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -474,14 +362,6 @@ export default function ClinicsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {getReservationTotal(clinic) > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                          {getReservationTotal(clinic)}
-                        </span>
-                      )}
                       {clinic.isActive ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
                           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
@@ -501,15 +381,6 @@ export default function ClinicsPage() {
                       {formatDate(clinic.createdAt)}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openReservationModal(clinic)}
-                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                        title={locale === 'th' ? 'สินค้าฝาก' : 'Reservations'}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </button>
                       <button
                         onClick={() => openEditModal(clinic)}
                         className="p-2 text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg transition-colors"
@@ -566,9 +437,6 @@ export default function ClinicsPage() {
                       {locale === 'th' ? 'สาขา' : 'Branch'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'สินค้าฝาก' : 'Reserved'}
-                    </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'สถานะ' : 'Status'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
@@ -590,18 +458,6 @@ export default function ClinicsPage() {
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        {getReservationTotal(clinic) > 0 ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            {getReservationTotal(clinic)} {locale === 'th' ? 'ชิ้น' : 'pcs'} ({getReservationCount(clinic)} {locale === 'th' ? 'รายการ' : 'items'})
-                          </span>
-                        ) : (
-                          <span className="text-[var(--color-foreground-muted)]">-</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
                         {clinic.isActive ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
                             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
@@ -619,15 +475,6 @@ export default function ClinicsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => openReservationModal(clinic)}
-                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                            title={locale === 'th' ? 'สินค้าฝาก' : 'Reservations'}
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                          </button>
                           <button
                             onClick={() => openEditModal(clinic)}
                             className="p-2 text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg transition-colors"
@@ -772,126 +619,6 @@ export default function ClinicsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Reservation Modal */}
-      {showReservationModal && reservationClinic && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-[var(--color-charcoal)]">
-                  {locale === 'th' ? 'จัดการสินค้าฝาก' : 'Manage Reservations'}
-                </h3>
-                <p className="text-sm text-[var(--color-foreground-muted)]">
-                  {reservationClinic.name} ({reservationClinic.province})
-                </p>
-              </div>
-              <button
-                onClick={closeReservationModal}
-                className="p-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {reservationLoading ? (
-              <div className="py-12 text-center">
-                <div className="w-10 h-10 mx-auto mb-3 relative">
-                  <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
-                  <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
-                </div>
-                <p className="text-sm text-[var(--color-foreground-muted)]">
-                  {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-3 mb-4">
-                  {reservations.length === 0 ? (
-                    <div className="text-center py-8 text-[var(--color-foreground-muted)]">
-                      {locale === 'th' ? 'ยังไม่มีสินค้าฝาก' : 'No reservations yet'}
-                    </div>
-                  ) : (
-                    reservations.map((res, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 bg-[var(--color-off-white)] rounded-xl">
-                        <div className="flex-1">
-                          <select
-                            value={res.productMasterId}
-                            onChange={(e) => updateReservationLine(index, 'productMasterId', parseInt(e.target.value))}
-                            className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
-                          >
-                            <option value={0}>{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select Product --'}</option>
-                            {productMasters.map((pm) => (
-                              <option key={pm.id} value={pm.id}>
-                                {pm.sku} - {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)} {pm.modelSize ? `(${pm.modelSize})` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="w-24">
-                          <input
-                            type="number"
-                            min={1}
-                            value={res.quantity}
-                            onChange={(e) => updateReservationLine(index, 'quantity', parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] text-center"
-                            placeholder={locale === 'th' ? 'จำนวน' : 'Qty'}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeReservationLine(index)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={addReservationLine}
-                  className="w-full py-2.5 border-2 border-dashed border-[var(--color-beige)] text-[var(--color-foreground-muted)] rounded-xl hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] transition-colors text-sm font-medium"
-                >
-                  + {locale === 'th' ? 'เพิ่มรายการ' : 'Add Item'}
-                </button>
-
-                <div className="flex gap-3 justify-end pt-6 mt-4 border-t border-[var(--color-beige)]">
-                  <button
-                    type="button"
-                    onClick={closeReservationModal}
-                    disabled={reservationLoading}
-                    className="px-4 py-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] font-medium transition-colors"
-                  >
-                    {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveReservations}
-                    disabled={reservationLoading}
-                    className="px-6 py-2 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-all"
-                  >
-                    {reservationLoading ? (
-                      <span className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        {locale === 'th' ? 'กำลังบันทึก...' : 'Saving...'}
-                      </span>
-                    ) : (
-                      locale === 'th' ? 'บันทึก' : 'Save'
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         </div>
       )}

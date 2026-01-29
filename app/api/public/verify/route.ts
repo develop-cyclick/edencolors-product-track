@@ -58,12 +58,20 @@ export async function GET(request: NextRequest) {
       include: {
         category: true,
         assignedClinic: true,
+        productMaster: {
+          select: {
+            activationType: true,
+            maxActivations: true,
+          },
+        },
         qrTokens: {
           where: { status: 'ACTIVE' },
           orderBy: { tokenVersion: 'desc' },
           take: 1,
         },
-        activation: true,
+        activations: {
+          orderBy: { activationNumber: 'desc' },
+        },
       },
     })
 
@@ -85,6 +93,17 @@ export async function GET(request: NextRequest) {
         success: false,
         result: VerifyResult.INVALID_TOKEN,
         message: 'Invalid QR code',
+      })
+    }
+
+    // Check if product is still pending link (pre-generated but not yet assigned to product)
+    if (productItem.status === 'PENDING_LINK') {
+      await logScan(productItemId, null, tokenVersion, VerifyResult.NOT_FOUND, request)
+
+      return NextResponse.json({
+        success: false,
+        result: VerifyResult.NOT_FOUND,
+        message: 'Product not found',
       })
     }
 
@@ -118,6 +137,12 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Get activation settings from ProductMaster (default to SINGLE/1 if not found)
+    const activationType = productItem.productMaster?.activationType || 'SINGLE'
+    const maxActivations = productItem.productMaster?.maxActivations || 1
+    const activationCount = productItem.activationCount || 0
+    const canActivate = activationCount < maxActivations
+
     // Determine the result based on product status
     let result: VerifyResultType
     let message: string
@@ -136,8 +161,14 @@ export async function GET(request: NextRequest) {
         message = 'Genuine product - Shipped'
         break
       case 'ACTIVATED':
-        result = VerifyResult.ACTIVATED
-        message = 'Product has been activated'
+        // For PACK products, check if more activations are available
+        if (activationType === 'PACK' && canActivate) {
+          result = VerifyResult.GENUINE_SHIPPED
+          message = `Genuine product - ${activationCount}/${maxActivations} activations used`
+        } else {
+          result = VerifyResult.ACTIVATED
+          message = 'Product has been fully activated'
+        }
         break
       case 'RETURNED':
         result = VerifyResult.RETURNED
@@ -151,6 +182,12 @@ export async function GET(request: NextRequest) {
     // Log successful scan
     await logScan(productItemId, activeToken.id, tokenVersion, result, request)
 
+    // Get the latest activation
+    const latestActivation = productItem.activations?.[0]
+
+    // Check if clinic info should be shown
+    const showClinicInfo = await getShowClinicInfoSetting()
+
     // Build response data (only show necessary info to public)
     const responseData = {
       serialNumber: productItem.serial12,
@@ -160,8 +197,13 @@ export async function GET(request: NextRequest) {
       category: productItem.category.nameTh,
       expiryDate: productItem.expDate ? formatDate(productItem.expDate) : null,
       status: productItem.status,
-      // Show clinic info only if shipped/activated
-      ...(productItem.assignedClinic && ['SHIPPED', 'ACTIVATED'].includes(productItem.status) && {
+      // Activation settings
+      activationType,
+      maxActivations,
+      activationCount,
+      canActivate,
+      // Show clinic info only if setting enabled and shipped/activated
+      ...(showClinicInfo && productItem.assignedClinic && ['SHIPPED', 'ACTIVATED'].includes(productItem.status) && {
         clinic: {
           name: productItem.assignedClinic.name,
           province: productItem.assignedClinic.province,
@@ -169,8 +211,9 @@ export async function GET(request: NextRequest) {
         },
       }),
       // Show activation info if activated
-      ...(productItem.activation && {
-        activatedAt: productItem.activation.createdAt,
+      ...(latestActivation && {
+        activatedAt: latestActivation.createdAt,
+        activatedBy: latestActivation.customerName,
       }),
     }
 
@@ -231,4 +274,21 @@ function formatDate(date: Date): string {
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear().toString().slice(-2)
   return `${day}/${month}/${year}`
+}
+
+/**
+ * Get show clinic info setting
+ */
+async function getShowClinicInfoSetting(): Promise<boolean> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'verify.showClinicInfo' },
+    })
+    if (setting) {
+      return JSON.parse(setting.value) === true
+    }
+    return true // Default to showing clinic info
+  } catch {
+    return true // Default to showing clinic info on error
+  }
 }

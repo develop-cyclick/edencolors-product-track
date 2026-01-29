@@ -224,7 +224,8 @@ export default function GRNDetailPage() {
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending Out' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'คืนสินค้า', labelEn: 'Returned' },
+      RETURNED: { bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', label: 'คืนสินค้า', labelEn: 'Returned' },
+      DAMAGED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'เสียหาย', labelEn: 'Damaged' },
     }
     const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
     return (
@@ -299,7 +300,7 @@ export default function GRNDetailPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           {/* View Document Button */}
-          <Link
+          {/* <Link
             href={`/${locale}/dashboard/grn/${id}/document`}
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-charcoal)]/30 text-[var(--color-charcoal)] rounded-xl font-medium hover:bg-[var(--color-charcoal)]/5 transition-all duration-200"
           >
@@ -307,9 +308,9 @@ export default function GRNDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             {locale === 'th' ? 'ดูเอกสาร/พิมพ์' : 'View/Print Document'}
-          </Link>
+          </Link> */}
           {/* Export Excel Button */}
-          <a
+          {/* <a
             href={`/api/warehouse/grn/${id}/export`}
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-gold)] text-[var(--color-gold)] rounded-xl font-medium hover:bg-[var(--color-gold)]/10 transition-all duration-200"
           >
@@ -317,7 +318,7 @@ export default function GRNDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             {locale === 'th' ? 'ส่งออก Excel' : 'Export Excel'}
-          </a>
+          </a> */}
           {/* Grid Print Button (A4 with 8 columns) */}
           <button
             onClick={handlePrintGridLabels}
@@ -358,7 +359,7 @@ export default function GRNDetailPage() {
               </>
             )}
           </button> */}
-          {!grn.approvedAt && canApprove && (
+          {/* {!grn.approvedAt && canApprove && (
             <button
               onClick={handleApprove}
               className="flex items-center gap-2 px-5 py-2.5 bg-[var(--color-mint)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(115,207,199,0.4)] transition-all duration-200"
@@ -368,7 +369,7 @@ export default function GRNDetailPage() {
               </svg>
               {locale === 'th' ? 'อนุมัติ' : 'Approve'}
             </button>
-          )}
+          )} */}
         </div>
       </div>
 

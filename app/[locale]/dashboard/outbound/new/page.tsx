@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 interface Clinic {
@@ -34,10 +34,24 @@ interface ProductMaster {
   }
 }
 
-interface Reservation {
+interface PurchaseOrderLine {
   productMasterId: number
   quantity: number
-  productMaster?: ProductMaster | null
+  shippedQuantity: number
+  productMaster: ProductMaster
+}
+
+interface PurchaseOrder {
+  id: number
+  poNo: string
+  clinicId: number
+  status: string
+  lines: PurchaseOrderLine[]
+  summary: {
+    totalOrdered: number
+    totalShipped: number
+    totalRemaining: number
+  }
 }
 
 interface LineItem {
@@ -47,28 +61,23 @@ interface LineItem {
   quantity: number
 }
 
-interface SelectedProduct {
-  productItemId: number
-  serial12: string
-  sku: string
-  name: string
-  modelSize: string | null
-  lot: string | null
-  expDate: string | null
-  unitId: number
-}
-
 export default function NewOutboundPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const locale = params.locale as string
+
+  // URL params
+  const urlClinicId = searchParams.get('clinicId')
+  const urlPoId = searchParams.get('poId')
 
   const [loading, setLoading] = useState(false)
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
-  const [clinicReservations, setClinicReservations] = useState<Reservation[]>([])
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
 
   // Clinic search dropdown state
   const [clinicSearch, setClinicSearch] = useState('')
@@ -85,16 +94,13 @@ export default function NewOutboundPage() {
   const [clinicPhone, setClinicPhone] = useState('')
   const [clinicEmail, setClinicEmail] = useState('')
   const [clinicContactName, setClinicContactName] = useState('')
-  const [poNo, setPoNo] = useState('')
+  const [purchaseOrderId, setPurchaseOrderId] = useState<number>(0)
   const [remarks, setRemarks] = useState('')
 
   // Line items - select by SKU + quantity
   const [lines, setLines] = useState<LineItem[]>([
     { id: crypto.randomUUID(), productMasterId: 0, productMaster: null, quantity: 1 }
   ])
-
-  // Selected products (FIFO result from API)
-  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([])
 
   useEffect(() => {
     // Fetch master data
@@ -116,8 +122,55 @@ export default function NewOutboundPage() {
       if (pmRes.success && pmRes.data?.productMasters) {
         setProductMasters(pmRes.data.productMasters)
       }
+
+      // Set clinic from URL params
+      if (urlClinicId) {
+        setClinicId(parseInt(urlClinicId))
+      }
     })
-  }, [])
+  }, [urlClinicId])
+
+  // Fetch POs when clinic changes
+  useEffect(() => {
+    if (clinicId) {
+      fetch(`/api/admin/purchase-orders?clinicId=${clinicId}&hasRemaining=true`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && res.data?.purchaseOrders) {
+            setPurchaseOrders(res.data.purchaseOrders)
+
+            // Set PO from URL params
+            if (urlPoId) {
+              const po = res.data.purchaseOrders.find((p: PurchaseOrder) => p.id === parseInt(urlPoId))
+              if (po) {
+                setPurchaseOrderId(po.id)
+                setSelectedPO(po)
+                // Pre-fill lines from PO
+                const newLines: LineItem[] = po.lines
+                  .filter((l: PurchaseOrderLine) => l.quantity > l.shippedQuantity)
+                  .map((l: PurchaseOrderLine) => {
+                    const pm = productMasters.find((p) => p.id === l.productMasterId)
+                    return {
+                      id: crypto.randomUUID(),
+                      productMasterId: l.productMasterId,
+                      productMaster: pm || null,
+                      quantity: Math.min(l.quantity - l.shippedQuantity, pm?.stats.inStock || 0),
+                    }
+                  })
+                if (newLines.length > 0) setLines(newLines)
+              }
+            }
+          } else {
+            setPurchaseOrders([])
+          }
+        })
+        .catch(() => setPurchaseOrders([]))
+    } else {
+      setPurchaseOrders([])
+      setPurchaseOrderId(0)
+      setSelectedPO(null)
+    }
+  }, [clinicId, urlPoId, productMasters])
 
   useEffect(() => {
     // Update address when clinic changes
@@ -127,28 +180,34 @@ export default function NewOutboundPage() {
     }
   }, [clinicId, clinics])
 
-  // Fetch reservations when clinic changes
-  useEffect(() => {
-    if (clinicId) {
-      fetch(`/api/admin/clinics/${clinicId}/reservations`)
-        .then((r) => r.json())
-        .then((res) => {
-          if (res.success && res.data?.reservations) {
-            setClinicReservations(res.data.reservations)
-          } else {
-            setClinicReservations([])
+  // Handle PO selection
+  const handlePOChange = (poId: number) => {
+    setPurchaseOrderId(poId)
+    const po = purchaseOrders.find((p) => p.id === poId)
+    setSelectedPO(po || null)
+
+    if (po) {
+      // Pre-fill lines from PO (remaining items only)
+      const newLines: LineItem[] = po.lines
+        .filter((l) => l.quantity > l.shippedQuantity)
+        .map((l) => {
+          const pm = productMasters.find((p) => p.id === l.productMasterId)
+          return {
+            id: crypto.randomUUID(),
+            productMasterId: l.productMasterId,
+            productMaster: pm || null,
+            quantity: Math.min(l.quantity - l.shippedQuantity, pm?.stats.inStock || 0),
           }
         })
-        .catch(() => setClinicReservations([]))
-    } else {
-      setClinicReservations([])
+      if (newLines.length > 0) setLines(newLines)
     }
-  }, [clinicId])
+  }
 
-  // Helper to get reservation quantity for a ProductMaster
-  const getReservationQty = (productMasterId: number) => {
-    const reservation = clinicReservations.find((r) => r.productMasterId === productMasterId)
-    return reservation?.quantity || 0
+  // Get remaining quantity for a product in selected PO
+  const getPORemainingQty = (productMasterId: number) => {
+    if (!selectedPO) return 0
+    const line = selectedPO.lines.find((l) => l.productMasterId === productMasterId)
+    return line ? line.quantity - line.shippedQuantity : 0
   }
 
   // Close clinic dropdown when clicking outside
@@ -252,7 +311,7 @@ export default function NewOutboundPage() {
           clinicPhone: clinicPhone || null,
           clinicEmail: clinicEmail || null,
           clinicContactName: clinicContactName || null,
-          poNo: poNo || null,
+          purchaseOrderId: purchaseOrderId || null,
           remarks: remarks || null,
           // Send productMasterId + quantity, API will do FIFO selection
           linesByProductMaster: lines.map((l) => ({
@@ -456,14 +515,36 @@ export default function NewOutboundPage() {
               />
             </div>
 
+            {/* PO Dropdown */}
             <div>
-              <label className={labelClass}>PO No.</label>
-              <input
-                type="text"
-                value={poNo}
-                onChange={(e) => setPoNo(e.target.value)}
-                className={inputClass}
-              />
+              <label className={labelClass}>
+                {locale === 'th' ? 'เลข PO (ถ้ามี)' : 'PO No. (if any)'}
+              </label>
+              <div className="relative">
+                <select
+                  value={purchaseOrderId}
+                  onChange={(e) => handlePOChange(parseInt(e.target.value))}
+                  className={selectClass}
+                  disabled={!clinicId || purchaseOrders.length === 0}
+                >
+                  <option value={0}>{locale === 'th' ? '-- ไม่ระบุ PO --' : '-- No PO --'}</option>
+                  {purchaseOrders.map((po) => (
+                    <option key={po.id} value={po.id}>
+                      {po.poNo} ({locale === 'th' ? 'คงเหลือ' : 'Remaining'}: {po.summary.totalRemaining})
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {clinicId > 0 && purchaseOrders.length === 0 && (
+                <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                  {locale === 'th' ? 'ไม่มี PO ที่รอส่งสำหรับคลินิกนี้' : 'No pending POs for this clinic'}
+                </p>
+              )}
             </div>
 
             <div className="lg:col-span-2">
@@ -527,41 +608,39 @@ export default function NewOutboundPage() {
             </div>
           </div>
 
-          {/* Clinic Reservations Summary */}
-          {clinicId > 0 && clinicReservations.length > 0 && (
+          {/* Selected PO Summary */}
+          {selectedPO && (
             <div className="mt-5 p-4 bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 rounded-xl">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-full bg-[var(--color-gold)]/20 flex items-center justify-center">
                   <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <h3 className="text-sm font-semibold text-[var(--color-gold-dark)]">
-                  {locale === 'th' ? 'สินค้าฝากของคลินิกนี้' : 'Reserved Products for this Clinic'}
-                </h3>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-gold-dark)]">
+                    {locale === 'th' ? 'รายการจาก PO' : 'Items from PO'}: {selectedPO.poNo}
+                  </h3>
+                  <p className="text-xs text-[var(--color-gold-dark)]">
+                    {locale === 'th' ? `คงเหลือ ${selectedPO.summary.totalRemaining} ชิ้น` : `${selectedPO.summary.totalRemaining} items remaining`}
+                  </p>
+                </div>
               </div>
               <div className="space-y-2">
-                {clinicReservations.map((res) => {
-                  const pm = productMasters.find((p) => p.id === res.productMasterId) || res.productMaster
-                  if (!pm) return null
-                  return (
-                    <div key={res.productMasterId} className="flex justify-between items-center text-sm py-1.5 px-3 bg-white/50 rounded-lg">
+                {selectedPO.lines
+                  .filter((l) => l.quantity > l.shippedQuantity)
+                  .map((line) => (
+                    <div key={line.productMasterId} className="flex justify-between items-center text-sm py-1.5 px-3 bg-white/50 rounded-lg">
                       <span className="text-[var(--color-charcoal)]">
-                        {pm.sku} - {locale === 'th' ? pm.nameTh : ((pm as any).nameEn || pm.nameTh)}
-                        {pm.modelSize && ` (${pm.modelSize})`}
+                        {line.productMaster?.sku} - {locale === 'th' ? line.productMaster?.nameTh : (line.productMaster?.nameEn || line.productMaster?.nameTh)}
+                        {line.productMaster?.modelSize && ` (${line.productMaster.modelSize})`}
                       </span>
                       <span className="font-semibold text-[var(--color-gold-dark)]">
-                        {res.quantity} {locale === 'th' ? 'ชิ้น' : 'pcs'}
+                        {line.quantity - line.shippedQuantity} / {line.quantity} {locale === 'th' ? 'ชิ้น' : 'pcs'}
                       </span>
                     </div>
-                  )
-                })}
+                  ))}
               </div>
-              <p className="text-xs text-[var(--color-gold-dark)] mt-3">
-                {locale === 'th'
-                  ? 'สินค้าฝาก: คือสินค้าที่คลินิกจองไว้ล่วงหน้าแต่ยังไม่ได้ส่ง'
-                  : 'Reserved: Products pre-ordered by the clinic but not yet shipped'}
-              </p>
             </div>
           )}
         </div>
@@ -620,14 +699,14 @@ export default function NewOutboundPage() {
                       >
                         <option value={0} disabled>{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select Product --'}</option>
                         {productMasters.map((pm) => {
-                          const reservedQty = getReservationQty(pm.id)
+                          const poRemaining = getPORemainingQty(pm.id)
                           return (
                             <option
                               key={pm.id}
                               value={pm.id}
                               disabled={pm.stats.inStock === 0}
                             >
-                              {pm.sku} - {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)} {pm.modelSize ? `(${pm.modelSize})` : ''} [{locale === 'th' ? 'คงเหลือ' : 'Stock'}: {pm.stats.inStock}]{reservedQty > 0 ? ` [${locale === 'th' ? 'ฝาก' : 'Reserved'}: ${reservedQty}]` : ''}
+                              {pm.sku} - {locale === 'th' ? pm.nameTh : (pm.nameEn || pm.nameTh)} {pm.modelSize ? `(${pm.modelSize})` : ''} [{locale === 'th' ? 'คงเหลือ' : 'Stock'}: {pm.stats.inStock}]{poRemaining > 0 ? ` [${locale === 'th' ? 'จาก PO' : 'From PO'}: ${poRemaining}]` : ''}
                             </option>
                           )
                         })}
@@ -643,9 +722,9 @@ export default function NewOutboundPage() {
                       <div className="mt-1.5 text-xs text-[var(--color-foreground-muted)]">
                         {locale === 'th' ? 'หมวดหมู่' : 'Category'}: {line.productMaster.category?.nameTh || '-'}
                         {line.productMaster.defaultUnit && ` | ${locale === 'th' ? 'หน่วย' : 'Unit'}: ${line.productMaster.defaultUnit.nameTh}`}
-                        {getReservationQty(line.productMaster.id) > 0 && (
+                        {getPORemainingQty(line.productMaster.id) > 0 && (
                           <span className="ml-2 text-[var(--color-gold)]">
-                            | {locale === 'th' ? 'สินค้าฝาก' : 'Reserved'}: {getReservationQty(line.productMaster.id)}
+                            | {locale === 'th' ? 'จาก PO' : 'From PO'}: {getPORemainingQty(line.productMaster.id)}
                           </span>
                         )}
                       </div>

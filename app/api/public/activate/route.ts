@@ -7,12 +7,13 @@ const CURRENT_POLICY_VERSION = '1.0'
 
 interface ActivationRequest {
   token: string
-  customerName: string
-  age: number
-  gender: 'M' | 'F' | 'Other'
-  province: string
-  phone?: string
   consent: boolean
+  // Optional customer info
+  customerName?: string
+  age?: number
+  gender?: 'M' | 'F' | 'Other'
+  province?: string
+  phone?: string
 }
 
 // POST /api/public/activate
@@ -51,37 +52,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!customerName || customerName.trim().length < 2) {
-      return NextResponse.json(
-        { success: false, error: 'Name is required (minimum 2 characters)' },
-        { status: 400 }
-      )
-    }
-
-    if (!age || age < 1 || age > 150) {
-      return NextResponse.json(
-        { success: false, error: 'Valid age is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!gender || !['M', 'F', 'Other'].includes(gender)) {
-      return NextResponse.json(
-        { success: false, error: 'Gender is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!province || province.trim().length < 2) {
-      return NextResponse.json(
-        { success: false, error: 'Province is required' },
-        { status: 400 }
-      )
-    }
-
     if (!consent) {
       return NextResponse.json(
         { success: false, error: 'Consent is required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate optional customer info (if provided)
+    if (customerName && customerName.trim().length < 2) {
+      return NextResponse.json(
+        { success: false, error: 'Name must be at least 2 characters' },
+        { status: 400 }
+      )
+    }
+
+    if (age !== undefined && (age < 1 || age > 150)) {
+      return NextResponse.json(
+        { success: false, error: 'Age must be between 1 and 150' },
+        { status: 400 }
+      )
+    }
+
+    if (gender && !['M', 'F', 'Other'].includes(gender)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid gender value' },
         { status: 400 }
       )
     }
@@ -108,7 +103,15 @@ export async function POST(request: NextRequest) {
           orderBy: { tokenVersion: 'desc' },
           take: 1,
         },
-        activation: true,
+        activations: {
+          orderBy: { activationNumber: 'desc' },
+        },
+        productMaster: {
+          select: {
+            activationType: true,
+            maxActivations: true,
+          },
+        },
         category: true,
       },
     })
@@ -150,20 +153,31 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if already activated (one-time lock)
-    if (productItem.activation) {
+    // Get activation settings from ProductMaster (default to SINGLE/1 if not found)
+    const activationType = productItem.productMaster?.activationType || 'SINGLE'
+    const maxActivations = productItem.productMaster?.maxActivations || 1
+    const currentActivationCount = productItem.activationCount || 0
+
+    // Check if already fully activated
+    if (currentActivationCount >= maxActivations) {
+      const latestActivation = productItem.activations?.[0]
       return NextResponse.json({
         success: false,
-        error: 'This product has already been activated',
+        error: activationType === 'PACK'
+          ? `This product has reached maximum activations (${maxActivations})`
+          : 'This product has already been activated',
         code: 'ALREADY_ACTIVATED',
         data: {
-          activatedAt: productItem.activation.createdAt,
+          activatedAt: latestActivation?.createdAt,
+          activationCount: currentActivationCount,
+          maxActivations,
         },
       })
     }
 
-    // Check product status - must be SHIPPED to activate
-    if (productItem.status !== 'SHIPPED') {
+    // Check product status - must be SHIPPED or ACTIVATED (for PACK) to activate
+    const allowedStatuses = activationType === 'PACK' ? ['SHIPPED', 'ACTIVATED'] : ['SHIPPED']
+    if (!allowedStatuses.includes(productItem.status)) {
       let errorMessage = 'This product cannot be activated'
 
       switch (productItem.status) {
@@ -186,25 +200,31 @@ export async function POST(request: NextRequest) {
 
     // Create activation record and update product status in a transaction
     const now = new Date()
+    const newActivationNumber = currentActivationCount + 1
+    const isLastActivation = newActivationNumber >= maxActivations
 
     const [activation] = await prisma.$transaction([
       // Create activation
       prisma.activation.create({
         data: {
-          productItemId: productItem.id,
-          customerName: customerName.trim(),
-          age,
-          gender,
-          province: province.trim(),
+          productItem: { connect: { id: productItem.id } },
+          activationNumber: newActivationNumber,
+          customerName: customerName?.trim() || null,
+          age: age || null,
+          gender: gender || null,
+          province: province?.trim() || null,
           phone: phone?.trim() || null,
           consentAt: now,
           policyVersion: CURRENT_POLICY_VERSION,
         },
       }),
-      // Update product status
+      // Update product: increment activationCount, set status to ACTIVATED if last activation
       prisma.productItem.update({
         where: { id: productItem.id },
-        data: { status: 'ACTIVATED' },
+        data: {
+          activationCount: newActivationNumber,
+          status: isLastActivation ? 'ACTIVATED' : productItem.status,
+        },
       }),
       // Log event
       prisma.eventLog.create({
@@ -212,11 +232,14 @@ export async function POST(request: NextRequest) {
           eventType: 'ACTIVATE',
           productItemId: productItem.id,
           details: {
-            customerName: customerName.trim(),
-            age,
-            gender,
-            province: province.trim(),
+            customerName: customerName?.trim() || null,
+            age: age || null,
+            gender: gender || null,
+            province: province?.trim() || null,
             activatedAt: now.toISOString(),
+            activationNumber: newActivationNumber,
+            maxActivations,
+            activationType,
           },
         },
       }),
@@ -224,12 +247,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Product activated successfully',
+      message: activationType === 'PACK'
+        ? `Product activated successfully (${newActivationNumber}/${maxActivations})`
+        : 'Product activated successfully',
       data: {
         serialNumber: productItem.serial12,
         productName: productItem.name,
         category: productItem.category.nameTh,
         activatedAt: activation.createdAt,
+        activationNumber: newActivationNumber,
+        maxActivations,
+        remainingActivations: maxActivations - newActivationNumber,
       },
     })
   } catch (error) {

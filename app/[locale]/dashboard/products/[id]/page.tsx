@@ -30,7 +30,7 @@ interface ProductItem {
   lot: string | null
   mfgDate: string | null
   expDate: string | null
-  status: 'IN_STOCK' | 'PENDING_OUT' | 'SHIPPED' | 'ACTIVATED' | 'RETURNED'
+  status: 'IN_STOCK' | 'PENDING_OUT' | 'SHIPPED' | 'ACTIVATED' | 'RETURNED' | 'DAMAGED'
   assignedClinic: { id: number; name: string } | null
   grnLine: {
     unit: { nameTh: string; nameEn: string | null }
@@ -50,7 +50,8 @@ const statusLabels: Record<string, { th: string; en: string; color: string }> = 
   PENDING_OUT: { th: 'รอส่งออก', en: 'Pending Out', color: 'bg-amber-100 text-amber-700' },
   SHIPPED: { th: 'ส่งออกแล้ว', en: 'Shipped', color: 'bg-blue-100 text-blue-700' },
   ACTIVATED: { th: 'เปิดใช้แล้ว', en: 'Activated', color: 'bg-purple-100 text-purple-700' },
-  RETURNED: { th: 'คืนสินค้า', en: 'Returned', color: 'bg-red-100 text-red-700' },
+  RETURNED: { th: 'คืนสินค้า', en: 'Returned', color: 'bg-orange-100 text-orange-700' },
+  DAMAGED: { th: 'เสียหาย', en: 'Damaged', color: 'bg-red-100 text-red-700' },
 }
 
 export default function ProductMasterDetailPage() {

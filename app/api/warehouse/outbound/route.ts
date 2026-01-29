@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import { generateOutboundNumber } from '@/lib/serial-generator'
-import type { OutboundStatus } from '@prisma/client'
+import type { OutboundStatus, ProductItem } from '@prisma/client'
 import type { JWTPayload } from '@/lib/auth'
 
 type HandlerContext = { user: JWTPayload }
@@ -36,7 +36,7 @@ interface CreateOutboundInput {
   clinicPhone?: string
   clinicEmail?: string
   clinicContactName?: string
-  poNo?: string
+  purchaseOrderId?: number | null
   remarks?: string
   lines?: OutboundLineInput[]  // Legacy format
   linesByProductMaster?: ProductMasterLineInput[]  // New FIFO format
@@ -58,7 +58,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     ...(search && {
       OR: [
         { deliveryNoteNo: { contains: search, mode: 'insensitive' as const } },
-        { poNo: { contains: search, mode: 'insensitive' as const } },
+        { purchaseOrder: { poNo: { contains: search, mode: 'insensitive' as const } } },
         { clinic: { name: { contains: search, mode: 'insensitive' as const } } },
       ],
     }),
@@ -76,6 +76,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         clinic: { select: { id: true, name: true, province: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
+        purchaseOrder: { select: { id: true, poNo: true } },
         _count: { select: { lines: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -124,8 +125,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
 
   try {
     // If using new FIFO format, select ProductItems automatically
-    let selectedItems: Array<{
-      productItem: typeof prisma.productItem extends { findFirst: () => Promise<infer T> } ? NonNullable<T> : never
+    const selectedItems: Array<{
+      productItem: ProductItem
       productMaster: {
         id: number
         sku: string
@@ -171,7 +172,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         // Add selected items with their ProductMaster info
         for (const item of availableItems) {
           selectedItems.push({
-            productItem: item as any,
+            productItem: item,
             productMaster,
           })
         }
@@ -199,7 +200,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       for (const item of productItems) {
         const lineData = body.lines!.find((l) => l.productItemId === item.id)!
         selectedItems.push({
-          productItem: item as any,
+          productItem: item,
           productMaster: item.productMaster ? {
             id: item.productMaster.id,
             sku: item.productMaster.sku,
@@ -235,7 +236,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           clinicPhone: body.clinicPhone,
           clinicEmail: body.clinicEmail,
           clinicContactName: body.clinicContactName,
-          poNo: body.poNo,
+          purchaseOrderId: body.purchaseOrderId || null,
           status: 'PENDING', // Auto submit for approval
           remarks: body.remarks,
         },

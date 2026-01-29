@@ -1,0 +1,219 @@
+import { NextRequest } from 'next/server'
+import prisma from '@/lib/prisma'
+import { withAdmin, withWarehouse } from '@/lib/api-middleware'
+import { successResponse, errorResponse, errors } from '@/lib/api-response'
+import type { JWTPayload } from '@/lib/auth'
+
+type RouteParams = Promise<{ id: string }>
+type HandlerContext = { user: JWTPayload; params?: RouteParams }
+
+// GET /api/admin/purchase-orders/[id] - Get purchase order detail
+async function handleGET(_request: NextRequest, context: HandlerContext) {
+  if (!context.params) {
+    return errorResponse('Missing params', 400)
+  }
+
+  try {
+    const { id } = await context.params
+    const purchaseOrderId = parseInt(id)
+
+    const purchaseOrder = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        clinic: {
+          select: {
+            id: true,
+            name: true,
+            province: true,
+            branchName: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+        lines: {
+          include: {
+            productMaster: {
+              select: {
+                id: true,
+                sku: true,
+                nameTh: true,
+                nameEn: true,
+                modelSize: true,
+                category: {
+                  select: {
+                    nameTh: true,
+                    nameEn: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        outbounds: {
+          select: {
+            id: true,
+            deliveryNoteNo: true,
+            status: true,
+            createdAt: true,
+            shippedAt: true,
+            lines: {
+              select: {
+                id: true,
+                sku: true,
+                itemName: true,
+                quantity: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    })
+
+    if (!purchaseOrder) {
+      return errors.notFound('Purchase order not found')
+    }
+
+    // Calculate summary
+    const totalOrdered = purchaseOrder.lines.reduce((sum, line) => sum + line.quantity, 0)
+    const totalShipped = purchaseOrder.lines.reduce((sum, line) => sum + line.shippedQuantity, 0)
+    const totalRemaining = totalOrdered - totalShipped
+
+    return successResponse({
+      purchaseOrder: {
+        ...purchaseOrder,
+        summary: {
+          totalOrdered,
+          totalShipped,
+          totalRemaining,
+          lineCount: purchaseOrder.lines.length,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Get purchase order error:', error)
+    return errors.internalError()
+  }
+}
+
+// PATCH /api/admin/purchase-orders/[id] - Update purchase order
+async function handlePATCH(request: NextRequest, context: HandlerContext) {
+  if (!context.params) {
+    return errorResponse('Missing params', 400)
+  }
+
+  try {
+    const { id } = await context.params
+    const purchaseOrderId = parseInt(id)
+    const body = await request.json()
+
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+    })
+
+    if (!existing) {
+      return errors.notFound('Purchase order not found')
+    }
+
+    // Don't allow editing if completed or cancelled
+    if (existing.status === 'COMPLETED' || existing.status === 'CANCELLED') {
+      return errorResponse('Cannot edit completed or cancelled purchase order', 400)
+    }
+
+    const updateData: Record<string, unknown> = {}
+
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.remarks !== undefined) updateData.remarks = body.remarks
+
+    // Update lines if provided
+    if (body.lines && Array.isArray(body.lines)) {
+      // Delete existing lines and create new ones
+      await prisma.purchaseOrderLine.deleteMany({
+        where: { purchaseOrderId },
+      })
+
+      await prisma.purchaseOrderLine.createMany({
+        data: body.lines.map((line: { productMasterId: number; quantity: number; shippedQuantity?: number }) => ({
+          purchaseOrderId,
+          productMasterId: line.productMasterId,
+          quantity: line.quantity,
+          shippedQuantity: line.shippedQuantity || 0,
+        })),
+      })
+    }
+
+    const purchaseOrder = await prisma.purchaseOrder.update({
+      where: { id: purchaseOrderId },
+      data: updateData,
+      include: {
+        clinic: true,
+        lines: {
+          include: {
+            productMaster: true,
+          },
+        },
+      },
+    })
+
+    return successResponse({ purchaseOrder })
+  } catch (error) {
+    console.error('Update purchase order error:', error)
+    return errors.internalError()
+  }
+}
+
+// DELETE /api/admin/purchase-orders/[id] - Delete/Cancel purchase order
+async function handleDELETE(request: NextRequest, context: HandlerContext) {
+  if (!context.params) {
+    return errorResponse('Missing params', 400)
+  }
+
+  try {
+    const { id } = await context.params
+    const purchaseOrderId = parseInt(id)
+    const { searchParams } = new URL(request.url)
+    const hard = searchParams.get('hard') === 'true'
+
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        outbounds: true,
+      },
+    })
+
+    if (!existing) {
+      return errors.notFound('Purchase order not found')
+    }
+
+    // Check if has outbounds
+    if (existing.outbounds.length > 0) {
+      return errorResponse('Cannot delete purchase order with outbound records', 400)
+    }
+
+    if (hard) {
+      // Hard delete
+      await prisma.purchaseOrder.delete({
+        where: { id: purchaseOrderId },
+      })
+      return successResponse({ message: 'Purchase order deleted successfully' })
+    } else {
+      // Soft delete - just cancel
+      await prisma.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: { status: 'CANCELLED' },
+      })
+      return successResponse({ message: 'Purchase order cancelled successfully' })
+    }
+  } catch (error) {
+    console.error('Delete purchase order error:', error)
+    return errors.internalError()
+  }
+}
+
+export const GET = withWarehouse<RouteParams>(handleGET)
+export const PATCH = withAdmin<RouteParams>(handlePATCH)
+export const DELETE = withAdmin<RouteParams>(handleDELETE)

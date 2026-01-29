@@ -36,7 +36,9 @@
       "mcp__chrome-devtools__wait_for",
       "Bash(where:*)",
       "Bash(npx md-to-pdf:*)",
-      "Bash(ipconfig:*)"
+      "Bash(ipconfig:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(npx prisma db seed:*)"
     ]
   }
 }

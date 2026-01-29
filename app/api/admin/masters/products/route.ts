@@ -114,6 +114,8 @@ export const POST = withAdmin(async (request: NextRequest) => {
         modelSize: body.modelSize || null,
         description: body.description || null,
         defaultUnitId: body.defaultUnitId || null,
+        activationType: body.activationType || 'SINGLE',
+        maxActivations: body.activationType === 'PACK' ? (body.maxActivations || 1) : 1,
         isActive: body.isActive ?? true,
       },
       include: {
@@ -161,6 +163,10 @@ export const PATCH = withAdmin(async (request: NextRequest) => {
         ...(body.modelSize !== undefined && { modelSize: body.modelSize }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.defaultUnitId !== undefined && { defaultUnitId: body.defaultUnitId }),
+        ...(body.activationType !== undefined && { activationType: body.activationType }),
+        ...(body.maxActivations !== undefined && {
+          maxActivations: body.activationType === 'PACK' ? body.maxActivations : 1
+        }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
       },
       include: {

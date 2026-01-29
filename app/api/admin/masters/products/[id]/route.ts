@@ -150,6 +150,10 @@ export const PATCH = withAdmin(async (request: NextRequest, context: HandlerCont
         ...(body.modelSize !== undefined && { modelSize: body.modelSize }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.defaultUnitId !== undefined && { defaultUnitId: body.defaultUnitId }),
+        ...(body.activationType !== undefined && { activationType: body.activationType }),
+        ...(body.maxActivations !== undefined && {
+          maxActivations: body.activationType === 'PACK' ? body.maxActivations : 1
+        }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
       },
       include: {

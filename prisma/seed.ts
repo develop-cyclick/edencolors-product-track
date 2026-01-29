@@ -201,6 +201,7 @@ async function main() {
     { name: 'SERIAL', prefix: '', currentVal: BigInt(0) },
     { name: 'GRN', prefix: `GRN-${year}-`, currentVal: BigInt(0) },
     { name: 'OUTBOUND', prefix: `OUT-${year}-`, currentVal: BigInt(0) },
+    { name: 'PRE_GEN', prefix: `PG-${year}-`, currentVal: BigInt(0) },
   ]
 
   for (const counter of counters) {

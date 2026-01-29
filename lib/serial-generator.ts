@@ -77,6 +77,32 @@ export async function generateOutboundNumber(): Promise<string> {
 }
 
 /**
+ * Generate next Pre-Generated Batch number (format: PG-YYYY-NNNNNN)
+ */
+export async function generatePreGenBatchNumber(): Promise<string> {
+  const year = new Date().getFullYear()
+  const prefix = `PG-${year}-`
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Update prefix if year changed
+    const counter = await tx.sequenceCounter.update({
+      where: { name: 'PRE_GEN' },
+      data: {
+        prefix: prefix,
+        currentVal: {
+          increment: 1,
+        },
+      },
+    })
+
+    return counter
+  })
+
+  // Format as 6-digit number
+  return `${result.prefix}${result.currentVal.toString().padStart(6, '0')}`
+}
+
+/**
  * Validate serial number format (12 digits)
  */
 export function isValidSerialNumber(serial: string): boolean {

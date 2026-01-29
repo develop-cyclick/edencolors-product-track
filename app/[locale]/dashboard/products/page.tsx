@@ -11,6 +11,8 @@ interface ProductMaster {
   nameEn: string | null
   modelSize: string | null
   description: string | null
+  activationType: 'SINGLE' | 'PACK'
+  maxActivations: number
   isActive: boolean
   category: { id: number; nameTh: string; nameEn: string }
   defaultUnit: { id: number; nameTh: string; nameEn: string } | null
@@ -52,6 +54,8 @@ export default function ProductMasterPage() {
     modelSize: '',
     description: '',
     defaultUnitId: '',
+    activationType: 'SINGLE' as 'SINGLE' | 'PACK',
+    maxActivations: 1,
   })
 
   const [units, setUnits] = useState<{ id: number; nameTh: string; nameEn: string }[]>([])
@@ -133,6 +137,8 @@ export default function ProductMasterPage() {
       modelSize: '',
       description: '',
       defaultUnitId: '',
+      activationType: 'SINGLE',
+      maxActivations: 1,
     })
     setShowModal(true)
   }
@@ -147,6 +153,8 @@ export default function ProductMasterPage() {
       modelSize: pm.modelSize || '',
       description: pm.description || '',
       defaultUnitId: pm.defaultUnit?.id.toString() || '',
+      activationType: pm.activationType || 'SINGLE',
+      maxActivations: pm.maxActivations || 1,
     })
     setShowModal(true)
   }
@@ -158,8 +166,19 @@ export default function ProductMasterPage() {
     try {
       const method = editingItem ? 'PATCH' : 'POST'
       const body = editingItem
-        ? { id: editingItem.id, ...formData, categoryId: parseInt(formData.categoryId), defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null }
-        : { ...formData, categoryId: parseInt(formData.categoryId), defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null }
+        ? {
+            id: editingItem.id,
+            ...formData,
+            categoryId: parseInt(formData.categoryId),
+            defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null,
+            maxActivations: formData.activationType === 'PACK' ? formData.maxActivations : 1,
+          }
+        : {
+            ...formData,
+            categoryId: parseInt(formData.categoryId),
+            defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null,
+            maxActivations: formData.activationType === 'PACK' ? formData.maxActivations : 1,
+          }
 
       const res = await fetch('/api/admin/masters/products', {
         method,
@@ -325,6 +344,9 @@ export default function ProductMasterPage() {
                     {locale === 'th' ? 'หน่วย' : 'Unit'}
                   </th>
                   <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ประเภท Activate' : 'Activation'}
+                  </th>
+                  <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
                     {locale === 'th' ? 'ในคลัง' : 'In Stock'}
                   </th>
                   <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
@@ -357,6 +379,23 @@ export default function ProductMasterPage() {
                     </td>
                     <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
                       {pm.defaultUnit ? (locale === 'th' ? pm.defaultUnit.nameTh : pm.defaultUnit.nameEn) : <span className="text-red-500">-</span>}
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      {pm.activationType === 'PACK' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                          Pack ({pm.maxActivations})
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Single
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-center">
                       <span className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-1 rounded-full text-sm font-medium ${
@@ -523,6 +562,96 @@ export default function ProductMasterPage() {
                     className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
                     rows={3}
                   />
+                </div>
+                {/* Activation Type */}
+                <div className="bg-[var(--color-off-white)] rounded-xl p-4 space-y-3">
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ประเภทการ Activate' : 'Activation Type'}
+                  </label>
+                  <div className="flex gap-4">
+                    <label className={`flex-1 cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                      formData.activationType === 'SINGLE'
+                        ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/5'
+                        : 'border-[var(--color-beige)] hover:border-[var(--color-gold)]/50'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="activationType"
+                        value="SINGLE"
+                        checked={formData.activationType === 'SINGLE'}
+                        onChange={(e) => setFormData({ ...formData, activationType: e.target.value as 'SINGLE' | 'PACK', maxActivations: 1 })}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          formData.activationType === 'SINGLE'
+                            ? 'border-[var(--color-gold)]'
+                            : 'border-[var(--color-beige)]'
+                        }`}>
+                          {formData.activationType === 'SINGLE' && (
+                            <div className="w-2 h-2 rounded-full bg-[var(--color-gold)]" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-[var(--color-charcoal)]">Single</div>
+                          <div className="text-xs text-[var(--color-foreground-muted)]">
+                            {locale === 'th' ? 'Activate ได้ 1 ครั้ง' : 'One-time activation'}
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                    <label className={`flex-1 cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                      formData.activationType === 'PACK'
+                        ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/5'
+                        : 'border-[var(--color-beige)] hover:border-[var(--color-gold)]/50'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="activationType"
+                        value="PACK"
+                        checked={formData.activationType === 'PACK'}
+                        onChange={(e) => setFormData({ ...formData, activationType: e.target.value as 'SINGLE' | 'PACK', maxActivations: 5 })}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          formData.activationType === 'PACK'
+                            ? 'border-[var(--color-gold)]'
+                            : 'border-[var(--color-beige)]'
+                        }`}>
+                          {formData.activationType === 'PACK' && (
+                            <div className="w-2 h-2 rounded-full bg-[var(--color-gold)]" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-[var(--color-charcoal)]">Pack</div>
+                          <div className="text-xs text-[var(--color-foreground-muted)]">
+                            {locale === 'th' ? 'Activate ได้หลายครั้ง' : 'Multiple activations'}
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  {formData.activationType === 'PACK' && (
+                    <div className="pt-2">
+                      <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                        {locale === 'th' ? 'จำนวนครั้งที่ Activate ได้' : 'Max Activations'}
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="100"
+                        value={formData.maxActivations}
+                        onChange={(e) => setFormData({ ...formData, maxActivations: parseInt(e.target.value) || 2 })}
+                        className="w-32 px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                      />
+                      <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                        {locale === 'th'
+                          ? `ลูกค้าสามารถ Activate สินค้านี้ได้ ${formData.maxActivations} ครั้ง`
+                          : `Customers can activate this product ${formData.maxActivations} times`}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4">
                   <button

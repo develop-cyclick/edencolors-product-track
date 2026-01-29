@@ -18,6 +18,7 @@ interface GRNLineInput {
   expDate?: string
   inspectionStatus?: InspectionStatus
   remarks?: string
+  preGeneratedItemIds?: number[]  // Optional: use pre-generated QR items instead of creating new
 }
 
 interface CreateGRNInput {
@@ -143,84 +144,183 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           throw new Error(`ProductMaster is inactive: ${productMaster.sku}`)
         }
 
-        // Each quantity creates one product item (1 serial per item)
-        for (let i = 0; i < line.quantity; i++) {
-          // Generate serial number
-          const serialNumber = await generateSerialNumber()
+        // Check if using pre-generated items
+        if (line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0) {
+          // Use pre-generated items (link existing items)
+          for (const preGenItemId of line.preGeneratedItemIds) {
+            // Fetch and validate pre-generated item
+            const preGenItem = await tx.productItem.findUnique({
+              where: { id: preGenItemId },
+              include: {
+                qrTokens: {
+                  where: { status: 'ACTIVE' },
+                  orderBy: { tokenVersion: 'desc' },
+                  take: 1,
+                },
+              },
+            })
 
-          // Create product item linked to ProductMaster
-          const productItem = await tx.productItem.create({
-            data: {
-              serial12: serialNumber,
-              sku: productMaster.sku,
-              name: productMaster.nameTh,
-              categoryId: productMaster.categoryId,
-              modelSize: productMaster.modelSize,
-              productMasterId: productMaster.id,  // Link to ProductMaster
-              lot: line.lot,
-              mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
-              expDate: line.expDate ? new Date(line.expDate) : null,
-              status: 'IN_STOCK',
-            },
-          })
+            if (!preGenItem) {
+              throw new Error(`Pre-generated item not found: ${preGenItemId}`)
+            }
 
-          // Create QR token for this product
-          const qrToken = await createQRToken({
-            serialNumber,
-            productItemId: productItem.id,
-            tokenVersion: 1,
-            issuedAt: Math.floor(Date.now() / 1000),
-          })
+            if (preGenItem.status !== 'PENDING_LINK') {
+              throw new Error(`Item ${preGenItem.serial12} is not available for linking (status: ${preGenItem.status})`)
+            }
 
-          // Store token and its hash
-          await tx.qRToken.create({
-            data: {
+            // Update pre-generated item with actual product data
+            const productItem = await tx.productItem.update({
+              where: { id: preGenItemId },
+              data: {
+                sku: productMaster.sku,
+                name: productMaster.nameTh,
+                categoryId: productMaster.categoryId,
+                modelSize: productMaster.modelSize,
+                productMasterId: productMaster.id,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                status: 'IN_STOCK',
+              },
+            })
+
+            // Update linked count on batch
+            if (productItem.preGeneratedBatchId) {
+              await tx.preGeneratedBatch.update({
+                where: { id: productItem.preGeneratedBatchId },
+                data: {
+                  linkedCount: { increment: 1 },
+                },
+              })
+            }
+
+            // Get existing QR token
+            const qrToken = preGenItem.qrTokens[0]?.token || ''
+
+            // Create GRN line
+            const grnLine = await tx.gRNLine.create({
+              data: {
+                grnHeaderId: grnHeader.id,
+                productItemId: productItem.id,
+                sku: productMaster.sku,
+                itemName: productMaster.nameTh,
+                modelSize: productMaster.modelSize,
+                quantity: 1,
+                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                inspectionStatus: line.inspectionStatus || 'OK',
+                remarks: line.remarks,
+              },
+            })
+
+            createdLines.push({
+              line: grnLine,
+              productItem,
+              qrToken,
+              isPreGenerated: true,
+            })
+
+            // Log event
+            await tx.eventLog.create({
+              data: {
+                eventType: 'INBOUND',
+                productItemId: productItem.id,
+                userId: user.userId,
+                details: {
+                  grnNo: grnHeader.grnNo,
+                  serialNumber: productItem.serial12,
+                  sku: productMaster.sku,
+                  productMasterId: productMaster.id,
+                  isPreGenerated: true,
+                  preGeneratedBatchId: productItem.preGeneratedBatchId,
+                },
+              },
+            })
+          }
+        } else {
+          // Normal flow: create new product items
+          // Each quantity creates one product item (1 serial per item)
+          for (let i = 0; i < line.quantity; i++) {
+            // Generate serial number
+            const serialNumber = await generateSerialNumber()
+
+            // Create product item linked to ProductMaster
+            const productItem = await tx.productItem.create({
+              data: {
+                serial12: serialNumber,
+                sku: productMaster.sku,
+                name: productMaster.nameTh,
+                categoryId: productMaster.categoryId,
+                modelSize: productMaster.modelSize,
+                productMasterId: productMaster.id,  // Link to ProductMaster
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                status: 'IN_STOCK',
+              },
+            })
+
+            // Create QR token for this product
+            const qrToken = await createQRToken({
+              serialNumber,
               productItemId: productItem.id,
               tokenVersion: 1,
-              token: qrToken, // Store actual encrypted token
-              tokenHash: hashToken(qrToken),
-              status: 'ACTIVE',
-            },
-          })
+              issuedAt: Math.floor(Date.now() / 1000),
+            })
 
-          // Create GRN line with ProductMaster data
-          const grnLine = await tx.gRNLine.create({
-            data: {
-              grnHeaderId: grnHeader.id,
-              productItemId: productItem.id,
-              sku: productMaster.sku,
-              itemName: productMaster.nameTh,
-              modelSize: productMaster.modelSize,
-              quantity: 1, // Always 1 per line (1 serial)
-              unitId: line.unitId || productMaster.defaultUnitId || 1,
-              lot: line.lot,
-              mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
-              expDate: line.expDate ? new Date(line.expDate) : null,
-              inspectionStatus: line.inspectionStatus || 'OK',
-              remarks: line.remarks,
-            },
-          })
-
-          createdLines.push({
-            line: grnLine,
-            productItem,
-            qrToken,
-          })
-
-          // Log event
-          await tx.eventLog.create({
-            data: {
-              eventType: 'INBOUND',
-              productItemId: productItem.id,
-              userId: user.userId,
-              details: {
-                grnNo: grnHeader.grnNo,
-                serialNumber,
-                sku: productMaster.sku,
-                productMasterId: productMaster.id,
+            // Store token and its hash
+            await tx.qRToken.create({
+              data: {
+                productItemId: productItem.id,
+                tokenVersion: 1,
+                token: qrToken, // Store actual encrypted token
+                tokenHash: hashToken(qrToken),
+                status: 'ACTIVE',
               },
-            },
-          })
+            })
+
+            // Create GRN line with ProductMaster data
+            const grnLine = await tx.gRNLine.create({
+              data: {
+                grnHeaderId: grnHeader.id,
+                productItemId: productItem.id,
+                sku: productMaster.sku,
+                itemName: productMaster.nameTh,
+                modelSize: productMaster.modelSize,
+                quantity: 1, // Always 1 per line (1 serial)
+                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                inspectionStatus: line.inspectionStatus || 'OK',
+                remarks: line.remarks,
+              },
+            })
+
+            createdLines.push({
+              line: grnLine,
+              productItem,
+              qrToken,
+              isPreGenerated: false,
+            })
+
+            // Log event
+            await tx.eventLog.create({
+              data: {
+                eventType: 'INBOUND',
+                productItemId: productItem.id,
+                userId: user.userId,
+                details: {
+                  grnNo: grnHeader.grnNo,
+                  serialNumber,
+                  sku: productMaster.sku,
+                  productMasterId: productMaster.id,
+                },
+              },
+            })
+          }
         }
       }
 

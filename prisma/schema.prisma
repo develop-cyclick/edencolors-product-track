@@ -21,11 +21,13 @@ enum UserRole {
 }
 
 enum ProductStatus {
+  PENDING_LINK  // QR ที่สร้างล่วงหน้า รอเชื่อมโยง
   IN_STOCK      // อยู่ในคลัง
   PENDING_OUT   // รอส่งออก (รออนุมัติ)
   SHIPPED       // ส่งออกแล้ว
   ACTIVATED     // ลูกค้าเปิดใช้แล้ว
   RETURNED      // คืนสินค้า
+  DAMAGED       // เสียหาย รอซ่อม
 }
 
 enum QRTokenStatus {
@@ -48,26 +50,34 @@ enum InspectionStatus {
   INCOMPLETE    // ไม่ครบ
 }
 
+enum ActivationType {
+  SINGLE        // Activate ได้ครั้งเดียว
+  PACK          // Activate ได้หลายครั้ง (กำหนดจำนวน)
+}
+
 // ============================================
 // MASTER DATA TABLES (Dropdowns)
 // ============================================
 
 model ProductMaster {
-  id            Int      @id @default(autoincrement())
-  sku           String   @unique
-  nameTh        String   @map("name_th")
-  nameEn        String?  @map("name_en")
-  categoryId    Int      @map("category_id")
-  modelSize     String?  @map("model_size")
-  description   String?  @db.Text
-  defaultUnitId Int?     @map("default_unit_id")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              Int            @id @default(autoincrement())
+  sku             String         @unique
+  nameTh          String         @map("name_th")
+  nameEn          String?        @map("name_en")
+  categoryId      Int            @map("category_id")
+  modelSize       String?        @map("model_size")
+  description     String?        @db.Text
+  defaultUnitId   Int?           @map("default_unit_id")
+  activationType  ActivationType @default(SINGLE) @map("activation_type")
+  maxActivations  Int            @default(1) @map("max_activations")
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  category      ProductCategory @relation(fields: [categoryId], references: [id])
-  defaultUnit   Unit?           @relation(fields: [defaultUnitId], references: [id])
-  productItems  ProductItem[]
+  category            ProductCategory     @relation(fields: [categoryId], references: [id])
+  defaultUnit         Unit?               @relation(fields: [defaultUnitId], references: [id])
+  productItems        ProductItem[]
+  purchaseOrderLines  PurchaseOrderLine[]
 
   @@index([sku])
   @@index([isActive])
@@ -144,12 +154,14 @@ model User {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  grnHeadersCreated      GRNHeader[]      @relation("GRNCreatedBy")
-  grnHeadersApproved     GRNHeader[]      @relation("GRNApprovedBy")
-  grnHeadersRejected     GRNHeader[]      @relation("GRNRejectedBy")
-  outboundsCreated       OutboundHeader[] @relation("OutboundCreatedBy")
-  outboundsApproved      OutboundHeader[] @relation("OutboundApprovedBy")
-  eventLogs              EventLog[]
+  grnHeadersCreated       GRNHeader[]         @relation("GRNCreatedBy")
+  grnHeadersApproved      GRNHeader[]         @relation("GRNApprovedBy")
+  grnHeadersRejected      GRNHeader[]         @relation("GRNRejectedBy")
+  outboundsCreated        OutboundHeader[]    @relation("OutboundCreatedBy")
+  outboundsApproved       OutboundHeader[]    @relation("OutboundApprovedBy")
+  purchaseOrdersCreated   PurchaseOrder[]     @relation("POCreatedBy")
+  preGeneratedBatches     PreGeneratedBatch[] @relation("PreGenBatchCreatedBy")
+  eventLogs               EventLog[]
 
   @@map("users")
 }
@@ -160,12 +172,12 @@ model Clinic {
   province     String
   branchName   String?  @map("branch_name")
   isActive     Boolean  @default(true) @map("is_active")
-  reservations Json?    @default("[]") // สินค้าฝาก: [{ productMasterId: number, quantity: number }]
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  products  ProductItem[]
-  outbounds OutboundHeader[]
+  products        ProductItem[]
+  outbounds       OutboundHeader[]
+  purchaseOrders  PurchaseOrder[]
 
   @@map("clinics")
 }
@@ -175,34 +187,38 @@ model Clinic {
 // ============================================
 
 model ProductItem {
-  id               Int           @id @default(autoincrement())
-  serial12         String        @unique @db.Char(12)
-  productMasterId  Int?          @map("product_master_id")
-  sku              String
-  name             String
-  categoryId       Int           @map("category_id")
-  modelSize        String?       @map("model_size") // รุ่น/ขนาด/ปริมาณบรรจุ
-  lot              String?
-  mfgDate          DateTime?     @map("mfg_date") @db.Date
-  expDate          DateTime?     @map("exp_date") @db.Date
-  status           ProductStatus @default(IN_STOCK)
-  assignedClinicId Int?          @map("assigned_clinic_id")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  id                    Int           @id @default(autoincrement())
+  serial12              String        @unique @db.Char(12)
+  productMasterId       Int?          @map("product_master_id")
+  sku                   String
+  name                  String
+  categoryId            Int           @map("category_id")
+  modelSize             String?       @map("model_size") // รุ่น/ขนาด/ปริมาณบรรจุ
+  lot                   String?
+  mfgDate               DateTime?     @map("mfg_date") @db.Date
+  expDate               DateTime?     @map("exp_date") @db.Date
+  status                ProductStatus @default(IN_STOCK)
+  activationCount       Int           @default(0) @map("activation_count") // จำนวนครั้งที่ Activate แล้ว
+  assignedClinicId      Int?          @map("assigned_clinic_id")
+  preGeneratedBatchId   Int?          @map("pre_generated_batch_id")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
 
-  productMaster   ProductMaster?  @relation(fields: [productMasterId], references: [id])
-  category        ProductCategory @relation(fields: [categoryId], references: [id])
-  assignedClinic  Clinic?         @relation(fields: [assignedClinicId], references: [id])
-  qrTokens        QRToken[]
-  activation      Activation?
-  grnLine         GRNLine?
-  outboundLines   OutboundLine[]
-  scanLogs        ScanLog[]
-  eventLogs       EventLog[]
+  productMaster       ProductMaster?      @relation(fields: [productMasterId], references: [id])
+  category            ProductCategory     @relation(fields: [categoryId], references: [id])
+  assignedClinic      Clinic?             @relation(fields: [assignedClinicId], references: [id])
+  preGeneratedBatch   PreGeneratedBatch?  @relation(fields: [preGeneratedBatchId], references: [id])
+  qrTokens            QRToken[]
+  activations         Activation[]        // รองรับ activation หลายครั้ง (สำหรับ PACK)
+  grnLine             GRNLine?
+  outboundLines       OutboundLine[]
+  scanLogs            ScanLog[]
+  eventLogs           EventLog[]
 
   @@index([serial12])
   @@index([status])
   @@index([productMasterId])
+  @@index([preGeneratedBatchId])
   @@map("product_items")
 }
 
@@ -301,7 +317,7 @@ model OutboundHeader {
   clinicPhone       String?        @map("clinic_phone")
   clinicEmail       String?        @map("clinic_email")
   clinicContactName String?        @map("clinic_contact_name")
-  poNo              String?        @map("po_no")
+  purchaseOrderId   Int?           @map("purchase_order_id")
   status            OutboundStatus @default(DRAFT)
   approvedById      Int?           @map("approved_by_id")
   approvedAt        DateTime?      @map("approved_at")
@@ -310,13 +326,15 @@ model OutboundHeader {
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
-  createdBy      User           @relation("OutboundCreatedBy", fields: [createdById], references: [id])
-  approvedBy     User?          @relation("OutboundApprovedBy", fields: [approvedById], references: [id])
-  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
-  shippingMethod ShippingMethod @relation(fields: [shippingMethodId], references: [id])
-  clinic         Clinic         @relation(fields: [clinicId], references: [id])
+  createdBy      User            @relation("OutboundCreatedBy", fields: [createdById], references: [id])
+  approvedBy     User?           @relation("OutboundApprovedBy", fields: [approvedById], references: [id])
+  warehouse      Warehouse       @relation(fields: [warehouseId], references: [id])
+  shippingMethod ShippingMethod  @relation(fields: [shippingMethodId], references: [id])
+  clinic         Clinic          @relation(fields: [clinicId], references: [id])
+  purchaseOrder  PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
   lines          OutboundLine[]
 
+  @@index([purchaseOrderId])
   @@map("outbound_headers")
 }
 
@@ -346,19 +364,21 @@ model OutboundLine {
 // ============================================
 
 model Activation {
-  id            Int      @id @default(autoincrement())
-  productItemId Int      @unique @map("product_item_id")
-  customerName  String   @map("customer_name")
-  age           Int
-  gender        String   // M/F/Other
-  province      String
-  phone         String?
-  consentAt     DateTime @map("consent_at")
-  policyVersion String   @map("policy_version")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id               Int      @id @default(autoincrement())
+  productItemId    Int      @map("product_item_id")
+  activationNumber Int      @default(1) @map("activation_number") // ครั้งที่ activate (1, 2, 3...)
+  customerName     String?  @map("customer_name") // optional
+  age              Int?     // optional
+  gender           String?  // M/F/Other - optional
+  province         String?  // optional
+  phone            String?
+  consentAt        DateTime @map("consent_at")
+  policyVersion    String   @map("policy_version")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   productItem ProductItem @relation(fields: [productItemId], references: [id])
 
+  @@unique([productItemId, activationNumber]) // หนึ่ง productItem หนึ่ง activationNumber
   @@map("activations")
 }
 
@@ -405,9 +425,88 @@ model EventLog {
 
 model SequenceCounter {
   id          Int    @id @default(autoincrement())
-  name        String @unique // SERIAL, GRN, OUTBOUND
+  name        String @unique // SERIAL, GRN, OUTBOUND, PO, PRE_GEN
   prefix      String // e.g., "GRN-2026-"
   currentVal  BigInt @default(0) @map("current_val")
 
   @@map("sequence_counters")
+}
+
+// ============================================
+// PRE-GENERATED QR BATCH
+// ============================================
+
+model PreGeneratedBatch {
+  id            Int           @id @default(autoincrement())
+  batchNo       String        @unique @map("batch_no") // PG-2026-000001
+  quantity      Int
+  linkedCount   Int           @default(0) @map("linked_count")
+  createdById   Int           @map("created_by_id")
+  remarks       String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  createdBy     User          @relation("PreGenBatchCreatedBy", fields: [createdById], references: [id])
+  productItems  ProductItem[]
+
+  @@index([batchNo])
+  @@map("pre_generated_batches")
+}
+
+// ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+model SystemSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique // e.g., "verify.showClinicInfo"
+  value     String   // JSON string for flexibility
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================
+// PURCHASE ORDER - ใบสั่งซื้อ
+// ============================================
+
+enum POStatus {
+  DRAFT         // ร่าง
+  CONFIRMED     // ยืนยันแล้ว
+  PARTIAL       // ส่งบางส่วนแล้ว
+  COMPLETED     // ส่งครบแล้ว
+  CANCELLED     // ยกเลิก
+}
+
+model PurchaseOrder {
+  id              Int       @id @default(autoincrement())
+  poNo            String    @unique @map("po_no") // Auto: PO-2026-000001
+  clinicId        Int       @map("clinic_id")
+  status          POStatus  @default(DRAFT)
+  remarks         String?
+  createdById     Int       @map("created_by_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  clinic          Clinic    @relation(fields: [clinicId], references: [id])
+  createdBy       User      @relation("POCreatedBy", fields: [createdById], references: [id])
+  lines           PurchaseOrderLine[]
+  outbounds       OutboundHeader[]
+
+  @@index([clinicId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               Int      @id @default(autoincrement())
+  purchaseOrderId  Int      @map("purchase_order_id")
+  productMasterId  Int      @map("product_master_id")
+  quantity         Int      // จำนวนที่สั่งฝาก
+  shippedQuantity  Int      @default(0) @map("shipped_quantity") // จำนวนที่ส่งแล้ว
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productMaster    ProductMaster @relation(fields: [productMasterId], references: [id])
+
+  @@map("purchase_order_lines")
 }

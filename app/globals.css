@@ -682,10 +682,10 @@ h6 { font-size: 1rem; }
 
 @keyframes shimmer {
   0% {
-    background-position: -200% 0;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: 200% 0;
+    transform: translateX(200%);
   }
 }
 
@@ -1257,11 +1257,30 @@ h6 { font-size: 1rem; }
   }
 
   /* Two-column layout for info cards */
-  @supports (display: grid) {
-    .lg\\:grid-cols-2 {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      gap: 1rem !important;
-    }
+  .print-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1rem !important;
   }
+}
+
+/* ========================================
+   QR Scanner Styles
+   ======================================== */
+.qr-scanner-container {
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.qr-scanner-container video {
+  object-fit: cover !important;
+  max-height: 300px !important;
+}
+
+.qr-scanner-container > div {
+  max-height: 300px !important;
+}
+
+.qr-scanner-container #qr-shaded-region {
+  border-color: rgba(201, 163, 90, 0.5) !important;
 }

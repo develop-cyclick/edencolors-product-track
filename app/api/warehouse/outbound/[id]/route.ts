@@ -28,6 +28,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       clinic: { select: { id: true, name: true, province: true, branchName: true } },
       createdBy: { select: { id: true, displayName: true, username: true } },
       approvedBy: { select: { id: true, displayName: true, username: true } },
+      purchaseOrder: { select: { id: true, poNo: true, status: true } },
       lines: {
         include: {
           productItem: {
@@ -126,15 +127,8 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
         })
       }
 
-      // Deduct from clinic reservations if any
-      const clinicData = await tx.clinic.findUnique({
-        where: { id: outbound.clinicId },
-        select: { reservations: true },
-      })
-
-      if (clinicData?.reservations && Array.isArray(clinicData.reservations)) {
-        const currentReservations = clinicData.reservations as Array<{ productMasterId: number; quantity: number }>
-
+      // Update PurchaseOrder shipped quantities if linked to a PO
+      if (outbound.purchaseOrderId) {
         // Count how many of each ProductMaster we're shipping
         const shippedByProductMaster: Record<number, number> = {}
         for (const line of outbound.lines) {
@@ -144,24 +138,43 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
           }
         }
 
-        // Deduct from reservations
-        const updatedReservations = currentReservations
-          .map((res) => {
-            const shipped = shippedByProductMaster[res.productMasterId] || 0
-            if (shipped > 0) {
-              return {
-                productMasterId: res.productMasterId,
-                quantity: Math.max(0, res.quantity - shipped),
-              }
-            }
-            return res
-          })
-          .filter((res) => res.quantity > 0) // Remove entries with 0 quantity
+        // Get PO lines and update shippedQuantity
+        const poLines = await tx.purchaseOrderLine.findMany({
+          where: { purchaseOrderId: outbound.purchaseOrderId },
+        })
 
-        // Update clinic reservations
-        await tx.clinic.update({
-          where: { id: outbound.clinicId },
-          data: { reservations: updatedReservations },
+        for (const poLine of poLines) {
+          const shipped = shippedByProductMaster[poLine.productMasterId] || 0
+          if (shipped > 0) {
+            await tx.purchaseOrderLine.update({
+              where: { id: poLine.id },
+              data: {
+                shippedQuantity: { increment: shipped },
+              },
+            })
+            // Deduct from what we're tracking so we don't double-count
+            shippedByProductMaster[poLine.productMasterId] -= shipped
+          }
+        }
+
+        // Check if PO is fully shipped and update status
+        const updatedPOLines = await tx.purchaseOrderLine.findMany({
+          where: { purchaseOrderId: outbound.purchaseOrderId },
+        })
+
+        const allShipped = updatedPOLines.every((line) => line.shippedQuantity >= line.quantity)
+        const someShipped = updatedPOLines.some((line) => line.shippedQuantity > 0)
+
+        let newStatus: 'CONFIRMED' | 'PARTIAL' | 'COMPLETED' = 'CONFIRMED'
+        if (allShipped) {
+          newStatus = 'COMPLETED'
+        } else if (someShipped) {
+          newStatus = 'PARTIAL'
+        }
+
+        await tx.purchaseOrder.update({
+          where: { id: outbound.purchaseOrderId },
+          data: { status: newStatus },
         })
       }
 
