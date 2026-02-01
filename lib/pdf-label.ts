@@ -62,10 +62,11 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
     }
 
     // Generate QR code as data URL
+    // Using 'H' error correction (30% recovery) for better scanning reliability
     const qrDataUrl = await QRCode.toDataURL(label.qrCodeUrl, {
-      width: 400, // Higher resolution for printing
-      margin: 1,
-      errorCorrectionLevel: 'M',
+      width: 500, // Higher resolution for printing (increased from 400)
+      margin: 2,  // Slightly larger margin for better scanning
+      errorCorrectionLevel: 'H', // Highest error correction (was 'M')
     })
 
     const centerX = LABEL_WIDTH_MM / 2
@@ -191,12 +192,13 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
   const itemsPerPage = GRID_COLUMNS * rowsPerPage
 
   // Generate all QR codes first
+  // Using 'H' error correction for better scanning reliability
   const qrDataUrls: string[] = []
   for (const label of labels) {
     const qrDataUrl = await QRCode.toDataURL(label.qrCodeUrl, {
-      width: 200, // Good quality for small size
-      margin: 1,
-      errorCorrectionLevel: 'M',
+      width: 300, // Higher quality for small size (increased from 200)
+      margin: 2,  // Slightly larger margin for better scanning
+      errorCorrectionLevel: 'H', // Highest error correction (was 'M')
     })
     qrDataUrls.push(qrDataUrl)
   }

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import type { Dictionary } from '@/i18n/get-dictionary'
 import QRScanner from '@/components/qr-scanner'
 
 interface VerifyResultProps {
   token?: string
+  serial?: string
   dict: Dictionary
   locale: string
 }
@@ -22,6 +24,7 @@ interface VerifyResponse {
     sku: string
     modelSize?: string
     category: string
+    imageUrl?: string
     expiryDate?: string
     status: string
     activationType?: 'SINGLE' | 'PACK'
@@ -53,10 +56,13 @@ interface ActivationResponse {
   }
 }
 
-export default function VerifyResult({ token, dict, locale }: VerifyResultProps) {
+export default function VerifyResult({ token, serial, dict, locale }: VerifyResultProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [response, setResponse] = useState<VerifyResponse | null>(null)
+
+  // Determine which identifier to use (prefer serial for new short URLs)
+  const identifier = serial || token
 
   // Activation states
   const [consent, setConsent] = useState(false)
@@ -75,7 +81,7 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
   }
 
   const handleActivate = async () => {
-    if (!consent || !token) return
+    if (!consent || !identifier) return
 
     setActivating(true)
     try {
@@ -83,7 +89,8 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token,
+          // Support both token and serial
+          ...(serial ? { serial } : { token }),
           consent: true,
           // Include customer info only if provided
           ...(customerName && { customerName }),
@@ -120,14 +127,18 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
   }
 
   useEffect(() => {
-    if (!token) {
+    if (!identifier) {
       setLoading(false)
       return
     }
 
     const verify = async () => {
       try {
-        const res = await fetch(`/api/public/verify?token=${encodeURIComponent(token)}`)
+        // Support both token-based and serial-based verification
+        const queryParam = serial
+          ? `serial=${encodeURIComponent(serial)}`
+          : `token=${encodeURIComponent(token!)}`
+        const res = await fetch(`/api/public/verify?${queryParam}`)
         const data = await res.json()
         setResponse(data)
       } catch {
@@ -138,10 +149,10 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
     }
 
     verify()
-  }, [token])
+  }, [token, serial, identifier])
 
-  // No token provided - show QR scanner
-  if (!token) {
+  // No identifier provided - show QR scanner
+  if (!identifier) {
     return (
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6 animate-scaleIn">
         <QRScanner onScan={handleScan} locale={locale} />
@@ -195,7 +206,7 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
     if (isGenuine && !isActivated) {
       return {
         title: locale === 'th' ? 'ของแท้' : 'Genuine Product',
-        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จากบริษัท' : 'This product is authentic',
+        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จากบริษัทบริษัทอีเด็นคัลเลอร์(ประเทศไทย)' : 'This product is authentic from Eden Colors (Thailand)',
       }
     }
     // PACK product with activations remaining
@@ -300,14 +311,36 @@ export default function VerifyResult({ token, dict, locale }: VerifyResultProps)
     <div className="space-y-4 animate-slideUp">
       {/* Status Card */}
       <div className={`rounded-2xl border-2 p-6 text-center ${statusConfig.bgColor} ${statusConfig.borderColor}`}>
-        {/* Icon */}
-        <div className={`w-16 h-16 mx-auto mb-4 rounded-full ${statusConfig.iconBg} flex items-center justify-center shadow-lg`}>
-          {statusConfig.icon}
-        </div>
+        {/* Product Image - Show for genuine products */}
+        {(isGenuine || isFullyActivated || (isPack && canActivate)) && response.data?.imageUrl && (
+          <div className="mb-4">
+            <div className="relative w-fit mx-auto">
+              <Image
+                src={response.data.imageUrl}
+                alt={response.data.productName}
+                width={150}
+                height={150}
+                className="object-contain"
+              />
+              {/* Icon */}
+              <div className={`w-10 h-10 rounded-full absolute -bottom-2 -right-2 ${statusConfig.iconBg} flex items-center justify-center shadow-lg`}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            {/* Product Name under image */}
+            {/*<p className="mt-3 text-lg font-semibold text-[var(--color-charcoal)]">
+              {response.data.productName}
+            </p>*/}
+          </div>
+        )}
+
+       
 
         {/* Status Text */}
         <h2 className={`text-display text-2xl font-bold mb-2 ${statusConfig.textColor}`}>
-          {statusText.title}
+          {response.data.productName}
         </h2>
         <p className="text-[var(--color-foreground-muted)]">{statusText.subtitle}</p>
 

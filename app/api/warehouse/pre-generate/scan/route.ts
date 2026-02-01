@@ -8,10 +8,19 @@ import type { JWTPayload } from '@/lib/auth'
 type HandlerContext = { user: JWTPayload }
 
 interface ScanInput {
-  qrContent: string  // Full URL or token from scanner
+  qrContent: string  // Full URL, serial number, or token from scanner
 }
 
-// POST /api/warehouse/pre-generate/scan - Decode QR and return serial info
+/**
+ * POST /api/warehouse/pre-generate/scan
+ * Decode QR code and return serial info for pre-generated items
+ *
+ * Supports multiple QR formats:
+ * - New short URL: https://domain.com/v/123456789012
+ * - Legacy token URL: https://domain.com/th/verify?token=xxx
+ * - Raw serial: 123456789012
+ * - Raw token: eyJhbGci...
+ */
 async function handlePOST(request: NextRequest, _context: HandlerContext) {
   const body: ScanInput = await request.json()
 
@@ -20,35 +29,65 @@ async function handlePOST(request: NextRequest, _context: HandlerContext) {
   }
 
   try {
-    // Extract token from QR content
-    // QR content could be:
-    // 1. Full URL: https://example.com/th/verify?token=xxx
-    // 2. Just the token: eyJhbGci...
-    let token = body.qrContent.trim()
+    let serialNumber: string
+    let productItemId: number | null = null
 
-    // Try to parse as URL and extract token parameter
+    // QR content could be:
+    // 1. New format: https://example.com/v/123456789012 (short URL with serial)
+    // 2. Legacy format: https://example.com/th/verify?token=xxx (token-based)
+    // 3. Just the token: eyJhbGci...
+    // 4. Just the serial: 123456789012
+    const qrContent = body.qrContent.trim()
+
+    // Try to parse as URL first
     try {
-      const url = new URL(token)
-      const tokenParam = url.searchParams.get('token')
-      if (tokenParam) {
-        token = tokenParam
+      const url = new URL(qrContent)
+
+      // NEW: Check if it's a short URL format: /v/{serial}
+      const pathMatch = url.pathname.match(/\/v\/(\d{12})$/)
+      if (pathMatch) {
+        serialNumber = pathMatch[1]
+        console.log('Detected new short URL format, serial:', serialNumber)
+      }
+      // LEGACY: Check for token parameter
+      else {
+        const tokenParam = url.searchParams.get('token')
+        if (tokenParam) {
+          // Decrypt the token
+          const payload = await decryptQRToken(tokenParam)
+          if (!payload) {
+            return errorResponse('Invalid QR code - cannot decode token')
+          }
+          serialNumber = payload.serialNumber
+          productItemId = payload.productItemId
+          console.log('Detected legacy token format, serial:', serialNumber)
+        } else {
+          return errorResponse('Invalid QR code - no token or serial found in URL')
+        }
       }
     } catch {
-      // Not a URL, assume it's the raw token
+      // Not a URL, check if it's a raw serial number (12 digits)
+      if (/^\d{12}$/.test(qrContent)) {
+        serialNumber = qrContent
+        console.log('Detected raw serial format:', serialNumber)
+      }
+      // Or a raw token
+      else {
+        // Try to decrypt as token
+        const payload = await decryptQRToken(qrContent)
+        if (!payload) {
+          return errorResponse('Invalid QR code - cannot decode')
+        }
+        serialNumber = payload.serialNumber
+        productItemId = payload.productItemId
+        console.log('Detected raw token format, serial:', serialNumber)
+      }
     }
-
-    // Decode the token
-    const payload = await decryptQRToken(token)
-
-    if (!payload) {
-      return errorResponse('Invalid QR code - cannot decode token')
-    }
-
-    const { serialNumber, productItemId } = payload
 
     // Find the product item and validate it's pre-generated
+    // Use ID if we have it (from token), otherwise search by serial
     const productItem = await prisma.productItem.findUnique({
-      where: { id: productItemId },
+      where: productItemId ? { id: productItemId } : { serial12: serialNumber },
       include: {
         preGeneratedBatch: {
           select: { id: true, batchNo: true },
@@ -60,8 +99,8 @@ async function handlePOST(request: NextRequest, _context: HandlerContext) {
       return errorResponse('Product item not found')
     }
 
-    // Validate serial matches
-    if (productItem.serial12 !== serialNumber) {
+    // Validate serial matches (only needed for token-based)
+    if (productItemId && productItem.serial12 !== serialNumber) {
       return errorResponse('Invalid QR code - serial mismatch')
     }
 

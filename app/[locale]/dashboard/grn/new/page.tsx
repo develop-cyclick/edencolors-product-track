@@ -74,6 +74,7 @@ export default function NewGRNPage() {
   const [scannerModal, setScannerModal] = useState<{ lineId: string; targetQty: number } | null>(null)
   const [scannerInput, setScannerInput] = useState('')
   const [scannerError, setScannerError] = useState<string | null>(null)
+  const [scannerSuccess, setScannerSuccess] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera')
   const scannerInputRef = useRef<HTMLInputElement>(null)
@@ -203,6 +204,7 @@ export default function NewGRNPage() {
     setScannerModal(null)
     setScannerInput('')
     setScannerError(null)
+    setScannerSuccess(null)
   }
 
   // Handle scanner input
@@ -216,6 +218,7 @@ export default function NewGRNPage() {
 
     setIsScanning(true)
     setScannerError(null)
+    setScannerSuccess(null)
 
     try {
       const res = await fetch('/api/warehouse/pre-generate/scan', {
@@ -270,11 +273,17 @@ export default function NewGRNPage() {
         return l
       }))
 
-      // Check if we've reached target quantity
+      // Show notification if reached target quantity, but don't auto-close
+      // User can continue scanning more items and close manually when done
       const updatedLine = lines.find(l => l.id === scannerModal.lineId)
-      if (updatedLine && updatedLine.scannedItems.length + 1 >= scannerModal.targetQty) {
-        // Play success sound
-        setTimeout(() => closeScannerModal(), 500)
+      const newCount = updatedLine ? updatedLine.scannedItems.length + 1 : 1
+      if (newCount >= scannerModal.targetQty) {
+        // Show success message when reaching or exceeding target
+        const message = locale === 'th'
+          ? `✓ สแกนครบจำนวนแล้ว (${newCount}/${scannerModal.targetQty}) - สามารถสแกนเพิ่มหรือกดเสร็จสิ้น`
+          : `✓ Target reached (${newCount}/${scannerModal.targetQty}) - Continue scanning or press Done`
+        setScannerSuccess(message)
+        console.log('Target quantity reached:', newCount)
       }
     } catch (error) {
       console.error('Scan error:', error)
@@ -421,17 +430,17 @@ export default function NewGRNPage() {
       <div>
         <Link
           href={`/${locale}/dashboard/grn`}
-          className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors mb-3"
+          className="inline-flex items-center gap-1 text-xs sm:text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors mb-3"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           {locale === 'th' ? 'กลับหน้ารายการ' : 'Back to list'}
         </Link>
-        <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">
+        <h1 className="text-display text-xl sm:text-2xl font-bold text-[var(--color-charcoal)]">
           {locale === 'th' ? 'สร้างใบรับสินค้าใหม่' : 'Create New GRN'}
         </h1>
-        <p className="text-[var(--color-foreground-muted)] mt-1">
+        <p className="text-sm sm:text-base text-[var(--color-foreground-muted)] mt-1">
           {locale === 'th' ? 'กรอกข้อมูลการรับสินค้าเข้าคลัง' : 'Fill in goods receipt information'}
         </p>
       </div>
@@ -585,9 +594,9 @@ export default function NewGRNPage() {
             <button
               type="button"
               onClick={addLine}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--color-mint)] text-white rounded-xl font-medium text-sm shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 transition-all duration-200"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[var(--color-mint)] text-white rounded-xl font-medium text-xs sm:text-sm shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 transition-all duration-200"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               {locale === 'th' ? 'เพิ่มรายการ' : 'Add Item'}
@@ -841,27 +850,27 @@ export default function NewGRNPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
           <button
             type="button"
             onClick={() => router.back()}
-            className="px-6 py-3 text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-xl hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] transition-all duration-200"
+            className="px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-xl hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] transition-all duration-200"
           >
             {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--color-gold)] text-white rounded-xl shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+            className="flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-medium bg-[var(--color-gold)] text-white rounded-xl shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
           >
             {loading ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 {locale === 'th' ? 'กำลังบันทึก...' : 'Saving...'}
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 {locale === 'th' ? 'บันทึกและสร้าง Serial' : 'Save & Generate Serials'}
@@ -883,28 +892,28 @@ export default function NewGRNPage() {
           {/* Modal Content */}
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
             {/* Header */}
-            <div className="bg-[var(--color-gold)] px-6 py-4">
+            <div className="bg-[var(--color-gold)] px-4 sm:px-6 py-3 sm:py-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className="text-base sm:text-lg font-semibold text-white">
                       {locale === 'th' ? 'สแกน QR Code' : 'Scan QR Code'}
                     </h3>
-                    <p className="text-sm text-white/80">
+                    <p className="text-xs sm:text-sm text-white/80">
                       {locale === 'th' ? 'สแกน QR ที่สร้างล่วงหน้า' : 'Scan pre-generated QR'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={closeScannerModal}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -912,19 +921,19 @@ export default function NewGRNPage() {
             </div>
 
             {/* Scanner Content */}
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {/* Mode Tabs */}
               <div className="flex gap-2 mb-4">
                 <button
                   type="button"
                   onClick={() => setScanMode('camera')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                     scanMode === 'camera'
                       ? 'bg-[var(--color-gold)] text-white shadow-md'
                       : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
@@ -936,13 +945,13 @@ export default function NewGRNPage() {
                     setScanMode('manual')
                     setTimeout(() => scannerInputRef.current?.focus(), 100)
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                     scanMode === 'manual'
                       ? 'bg-[var(--color-gold)] text-white shadow-md'
                       : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                   </svg>
                   {locale === 'th' ? 'เครื่องสแกน' : 'Scanner'}
@@ -982,6 +991,16 @@ export default function NewGRNPage() {
                   <p className="text-xs text-[var(--color-foreground-muted)] mt-2 text-center">
                     {locale === 'th' ? 'เครื่องสแกนจะส่งข้อมูลอัตโนมัติ หรือกด Enter หลังวาง' : 'Scanner sends data automatically, or press Enter after paste'}
                   </p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {scannerSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm text-green-600 font-medium">{scannerSuccess}</span>
                 </div>
               )}
 
@@ -1054,11 +1073,11 @@ export default function NewGRNPage() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-[var(--color-off-white)] border-t border-[var(--color-beige)] flex justify-end gap-3">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--color-off-white)] border-t border-[var(--color-beige)] flex justify-end gap-3">
               <button
                 type="button"
                 onClick={closeScannerModal}
-                className="px-5 py-2.5 text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-xl hover:border-[var(--color-gold)] transition-colors"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-xl hover:border-[var(--color-gold)] transition-colors"
               >
                 {locale === 'th' ? 'เสร็จสิ้น' : 'Done'}
               </button>

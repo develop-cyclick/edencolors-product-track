@@ -113,7 +113,8 @@ export const POST = withWarehouse(async (request: NextRequest) => {
           })
         }
 
-        const qrCodeUrl = generateQRCodeURL(token, 'th')
+        // Use short URL with serial for easier QR code scanning
+        const qrCodeUrl = generateQRCodeURL(item.serial12)
 
         return {
           serialNumber: item.serial12,

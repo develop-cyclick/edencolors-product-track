@@ -64,6 +64,7 @@ model ProductMaster {
   sku             String         @unique
   nameTh          String         @map("name_th")
   nameEn          String?        @map("name_en")
+  imageUrl        String?        @map("image_url")
   categoryId      Int            @map("category_id")
   modelSize       String?        @map("model_size")
   description     String?        @db.Text
@@ -306,6 +307,7 @@ model GRNLine {
 model OutboundHeader {
   id                Int            @id @default(autoincrement())
   deliveryNoteNo    String         @unique @map("delivery_note_no") // Auto: OUT-2026-000001
+  contractNo        String?        @map("contract_no")
   shippedAt         DateTime?      @map("shipped_at")
   createdById       Int            @map("created_by_id")
   warehouseId       Int            @map("warehouse_id")

@@ -50,12 +50,12 @@ export function loadSarabunFont(doc: jsPDF): boolean {
     doc.addFileToVFS('NotoSansThai-Regular.ttf', regularFontBase64)
     doc.addFileToVFS('NotoSansThai-Bold.ttf', boldFontBase64)
 
-    // Register fonts with family name 'Sarabun' for compatibility
-    doc.addFont('NotoSansThai-Regular.ttf', 'Sarabun', 'normal')
-    doc.addFont('NotoSansThai-Bold.ttf', 'Sarabun', 'bold')
+    // Register fonts with family name 'NotoSansThai'
+    doc.addFont('NotoSansThai-Regular.ttf', 'NotoSansThai', 'normal')
+    doc.addFont('NotoSansThai-Bold.ttf', 'NotoSansThai', 'bold')
 
     // Set default font
-    doc.setFont('Sarabun', 'normal')
+    doc.setFont('NotoSansThai', 'normal')
 
     fontLoadAttempted = true
     fontLoadSuccess = true

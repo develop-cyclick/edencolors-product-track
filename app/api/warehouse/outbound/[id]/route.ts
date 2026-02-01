@@ -283,6 +283,8 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
   const allowedFields = [
     'shippingMethodId',
+    'deliveryNoteNo',
+    'contractNo',
     'salesPersonName',
     'companyContact',
     'clinicAddress',

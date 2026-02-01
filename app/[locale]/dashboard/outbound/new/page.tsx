@@ -88,6 +88,8 @@ export default function NewOutboundPage() {
   const [warehouseId, setWarehouseId] = useState<number>(0)
   const [shippingMethodId, setShippingMethodId] = useState<number>(0)
   const [clinicId, setClinicId] = useState<number>(0)
+  const [deliveryNoteNo, setDeliveryNoteNo] = useState('')
+  const [contractNo, setContractNo] = useState('')
   const [salesPersonName, setSalesPersonName] = useState('')
   const [companyContact, setCompanyContact] = useState('')
   const [clinicAddress, setClinicAddress] = useState('')
@@ -305,6 +307,8 @@ export default function NewOutboundPage() {
           warehouseId,
           shippingMethodId,
           clinicId,
+          deliveryNoteNo: deliveryNoteNo || null,
+          contractNo: contractNo || null,
           salesPersonName: salesPersonName || null,
           companyContact: companyContact || null,
           clinicAddress: clinicAddress || null,
@@ -488,6 +492,31 @@ export default function NewOutboundPage() {
                 {/* Hidden input for form validation */}
                 <input type="hidden" name="clinicId" value={clinicId} required />
               </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                IV No. <span className="text-xs text-[var(--color-foreground-muted)]">({locale === 'th' ? 'ถ้าไม่กรอกจะสร้างอัตโนมัติ' : 'Auto-generate if empty'})</span>
+              </label>
+              <input
+                type="text"
+                value={deliveryNoteNo}
+                onChange={(e) => setDeliveryNoteNo(e.target.value)}
+                placeholder={locale === 'th' ? 'เช่น OUT-2026-000001' : 'e.g. OUT-2026-000001'}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Contract No.
+              </label>
+              <input
+                type="text"
+                value={contractNo}
+                onChange={(e) => setContractNo(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
             <div>

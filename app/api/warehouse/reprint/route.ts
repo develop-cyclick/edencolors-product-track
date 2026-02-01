@@ -105,7 +105,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       return {
         token: qrTokenString,
         tokenVersion: newTokenVersion,
-        qrUrl: generateQRCodeURL(qrTokenString, 'th'),
+        qrUrl: generateQRCodeURL(productItem.serial12),
         newTokenId: newToken.id,
       }
     })

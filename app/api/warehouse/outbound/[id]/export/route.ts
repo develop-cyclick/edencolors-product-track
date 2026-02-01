@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
-import * as XLSX from 'xlsx'
+import { generateDeliveryNotePDF } from '@/lib/pdf-delivery'
 import type { JWTPayload } from '@/lib/auth'
 
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
 
-// GET /api/warehouse/outbound/[id]/export - Export Outbound to Excel
+// GET /api/warehouse/outbound/[id]/export - Export Outbound to PDF
 async function handleGET(_request: NextRequest, context: HandlerContext) {
   if (!context.params) {
     return NextResponse.json({ success: false, error: 'Missing params' }, { status: 400 })
@@ -47,92 +47,56 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       return NextResponse.json({ success: false, error: 'Outbound not found' }, { status: 404 })
     }
 
-    const statusMap: Record<string, string> = {
-      DRAFT: 'แบบร่าง',
-      PENDING: 'รออนุมัติ',
-      APPROVED: 'อนุมัติแล้ว',
-      REJECTED: 'ปฏิเสธ',
+    // Prepare data for PDF
+    const pdfData = {
+      deliveryNoteNo: outbound.deliveryNoteNo,
+      customerName: outbound.clinic?.name || '',
+      customerAddress: outbound.clinicAddress || `${outbound.clinic?.province || ''}${outbound.clinic?.branchName ? ` (${outbound.clinic.branchName})` : ''}`,
+      customerPhone: outbound.clinicPhone || '',
+      customerContact: outbound.clinicContactName || '',
+      shippedDate: (outbound.shippedAt || outbound.createdAt).toISOString(),
+      contractNo: outbound.contractNo || null,
+      poNo: outbound.purchaseOrder?.poNo || null,
+      shippingMethod: outbound.shippingMethod?.nameTh || null,
+      deliveryBy: outbound.salesPersonName || null,
+      stockPreparedBy: outbound.createdBy.displayName,
+      lines: outbound.lines.map((line) => ({
+        id: line.id,
+        sku: line.sku,
+        itemName: line.itemName,
+        modelSize: line.modelSize,
+        quantity: line.quantity,
+        lot: line.lot,
+        expDate: line.expDate ? line.expDate.toISOString() : null,
+        serial12: line.productItem?.serial12 || '',
+        unit: line.unit?.nameTh || null,
+      })),
+      remarks: outbound.remarks,
     }
 
-    // Create workbook
-    const workbook = XLSX.utils.book_new()
+    // Generate PDF
+    const pdfBuffer = await generateDeliveryNotePDF(pdfData)
 
-    // Header info sheet
-    const headerData = [
-      ['ใบส่งออกสินค้า (Delivery Note)'],
-      [],
-      ['เลขที่ใบส่งออก', outbound.deliveryNoteNo],
-      ['สถานะ', statusMap[outbound.status] || outbound.status],
-      ['คลังสินค้า', outbound.warehouse.name],
-      ['วิธีการจัดส่ง', outbound.shippingMethod?.nameTh || '-'],
-      ['เลขที่ PO', outbound.purchaseOrder?.poNo || '-'],
-      [],
-      ['ข้อมูลคลินิก'],
-      ['ชื่อคลินิก', outbound.clinic?.name || '-'],
-      ['สาขา', outbound.clinic?.branchName || '-'],
-      ['จังหวัด', outbound.clinic?.province || '-'],
-      ['ผู้ติดต่อ', outbound.clinicContactName || '-'],
-      ['เบอร์โทร', outbound.clinicPhone || '-'],
-      ['อีเมล', outbound.clinicEmail || '-'],
-      ['ที่อยู่', outbound.clinicAddress || '-'],
-      [],
-      ['ข้อมูลฝ่ายขาย'],
-      ['พนักงานขาย', outbound.salesPersonName || '-'],
-      ['ผู้ติดต่อบริษัท', outbound.companyContact || '-'],
-      [],
-      ['วันที่สร้าง', outbound.createdAt ? new Date(outbound.createdAt).toLocaleDateString('th-TH') : '-'],
-      ['สร้างโดย', outbound.createdBy.displayName],
-      ['วันที่อนุมัติ', outbound.approvedAt ? new Date(outbound.approvedAt).toLocaleDateString('th-TH') : '-'],
-      ['อนุมัติโดย', outbound.approvedBy?.displayName || '-'],
-      ['วันที่ส่งออก', outbound.shippedAt ? new Date(outbound.shippedAt).toLocaleDateString('th-TH') : '-'],
-      ['หมายเหตุ', outbound.remarks || '-'],
-      ...(outbound.rejectReason ? [['เหตุผลที่ปฏิเสธ', outbound.rejectReason]] : []),
-    ]
-    const headerSheet = XLSX.utils.aoa_to_sheet(headerData)
-    headerSheet['!cols'] = [{ wch: 20 }, { wch: 40 }]
-    XLSX.utils.book_append_sheet(workbook, headerSheet, 'ข้อมูลทั่วไป')
+    // Convert Buffer to Uint8Array for NextResponse
+    const uint8Array = new Uint8Array(pdfBuffer)
 
-    // Lines sheet
-    const linesData = outbound.lines.map((line, index) => ({
-      'ลำดับ': index + 1,
-      'Serial': line.productItem?.serial12 || '-',
-      'SKU': line.sku,
-      'ชื่อสินค้า': line.itemName,
-      'หมวดหมู่': line.productItem?.category?.nameTh || '-',
-      'รุ่น/ขนาด': line.modelSize || '-',
-      'Lot': line.lot || '-',
-      'วันหมดอายุ': line.expDate ? new Date(line.expDate).toLocaleDateString('th-TH') : '-',
-      'หน่วย': line.unit?.nameTh || '-',
-      'สถานะสินค้า': line.itemStatus || '-',
-    }))
-    const linesSheet = XLSX.utils.json_to_sheet(linesData)
-    linesSheet['!cols'] = [
-      { wch: 6 },  // ลำดับ
-      { wch: 14 }, // Serial
-      { wch: 12 }, // SKU
-      { wch: 25 }, // ชื่อสินค้า
-      { wch: 15 }, // หมวดหมู่
-      { wch: 12 }, // รุ่น/ขนาด
-      { wch: 10 }, // Lot
-      { wch: 12 }, // วันหมดอายุ
-      { wch: 10 }, // หน่วย
-      { wch: 12 }, // สถานะสินค้า
-    ]
-    XLSX.utils.book_append_sheet(workbook, linesSheet, 'รายการสินค้า')
-
-    // Generate buffer
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
-
-    return new NextResponse(buffer, {
+    return new NextResponse(uint8Array, {
       status: 200,
       headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="Outbound_${outbound.deliveryNoteNo}.xlsx"`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="DeliveryNote_${outbound.deliveryNoteNo}.pdf"`,
       },
     })
   } catch (error) {
     console.error('Export Outbound error:', error)
-    return NextResponse.json({ success: false, error: 'Failed to export' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Error details:', errorMessage)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to export',
+      details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+    }, { status: 500 })
   }
 }
 

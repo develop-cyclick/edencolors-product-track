@@ -82,7 +82,7 @@ export default async function LoginPage({ params }: LoginPageProps) {
           {/* Mobile Logo */}
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Image src="/Logo.webp" alt="Eden Colors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto mb-4" />
+            <Image src="/logo-black.png" alt="Eden Colors Logo" width={120} height={34} className="h-[220px] sm:h-[320px] w-auto mx-auto mb-4" />
           </Link>
 
           {/* Login Card */}

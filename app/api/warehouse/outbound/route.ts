@@ -30,6 +30,8 @@ interface CreateOutboundInput {
   warehouseId: number
   shippingMethodId: number
   clinicId: number
+  deliveryNoteNo?: string  // Optional - if not provided, auto-generate
+  contractNo?: string
   salesPersonName?: string
   companyContact?: string
   clinicAddress?: string
@@ -219,13 +221,14 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Generate outbound number
-      const deliveryNoteNo = await generateOutboundNumber()
+      // Use provided IV No. or generate one
+      const deliveryNoteNo = body.deliveryNoteNo?.trim() || await generateOutboundNumber()
 
       // Create outbound header
       const outbound = await tx.outboundHeader.create({
         data: {
           deliveryNoteNo,
+          contractNo: body.contractNo || null,
           createdById: user.userId,
           warehouseId: body.warehouseId,
           shippingMethodId: body.shippingMethodId,

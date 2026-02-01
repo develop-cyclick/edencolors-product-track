@@ -26,6 +26,7 @@ interface OutboundHeader {
   id: number
   outboundNo: string
   deliveryNoteNo: string | null
+  contractNo: string | null
   status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
   createdAt: string
   shippedAt: string | null
@@ -37,8 +38,12 @@ interface OutboundHeader {
   clinicPhone: string | null
   clinicEmail: string | null
   clinicContactName: string | null
-  poNo: string | null
   remarks: string | null
+  purchaseOrder: {
+    id: number
+    poNo: string
+    status: string
+  } | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null
   clinic: { id: number; name: string; province: string; branchName: string | null } | null
@@ -347,7 +352,7 @@ export default function OutboundDetailPage() {
             {locale === 'th' ? 'ดูเอกสาร/พิมพ์' : 'View/Print Document'}
           </Link>
           {/* Export Excel Button */}
-          <a
+          {/*<a
             href={`/api/warehouse/outbound/${id}/export`}
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-gold)] text-[var(--color-gold)] rounded-xl font-medium hover:bg-[var(--color-gold)]/10 transition-all duration-200"
           >
@@ -355,7 +360,7 @@ export default function OutboundDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             {locale === 'th' ? 'ส่งออก Excel' : 'Export Excel'}
-          </a>
+          </a>*/}
           {/* Approve/Reject - Only for ADMIN or MANAGER */}
           {/* {outbound.status === 'PENDING' && canApprove && (
             <>
@@ -421,14 +426,24 @@ export default function OutboundDetailPage() {
             </div>
             {outbound.deliveryNoteNo && (
               <div className="flex justify-between">
-                <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ใบส่งสินค้า' : 'Delivery Note'}</dt>
+                <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ใบส่งสินค้า (IV No.)' : 'Delivery Note (IV No.)'}</dt>
                 <dd className="font-medium text-[var(--color-charcoal)]">{outbound.deliveryNoteNo}</dd>
               </div>
             )}
-            {outbound.poNo && (
+            {outbound.contractNo && (
+              <div className="flex justify-between">
+                <dt className="text-[var(--color-foreground-muted)]">Contract No.</dt>
+                <dd className="font-medium text-[var(--color-charcoal)]">{outbound.contractNo}</dd>
+              </div>
+            )}
+            {outbound.purchaseOrder && (
               <div className="flex justify-between">
                 <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ PO' : 'PO No'}</dt>
-                <dd className="font-medium text-[var(--color-charcoal)]">{outbound.poNo}</dd>
+                <dd className="font-medium text-[var(--color-charcoal)]">
+                  <Link href={`/${locale}/dashboard/orders/${outbound.purchaseOrder.id}`} className="text-[var(--color-gold)] hover:underline">
+                    {outbound.purchaseOrder.poNo}
+                  </Link>
+                </dd>
               </div>
             )}
             <div className="flex justify-between">
@@ -644,24 +659,27 @@ export default function OutboundDetailPage() {
                     </button>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-end gap-2">
                       <Link
                         href={`/${locale}/dashboard/products/item/${line.productItem.id}`}
-                        className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--color-off-white)] text-[var(--color-gold)] hover:bg-[var(--color-gold)] hover:text-white transition-all duration-200"
+                        title={locale === 'th' ? 'ดูรายละเอียด' : 'View Details'}
                       >
-                        {locale === 'th' ? 'ดู' : 'View'}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                       </Link>
                       {/* Show damage button only for SHIPPED status */}
                       {line.productItem.status === 'SHIPPED' && (
                         <button
                           onClick={() => openDamageModal(line)}
-                          className="inline-flex items-center gap-1 text-sm text-red-500 hover:text-red-700 font-medium transition-colors"
+                          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-200"
                           title={locale === 'th' ? 'แจ้งเสียหาย' : 'Mark Damaged'}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
-                          {locale === 'th' ? 'เสียหาย' : 'Damaged'}
                         </button>
                       )}
                     </div>

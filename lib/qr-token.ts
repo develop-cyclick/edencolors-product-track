@@ -47,10 +47,20 @@ export function hashToken(token: string): string {
 }
 
 /**
- * Generate QR code URL with token
- * The URL will be: {baseUrl}/verify?token={encryptedToken}
+ * Generate QR code URL with serial number (short URL for easy scanning)
+ * The URL will be: {baseUrl}/v/{serial12}
+ * This is much shorter than using the full JWE token, making QR codes easier to scan
  */
-export function generateQRCodeURL(token: string, locale: 'th' | 'en' = 'th'): string {
+export function generateQRCodeURL(serial12: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  return `${baseUrl}/v/${serial12}`
+}
+
+/**
+ * Legacy function for backwards compatibility (deprecated)
+ * @deprecated Use generateQRCodeURL(serial12) instead
+ */
+export function generateQRCodeURLWithToken(token: string, locale: 'th' | 'en' = 'th'): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   return `${baseUrl}/${locale}/verify?token=${encodeURIComponent(token)}`
 }

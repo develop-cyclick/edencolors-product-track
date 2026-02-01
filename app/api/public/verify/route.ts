@@ -26,35 +26,64 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // Support both token-based (legacy) and serial-based (new short URL) verification
   const token = request.nextUrl.searchParams.get('token')
+  const serial = request.nextUrl.searchParams.get('serial')
 
-  if (!token) {
+  if (!token && !serial) {
     return NextResponse.json(
-      { success: false, error: 'Token is required' },
+      { success: false, error: 'Token or serial is required' },
       { status: 400 }
     )
   }
 
   try {
-    // Decrypt the token
-    const payload = await decryptQRToken(token)
+    let serialNumber: string
+    let productItemId: number | undefined
+    let tokenVersion: number = 1
 
-    if (!payload) {
-      // Log invalid scan attempt
-      await logScan(null, null, 0, VerifyResult.INVALID_TOKEN, request)
+    // Method 1: Short URL with serial (NEW - faster and easier to scan)
+    if (serial) {
+      // Validate serial format (12 digits)
+      if (!/^\d{12}$/.test(serial)) {
+        return NextResponse.json({
+          success: false,
+          result: VerifyResult.INVALID_TOKEN,
+          message: 'Invalid serial number format',
+        })
+      }
+      serialNumber = serial
+      // productItemId will be fetched from database
+    }
+    // Method 2: Legacy token-based verification
+    else if (token) {
+      // Decrypt the token
+      const payload = await decryptQRToken(token)
 
-      return NextResponse.json({
-        success: false,
-        result: VerifyResult.INVALID_TOKEN,
-        message: 'Invalid QR code',
-      })
+      if (!payload) {
+        // Log invalid scan attempt
+        await logScan(null, null, 0, VerifyResult.INVALID_TOKEN, request)
+
+        return NextResponse.json({
+          success: false,
+          result: VerifyResult.INVALID_TOKEN,
+          message: 'Invalid QR code',
+        })
+      }
+
+      serialNumber = payload.serialNumber
+      productItemId = payload.productItemId
+      tokenVersion = payload.tokenVersion
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Token or serial is required' },
+        { status: 400 }
+      )
     }
 
-    const { serialNumber, productItemId, tokenVersion } = payload
-
-    // Find the product item
+    // Find the product item (by ID if we have it, otherwise by serial)
     const productItem = await prisma.productItem.findUnique({
-      where: { id: productItemId },
+      where: productItemId ? { id: productItemId } : { serial12: serialNumber },
       include: {
         category: true,
         assignedClinic: true,
@@ -62,6 +91,7 @@ export async function GET(request: NextRequest) {
           select: {
             activationType: true,
             maxActivations: true,
+            imageUrl: true,
           },
         },
         qrTokens: {
@@ -85,9 +115,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check if serial matches
-    if (productItem.serial12 !== serialNumber) {
-      await logScan(productItemId, null, tokenVersion, VerifyResult.INVALID_TOKEN, request)
+    // Check if serial matches (only needed for token-based verification)
+    if (token && productItem.serial12 !== serialNumber) {
+      await logScan(productItem.id, null, tokenVersion, VerifyResult.INVALID_TOKEN, request)
 
       return NextResponse.json({
         success: false,
@@ -96,9 +126,14 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // For serial-based verification, update productItemId
+    if (serial) {
+      productItemId = productItem.id
+    }
+
     // Check if product is still pending link (pre-generated but not yet assigned to product)
     if (productItem.status === 'PENDING_LINK') {
-      await logScan(productItemId, null, tokenVersion, VerifyResult.NOT_FOUND, request)
+      await logScan(productItem.id, null, tokenVersion, VerifyResult.NOT_FOUND, request)
 
       return NextResponse.json({
         success: false,
@@ -110,10 +145,10 @@ export async function GET(request: NextRequest) {
     // Get the active token
     const activeToken = productItem.qrTokens[0]
 
-    // Check if this token version is current
-    if (!activeToken || activeToken.tokenVersion !== tokenVersion) {
+    // Check if this token version is current (only for token-based verification)
+    if (token && (!activeToken || activeToken.tokenVersion !== tokenVersion)) {
       // Token was reprinted - this is an old token
-      await logScan(productItemId, null, tokenVersion, VerifyResult.REPRINTED, request)
+      await logScan(productItem.id, null, tokenVersion, VerifyResult.REPRINTED, request)
 
       return NextResponse.json({
         success: false,
@@ -125,16 +160,18 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Verify token hash matches
-    const tokenHash = hashToken(token)
-    if (activeToken.tokenHash !== tokenHash) {
-      await logScan(productItemId, activeToken.id, tokenVersion, VerifyResult.INVALID_TOKEN, request)
+    // Verify token hash matches (only for token-based verification)
+    if (token && activeToken) {
+      const tokenHash = hashToken(token)
+      if (activeToken.tokenHash !== tokenHash) {
+        await logScan(productItem.id, activeToken.id, tokenVersion, VerifyResult.INVALID_TOKEN, request)
 
-      return NextResponse.json({
-        success: false,
-        result: VerifyResult.INVALID_TOKEN,
-        message: 'Invalid QR code',
-      })
+        return NextResponse.json({
+          success: false,
+          result: VerifyResult.INVALID_TOKEN,
+          message: 'Invalid QR code',
+        })
+      }
     }
 
     // Get activation settings from ProductMaster (default to SINGLE/1 if not found)
@@ -180,7 +217,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Log successful scan
-    await logScan(productItemId, activeToken.id, tokenVersion, result, request)
+    await logScan(productItem.id, activeToken?.id || null, tokenVersion, result, request)
 
     // Get the latest activation
     const latestActivation = productItem.activations?.[0]
@@ -195,6 +232,7 @@ export async function GET(request: NextRequest) {
       sku: productItem.sku,
       modelSize: productItem.modelSize,
       category: productItem.category.nameTh,
+      imageUrl: productItem.productMaster?.imageUrl || null,
       expiryDate: productItem.expDate ? formatDate(productItem.expDate) : null,
       status: productItem.status,
       // Activation settings

@@ -6,7 +6,8 @@ import { checkRateLimit, rateLimitPresets } from '@/lib/rate-limit'
 const CURRENT_POLICY_VERSION = '1.0'
 
 interface ActivationRequest {
-  token: string
+  token?: string
+  serial?: string
   consent: boolean
   // Optional customer info
   customerName?: string
@@ -43,11 +44,12 @@ export async function POST(request: NextRequest) {
     const body: ActivationRequest = await request.json()
 
     // Validate required fields
-    const { token, customerName, age, gender, province, phone, consent } = body
+    const { token, serial, customerName, age, gender, province, phone, consent } = body
 
-    if (!token) {
+    // Either token or serial must be provided
+    if (!token && !serial) {
       return NextResponse.json(
-        { success: false, error: 'Token is required' },
+        { success: false, error: 'Token or serial is required' },
         { status: 400 }
       )
     }
@@ -81,22 +83,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Decrypt the token
-    const payload = await decryptQRToken(token)
+    let serialNumber: string
+    let productItemId: number | undefined
+    let tokenVersion: number = 1
 
-    if (!payload) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid QR code',
-        code: 'INVALID_TOKEN',
-      })
+    // Method 1: Short URL with serial (NEW)
+    if (serial) {
+      // Validate serial format (12 digits)
+      if (!/^\d{12}$/.test(serial)) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid serial number format',
+          code: 'INVALID_TOKEN',
+        })
+      }
+      serialNumber = serial
+    }
+    // Method 2: Legacy token-based activation
+    else if (token) {
+      // Decrypt the token
+      const payload = await decryptQRToken(token)
+
+      if (!payload) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid QR code',
+          code: 'INVALID_TOKEN',
+        })
+      }
+
+      serialNumber = payload.serialNumber
+      productItemId = payload.productItemId
+      tokenVersion = payload.tokenVersion
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Token or serial is required' },
+        { status: 400 }
+      )
     }
 
-    const { serialNumber, productItemId, tokenVersion } = payload
-
-    // Find the product with active token
+    // Find the product with active token (by ID if we have it, otherwise by serial)
     const productItem = await prisma.productItem.findUnique({
-      where: { id: productItemId },
+      where: productItemId ? { id: productItemId } : { serial12: serialNumber },
       include: {
         qrTokens: {
           where: { status: 'ACTIVE' },
@@ -124,8 +152,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if serial matches
-    if (productItem.serial12 !== serialNumber) {
+    // Check if serial matches (only needed for token-based activation)
+    if (token && productItem.serial12 !== serialNumber) {
       return NextResponse.json({
         success: false,
         error: 'Invalid QR code',
@@ -133,24 +161,31 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if token version is current
-    const activeToken = productItem.qrTokens[0]
-    if (!activeToken || activeToken.tokenVersion !== tokenVersion) {
-      return NextResponse.json({
-        success: false,
-        error: 'This QR code has been replaced',
-        code: 'REPRINTED',
-      })
+    // For serial-based activation, update productItemId
+    if (serial) {
+      productItemId = productItem.id
     }
 
-    // Verify token hash
-    const tokenHash = hashToken(token)
-    if (activeToken.tokenHash !== tokenHash) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid QR code',
-        code: 'INVALID_TOKEN',
-      })
+    // Check if token version is current (only for token-based activation)
+    if (token) {
+      const activeToken = productItem.qrTokens[0]
+      if (!activeToken || activeToken.tokenVersion !== tokenVersion) {
+        return NextResponse.json({
+          success: false,
+          error: 'This QR code has been replaced',
+          code: 'REPRINTED',
+        })
+      }
+
+      // Verify token hash
+      const tokenHash = hashToken(token)
+      if (activeToken.tokenHash !== tokenHash) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid QR code',
+          code: 'INVALID_TOKEN',
+        })
+      }
     }
 
     // Get activation settings from ProductMaster (default to SINGLE/1 if not found)
