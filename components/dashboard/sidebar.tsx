@@ -52,23 +52,23 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       roles: ['ADMIN', 'MANAGER', 'WAREHOUSE'],
     },
     {
-      label: 'รับเข้าคลัง',
-      labelEn: 'GRN',
-      href: `/${locale}/dashboard/grn`,
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-      ),
-      roles: ['ADMIN', 'WAREHOUSE'],
-    },
-    {
       label: 'สร้าง QR ล่วงหน้า',
       labelEn: 'Pre-Generate QR',
       href: `/${locale}/dashboard/pre-generate`,
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+        </svg>
+      ),
+      roles: ['ADMIN', 'WAREHOUSE'],
+    },
+    {
+      label: 'รับเข้าคลัง',
+      labelEn: 'GRN',
+      href: `/${locale}/dashboard/grn`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         </svg>
       ),
       roles: ['ADMIN', 'WAREHOUSE'],
@@ -85,6 +85,17 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       roles: ['ADMIN', 'WAREHOUSE'],
     },
     {
+      label: 'ใบสั่งซื้อ',
+      labelEn: 'Purchase Orders',
+      href: `/${locale}/dashboard/purchase-orders`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+      ),
+      roles: ['ADMIN', 'WAREHOUSE'],
+    },
+    {
       label: 'รออนุมัติ',
       labelEn: 'Approval',
       href: `/${locale}/dashboard/approval`,
@@ -95,6 +106,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       ),
       roles: ['ADMIN', 'MANAGER'],
     },
+    
     {
       label: 'สินค้าในคลัง',
       labelEn: 'Products',
@@ -107,6 +119,17 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       roles: ['ADMIN', 'MANAGER', 'WAREHOUSE'],
     },
     {
+      label: 'คลินิก',
+      labelEn: 'Clinics',
+      href: `/${locale}/dashboard/clinics`,
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+      roles: ['ADMIN'],
+    },
+    {
       label: 'พิมพ์ QR ใหม่',
       labelEn: 'Reprint',
       href: `/${locale}/dashboard/reprint`,
@@ -117,17 +140,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       ),
       roles: ['ADMIN', 'WAREHOUSE'],
     },
-    {
-      label: 'ใบสั่งซื้อ',
-      labelEn: 'Purchase Orders',
-      href: `/${locale}/dashboard/purchase-orders`,
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-      ),
-      roles: ['ADMIN', 'WAREHOUSE'],
-    },
+    
     {
       label: 'เสียหาย/คืนสินค้า',
       labelEn: 'Damaged/Return',
@@ -139,17 +152,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       ),
       roles: ['ADMIN', 'WAREHOUSE'],
     },
-    {
-      label: 'คลินิก',
-      labelEn: 'Clinics',
-      href: `/${locale}/dashboard/clinics`,
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-      ),
-      roles: ['ADMIN'],
-    },
+    
     {
       label: 'ผู้ใช้งาน',
       labelEn: 'Users',

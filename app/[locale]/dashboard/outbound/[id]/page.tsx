@@ -262,12 +262,12 @@ export default function OutboundDetailPage() {
 
   const getItemStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
-      IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'ในคลัง', labelEn: 'In Stock' },
-      PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending Out' },
-      SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
-      ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', label: 'คืนสินค้า', labelEn: 'Returned' },
-      DAMAGED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'เสียหาย', labelEn: 'Damaged' },
+      IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'ในคลัง', labelEn: 'In Stock' },
+      PENDING_OUT: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'รอส่งออก', labelEn: 'Pending Out' },
+      SHIPPED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
+      ACTIVATED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
+      RETURNED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'คืนสินค้า', labelEn: 'Returned' },
+      DAMAGED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'เสียหาย', labelEn: 'Damaged' },
     }
     const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
     return (

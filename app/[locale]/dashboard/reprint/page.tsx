@@ -313,7 +313,7 @@ export default function ReprintPage() {
                         <button
                           onClick={() => openReprintModal(product)}
                           disabled={reprinting === product.id}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-all"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-gold)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-gold)]/90 disabled:opacity-50 transition-all"
                         >
                           {reprinting === product.id ? (
                             <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">

@@ -412,7 +412,7 @@ export default function PurchaseOrdersPage() {
                     <td className="px-5 py-4">
                       <button
                         onClick={() => openDetailModal(po)}
-                        className="font-medium text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] hover:underline"
+                        className="font-medium text-amber-600 hover:text-[var(--color-gold-dark)] hover:underline"
                       >
                         {po.poNo}
                       </button>
@@ -424,7 +424,7 @@ export default function PurchaseOrdersPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
@@ -432,7 +432,7 @@ export default function PurchaseOrdersPage() {
                       </span>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
