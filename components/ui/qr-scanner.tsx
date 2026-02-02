@@ -13,8 +13,11 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [hasFlash, setHasFlash] = useState(false)
+  const [flashOn, setFlashOn] = useState(false)
   const isRunningRef = useRef(false)
   const containerIdRef = useRef(`qr-reader-${Math.random().toString(36).substr(2, 9)}`)
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null)
 
   // Use refs to store callbacks to avoid stale closures
   const onScanRef = useRef(onScan)
@@ -44,6 +47,66 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
       }
       isRunningRef.current = false
       scannerRef.current = null
+      videoTrackRef.current = null
+      setHasFlash(false)
+      setFlashOn(false)
+    }
+  }, [])
+
+  // Toggle flash/torch
+  const toggleFlash = useCallback(async () => {
+    if (!videoTrackRef.current) return
+
+    try {
+      const capabilities = videoTrackRef.current.getCapabilities() as MediaTrackCapabilities & { torch?: boolean }
+      if (capabilities.torch) {
+        const newFlashState = !flashOn
+        await videoTrackRef.current.applyConstraints({
+          advanced: [{ torch: newFlashState } as MediaTrackConstraintSet]
+        })
+        setFlashOn(newFlashState)
+      }
+    } catch (err) {
+      console.log('Flash toggle error:', err)
+    }
+  }, [flashOn])
+
+  // Apply autofocus constraints to video track
+  const applyFocusConstraints = useCallback(async (track: MediaStreamTrack) => {
+    try {
+      const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+        focusMode?: string[]
+        torch?: boolean
+      }
+
+      console.log('Camera capabilities:', capabilities)
+
+      // Check if camera supports continuous autofocus
+      const constraints: MediaTrackConstraintSet & { focusMode?: string } = {}
+
+      if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+        constraints.focusMode = 'continuous'
+        console.log('Applying continuous autofocus')
+      } else if (capabilities.focusMode && capabilities.focusMode.includes('auto')) {
+        constraints.focusMode = 'auto'
+        console.log('Applying auto focus')
+      }
+
+      // Check for torch/flash capability
+      if (capabilities.torch) {
+        setHasFlash(true)
+        console.log('Flash/torch available')
+      }
+
+      if (Object.keys(constraints).length > 0) {
+        await track.applyConstraints({
+          advanced: [constraints as MediaTrackConstraintSet]
+        })
+        console.log('Focus constraints applied successfully')
+      }
+    } catch (err) {
+      console.log('Could not apply focus constraints:', err)
+      // Continue anyway - autofocus might still work
     }
   }, [])
 
@@ -74,12 +137,22 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
         const html5QrCode = new Html5Qrcode(containerId)
         scannerRef.current = html5QrCode
 
+        // Start with optimized config for easier scanning
         await html5QrCode.start(
           { facingMode: 'environment' },
           {
-            fps: 15,
-            qrbox: { width: 250, height: 250 },
+            fps: 15, // Higher FPS for faster detection
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              // Use 80% of the smaller dimension for larger scan area
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
+              const qrboxSize = Math.floor(minEdge * 0.8)
+              return { width: qrboxSize, height: qrboxSize }
+            },
             aspectRatio: 1,
+            disableFlip: false,
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true, // Use native BarcodeDetector API if available (faster)
+            },
           },
           (decodedText) => {
             console.log('QR Scanned:', decodedText)
@@ -94,6 +167,18 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
 
         if (mounted) {
           isRunningRef.current = true
+
+          // Get the video track and apply focus constraints
+          // html5-qrcode exposes the video element, we need to get the stream from it
+          const videoElement = document.querySelector(`#${containerId} video`) as HTMLVideoElement
+          if (videoElement && videoElement.srcObject) {
+            const stream = videoElement.srcObject as MediaStream
+            const videoTrack = stream.getVideoTracks()[0]
+            if (videoTrack) {
+              videoTrackRef.current = videoTrack
+              await applyFocusConstraints(videoTrack)
+            }
+          }
         }
       } catch (err) {
         console.error('Camera error:', err)
@@ -116,7 +201,7 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
       mounted = false
       stopScanner()
     }
-  }, [isActive, stopScanner])
+  }, [isActive, stopScanner, applyFocusConstraints])
 
   if (cameraError) {
     return (
@@ -140,11 +225,44 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
           </div>
         </div>
       )}
+
+      {/* Flash toggle button */}
+      {hasFlash && !isStarting && (
+        <button
+          type="button"
+          onClick={toggleFlash}
+          className={`absolute top-3 right-3 z-20 p-2.5 rounded-full transition-all ${
+            flashOn
+              ? 'bg-yellow-400 text-yellow-900'
+              : 'bg-black/50 text-white hover:bg-black/70'
+          }`}
+          title={flashOn ? 'ปิดแฟลช' : 'เปิดแฟลช'}
+        >
+          {flashOn ? (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          )}
+        </button>
+      )}
+
       <div
         id={containerIdRef.current}
         className="qr-scanner-container w-full overflow-hidden rounded-lg bg-black"
-        style={{ minHeight: '280px', maxHeight: '300px' }}
       />
+
+      {/* Scan tips - compact on mobile */}
+      {!isStarting && (
+        <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-[10px] sm:text-xs text-blue-700 font-medium">
+            💡 ถือ QR ให้เต็มกรอบ • หลีกเลี่ยงแสงสะท้อน • เลื่อนไกล-ใกล้ถ้าโฟกัสช้า
+          </p>
+        </div>
+      )}
     </div>
   )
 }

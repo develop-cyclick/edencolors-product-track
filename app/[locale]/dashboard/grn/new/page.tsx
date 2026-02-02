@@ -83,7 +83,7 @@ export default function NewGRNPage() {
   const [scannerError, setScannerError] = useState<string | null>(null)
   const [scannerSuccess, setScannerSuccess] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
-  const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera')
+  const [scanMode, setScanMode] = useState<'camera' | 'manual'>('manual')
   const scannerInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
@@ -1081,17 +1081,17 @@ export default function NewGRNPage() {
 
       {/* Scanner Modal */}
       {scannerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={closeScannerModal}
           />
 
-          {/* Modal Content */}
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+          {/* Modal Content - Full screen on mobile, centered modal on desktop */}
+          <div className="relative bg-white w-full h-[95vh] sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:shadow-2xl sm:max-w-md sm:mx-4 overflow-hidden flex flex-col rounded-t-3xl sm:rounded-2xl">
             {/* Header */}
-            <div className="bg-[var(--color-gold)] px-4 sm:px-6 py-3 sm:py-4">
+            <div className="bg-[var(--color-gold)] px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/20 flex items-center justify-center">
@@ -1103,41 +1103,26 @@ export default function NewGRNPage() {
                     <h3 className="text-base sm:text-lg font-semibold text-white">
                       {locale === 'th' ? 'สแกน QR Code' : 'Scan QR Code'}
                     </h3>
-                    <p className="text-xs sm:text-sm text-white/80">
+                    <p className="text-xs sm:text-sm text-white/80 hidden sm:block">
                       {locale === 'th' ? 'สแกน QR ที่สร้างล่วงหน้า' : 'Scan pre-generated QR'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={closeScannerModal}
-                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
                 >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
             </div>
 
-            {/* Scanner Content */}
-            <div className="p-4 sm:p-6">
+            {/* Scanner Content - Scrollable */}
+            <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
               {/* Mode Tabs */}
               <div className="flex gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setScanMode('camera')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-                    scanMode === 'camera'
-                      ? 'bg-[var(--color-gold)] text-white shadow-md'
-                      : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
-                  }`}
-                >
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  {locale === 'th' ? 'กล้อง' : 'Camera'}
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1155,6 +1140,22 @@ export default function NewGRNPage() {
                   </svg>
                   {locale === 'th' ? 'เครื่องสแกน' : 'Scanner'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setScanMode('camera')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                    scanMode === 'camera'
+                      ? 'bg-[var(--color-gold)] text-white shadow-md'
+                      : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {locale === 'th' ? 'กล้อง' : 'Camera'}
+                </button>
+                
               </div>
 
               {/* Camera Mode */}
@@ -1272,11 +1273,11 @@ export default function NewGRNPage() {
             </div>
 
             {/* Footer */}
-            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--color-off-white)] border-t border-[var(--color-beige)] flex justify-end gap-3">
+            <div className="px-4 sm:px-6 py-4 bg-[var(--color-off-white)] border-t border-[var(--color-beige)] flex-shrink-0 safe-area-bottom">
               <button
                 type="button"
                 onClick={closeScannerModal}
-                className="px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-beige)] rounded-xl hover:border-[var(--color-gold)] transition-colors"
+                className="w-full sm:w-auto sm:ml-auto flex justify-center px-6 py-3 sm:py-2.5 text-sm font-medium text-white bg-[var(--color-gold)] rounded-xl hover:bg-[var(--color-gold-dark)] transition-colors shadow-md"
               >
                 {locale === 'th' ? 'เสร็จสิ้น' : 'Done'}
               </button>

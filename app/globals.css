@@ -1268,19 +1268,84 @@ h6 { font-size: 1rem; }
    QR Scanner Styles
    ======================================== */
 .qr-scanner-container {
-  max-height: 300px;
+  max-height: 350px;
   overflow: hidden;
+  position: relative;
 }
 
 .qr-scanner-container video {
   object-fit: cover !important;
-  max-height: 300px !important;
+  max-height: 350px !important;
+  width: 100% !important;
 }
 
 .qr-scanner-container > div {
-  max-height: 300px !important;
+  max-height: 350px !important;
 }
 
+/* Make the shaded region lighter so QR is more visible */
 .qr-scanner-container #qr-shaded-region {
-  border-color: rgba(201, 163, 90, 0.5) !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Style the scan region border */
+.qr-scanner-container [style*="border"] {
+  border-color: var(--color-gold) !important;
+}
+
+/* Hide default text messages from html5-qrcode */
+.qr-scanner-container span,
+.qr-scanner-container a {
+  display: none !important;
+}
+
+/* Animated scan line */
+@keyframes scanLine {
+  0% { top: 10%; }
+  50% { top: 85%; }
+  100% { top: 10%; }
+}
+
+.qr-scanner-container::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-gold), transparent);
+  box-shadow: 0 0 10px var(--color-gold), 0 0 20px var(--color-gold);
+  animation: scanLine 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 2px;
+}
+
+/* Mobile-optimized QR scanner */
+@media (max-width: 640px) {
+  .qr-scanner-container {
+    min-height: 280px;
+    max-height: 400px;
+  }
+
+  .qr-scanner-container video {
+    max-height: 400px !important;
+  }
+}
+
+/* ========================================
+   Safe Area (iPhone Notch Support)
+   ======================================== */
+.safe-area-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.safe-area-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+/* Full screen modal for mobile */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
 }
