@@ -258,6 +258,303 @@ async function handleDELETE(_request: NextRequest, context: HandlerContext) {
   return successResponse({ deleted: true })
 }
 
+// PUT /api/warehouse/grn/[id] - Full edit of GRN (delete old items and create new)
+async function handlePUT(request: NextRequest, context: HandlerContext) {
+  if (!context.params) {
+    return errorResponse('Missing params', 400)
+  }
+
+  const { id } = await context.params
+  const grnId = parseInt(id)
+  const body = await request.json()
+  const user = context.user
+
+  if (isNaN(grnId)) {
+    return errorResponse('Invalid GRN ID', 400)
+  }
+
+  // Fetch existing GRN with lines
+  const existingGrn = await prisma.gRNHeader.findUnique({
+    where: { id: grnId },
+    include: {
+      lines: {
+        include: {
+          productItem: {
+            include: {
+              outboundLines: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!existingGrn) {
+    return errors.notFound('GRN')
+  }
+
+  // Check if approved
+  if (existingGrn.approvedAt) {
+    return errorResponse('Cannot edit approved GRN', 400)
+  }
+
+  // Check if any product has outbound
+  const hasOutbound = existingGrn.lines.some(
+    (line) => line.productItem.outboundLines.length > 0
+  )
+
+  if (hasOutbound) {
+    return errorResponse('Cannot edit GRN with products that have outbound records', 400)
+  }
+
+  // Validate required fields
+  if (!body.receivedAt || !body.warehouseId || !body.supplierName || !body.lines?.length) {
+    return errorResponse('Missing required fields: receivedAt, warehouseId, supplierName, lines')
+  }
+
+  // Import serial generator functions
+  const { generateSerialNumber } = await import('@/lib/serial-generator')
+  const { createQRToken, hashToken } = await import('@/lib/qr-token')
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Delete existing data in reverse order
+      const productItemIds = existingGrn.lines.map((line) => line.productItem.id)
+
+      // Delete scan logs
+      await tx.scanLog.deleteMany({
+        where: { productItemId: { in: productItemIds } },
+      })
+
+      // Delete event logs
+      await tx.eventLog.deleteMany({
+        where: { productItemId: { in: productItemIds } },
+      })
+
+      // Delete QR tokens
+      await tx.qRToken.deleteMany({
+        where: { productItemId: { in: productItemIds } },
+      })
+
+      // Delete GRN lines
+      await tx.gRNLine.deleteMany({
+        where: { grnHeaderId: grnId },
+      })
+
+      // Delete product items
+      await tx.productItem.deleteMany({
+        where: { id: { in: productItemIds } },
+      })
+
+      // 2. Update GRN header
+      await tx.gRNHeader.update({
+        where: { id: grnId },
+        data: {
+          receivedAt: new Date(body.receivedAt),
+          warehouseId: body.warehouseId,
+          poNo: body.poNo,
+          supplierName: body.supplierName,
+          deliveryNoteNo: body.deliveryNoteNo,
+          supplierAddress: body.supplierAddress,
+          supplierPhone: body.supplierPhone,
+          supplierContact: body.supplierContact,
+          deliveryDocDate: body.deliveryDocDate ? new Date(body.deliveryDocDate) : null,
+          remarks: body.remarks,
+        },
+      })
+
+      // 3. Create new lines with product items and QR tokens (same as POST logic)
+      const createdLines = []
+
+      for (const line of body.lines) {
+        // Fetch ProductMaster data
+        const productMaster = await tx.productMaster.findUnique({
+          where: { id: line.productMasterId },
+          include: { category: true, defaultUnit: true },
+        })
+
+        if (!productMaster) {
+          throw new Error(`ProductMaster not found: ${line.productMasterId}`)
+        }
+
+        if (!productMaster.isActive) {
+          throw new Error(`ProductMaster is inactive: ${productMaster.sku}`)
+        }
+
+        // Check if using pre-generated items
+        if (line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0) {
+          // Use pre-generated items (link existing items)
+          for (const preGenItemId of line.preGeneratedItemIds) {
+            const preGenItem = await tx.productItem.findUnique({
+              where: { id: preGenItemId },
+              include: {
+                qrTokens: {
+                  where: { status: 'ACTIVE' },
+                  orderBy: { tokenVersion: 'desc' },
+                  take: 1,
+                },
+              },
+            })
+
+            if (!preGenItem) {
+              throw new Error(`Pre-generated item not found: ${preGenItemId}`)
+            }
+
+            if (preGenItem.status !== 'PENDING_LINK') {
+              throw new Error(`Item ${preGenItem.serial12} is not available for linking`)
+            }
+
+            // Update pre-generated item with actual product data
+            const productItem = await tx.productItem.update({
+              where: { id: preGenItemId },
+              data: {
+                sku: productMaster.sku,
+                name: productMaster.nameTh,
+                categoryId: productMaster.categoryId,
+                modelSize: productMaster.modelSize,
+                productMasterId: productMaster.id,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                status: 'IN_STOCK',
+              },
+            })
+
+            // Update linked count on batch
+            if (productItem.preGeneratedBatchId) {
+              await tx.preGeneratedBatch.update({
+                where: { id: productItem.preGeneratedBatchId },
+                data: { linkedCount: { increment: 1 } },
+              })
+            }
+
+            const qrToken = preGenItem.qrTokens[0]?.token || ''
+
+            // Create GRN line
+            const grnLine = await tx.gRNLine.create({
+              data: {
+                grnHeaderId: grnId,
+                productItemId: productItem.id,
+                sku: productMaster.sku,
+                itemName: productMaster.nameTh,
+                modelSize: productMaster.modelSize,
+                quantity: 1,
+                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                inspectionStatus: line.inspectionStatus || 'OK',
+                remarks: line.remarks,
+              },
+            })
+
+            createdLines.push({ line: grnLine, productItem, qrToken })
+
+            // Log event
+            await tx.eventLog.create({
+              data: {
+                eventType: 'INBOUND',
+                productItemId: productItem.id,
+                userId: user.userId,
+                details: {
+                  grnNo: existingGrn.grnNo,
+                  serialNumber: productItem.serial12,
+                  sku: productMaster.sku,
+                  isPreGenerated: true,
+                  editedGrn: true,
+                },
+              },
+            })
+          }
+        } else {
+          // Normal flow: create new product items
+          for (let i = 0; i < line.quantity; i++) {
+            const serialNumber = await generateSerialNumber()
+
+            const productItem = await tx.productItem.create({
+              data: {
+                serial12: serialNumber,
+                sku: productMaster.sku,
+                name: productMaster.nameTh,
+                categoryId: productMaster.categoryId,
+                modelSize: productMaster.modelSize,
+                productMasterId: productMaster.id,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                status: 'IN_STOCK',
+              },
+            })
+
+            const qrToken = await createQRToken({
+              serialNumber,
+              productItemId: productItem.id,
+              tokenVersion: 1,
+              issuedAt: Math.floor(Date.now() / 1000),
+            })
+
+            await tx.qRToken.create({
+              data: {
+                productItemId: productItem.id,
+                tokenVersion: 1,
+                token: qrToken,
+                tokenHash: hashToken(qrToken),
+                status: 'ACTIVE',
+              },
+            })
+
+            const grnLine = await tx.gRNLine.create({
+              data: {
+                grnHeaderId: grnId,
+                productItemId: productItem.id,
+                sku: productMaster.sku,
+                itemName: productMaster.nameTh,
+                modelSize: productMaster.modelSize,
+                quantity: 1,
+                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                lot: line.lot,
+                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+                expDate: line.expDate ? new Date(line.expDate) : null,
+                inspectionStatus: line.inspectionStatus || 'OK',
+                remarks: line.remarks,
+              },
+            })
+
+            createdLines.push({ line: grnLine, productItem, qrToken })
+
+            // Log event
+            await tx.eventLog.create({
+              data: {
+                eventType: 'INBOUND',
+                productItemId: productItem.id,
+                userId: user.userId,
+                details: {
+                  grnNo: existingGrn.grnNo,
+                  serialNumber,
+                  sku: productMaster.sku,
+                  editedGrn: true,
+                },
+              },
+            })
+          }
+        }
+      }
+
+      return { linesCreated: createdLines.length }
+    })
+
+    return successResponse({
+      id: grnId,
+      grnNo: existingGrn.grnNo,
+      linesCreated: result.linesCreated,
+    })
+  } catch (error) {
+    console.error('Update GRN error:', error)
+    return errorResponse(error instanceof Error ? error.message : 'Failed to update GRN')
+  }
+}
+
 export const GET = withRoles<RouteParams>(['ADMIN', 'MANAGER', 'WAREHOUSE'], handleGET)
 export const PATCH = withRoles<RouteParams>(['ADMIN', 'MANAGER', 'WAREHOUSE'], handlePATCH)
+export const PUT = withRoles<RouteParams>(['ADMIN', 'MANAGER', 'WAREHOUSE'], handlePUT)
 export const DELETE = withRoles<RouteParams>(['ADMIN'], handleDELETE)

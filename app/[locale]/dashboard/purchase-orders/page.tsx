@@ -71,6 +71,8 @@ export default function PurchaseOrdersPage() {
   // Modal state
   const [showModal, setShowModal] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingPOId, setEditingPOId] = useState<number | null>(null)
 
   // Filter state
   const [filterClinicId, setFilterClinicId] = useState<number>(0)
@@ -80,6 +82,15 @@ export default function PurchaseOrdersPage() {
   const [formClinicId, setFormClinicId] = useState<number>(0)
   const [formRemarks, setFormRemarks] = useState('')
   const [formLines, setFormLines] = useState<POLine[]>([{ productMasterId: 0, quantity: 1 }])
+  // Delivery info form state
+  const [formDeliveryNoteNo, setFormDeliveryNoteNo] = useState('')
+  const [formContractNo, setFormContractNo] = useState('')
+  const [formSalesPersonName, setFormSalesPersonName] = useState('')
+  const [formCompanyContact, setFormCompanyContact] = useState('')
+  const [formClinicAddress, setFormClinicAddress] = useState('')
+  const [formClinicPhone, setFormClinicPhone] = useState('')
+  const [formClinicEmail, setFormClinicEmail] = useState('')
+  const [formClinicContactName, setFormClinicContactName] = useState('')
 
   // Clinic search dropdown
   const [clinicSearch, setClinicSearch] = useState('')
@@ -135,19 +146,69 @@ export default function PurchaseOrdersPage() {
   }
 
   const openCreateModal = () => {
+    setIsEditMode(false)
+    setEditingPOId(null)
     setFormClinicId(0)
     setFormRemarks('')
     setFormLines([{ productMasterId: 0, quantity: 1 }])
     setClinicSearch('')
+    setFormDeliveryNoteNo('')
+    setFormContractNo('')
+    setFormSalesPersonName('')
+    setFormCompanyContact('')
+    setFormClinicAddress('')
+    setFormClinicPhone('')
+    setFormClinicEmail('')
+    setFormClinicContactName('')
+    setShowModal(true)
+  }
+
+  const openEditModal = (po: PurchaseOrder) => {
+    setIsEditMode(true)
+    setEditingPOId(po.id)
+    setFormClinicId(po.clinicId)
+    setFormRemarks(po.remarks || '')
+    // Pre-fill lines from existing PO
+    setFormLines(po.lines.map((l) => ({
+      productMasterId: l.productMasterId,
+      quantity: l.quantity,
+    })))
+    setClinicSearch('')
+    // Pre-fill delivery info - need to fetch from API since it's not in the list response
+    fetch(`/api/admin/purchase-orders/${po.id}`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success && res.data?.purchaseOrder) {
+          const poData = res.data.purchaseOrder
+          setFormDeliveryNoteNo(poData.deliveryNoteNo || '')
+          setFormContractNo(poData.contractNo || '')
+          setFormSalesPersonName(poData.salesPersonName || '')
+          setFormCompanyContact(poData.companyContact || '')
+          setFormClinicAddress(poData.clinicAddress || '')
+          setFormClinicPhone(poData.clinicPhone || '')
+          setFormClinicEmail(poData.clinicEmail || '')
+          setFormClinicContactName(poData.clinicContactName || '')
+        }
+      })
     setShowModal(true)
   }
 
   const closeModal = () => {
     setShowModal(false)
+    setIsEditMode(false)
+    setEditingPOId(null)
     setFormClinicId(0)
     setFormRemarks('')
     setFormLines([{ productMasterId: 0, quantity: 1 }])
     setClinicSearch('')
+    setFormDeliveryNoteNo('')
+    setFormContractNo('')
+    setFormSalesPersonName('')
+    setFormCompanyContact('')
+    setFormClinicAddress('')
+    setFormClinicPhone('')
+    setFormClinicEmail('')
+    setFormClinicContactName('')
   }
 
   const addLine = () => {
@@ -181,26 +242,54 @@ export default function PurchaseOrdersPage() {
     setActionLoading(true)
 
     try {
-      const res = await fetch('/api/admin/purchase-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clinicId: formClinicId,
-          remarks: formRemarks || null,
-          lines: validLines,
-        }),
-      })
+      const payload = {
+        clinicId: formClinicId,
+        remarks: formRemarks || null,
+        lines: validLines,
+        // Delivery info
+        deliveryNoteNo: formDeliveryNoteNo || null,
+        contractNo: formContractNo || null,
+        salesPersonName: formSalesPersonName || null,
+        companyContact: formCompanyContact || null,
+        clinicAddress: formClinicAddress || null,
+        clinicPhone: formClinicPhone || null,
+        clinicEmail: formClinicEmail || null,
+        clinicContactName: formClinicContactName || null,
+      }
+
+      let res
+      if (isEditMode && editingPOId) {
+        res = await fetch(`/api/admin/purchase-orders/${editingPOId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        res = await fetch('/api/admin/purchase-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      }
 
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? `สร้าง PO สำเร็จ: ${data.data.purchaseOrder.poNo}` : `PO created: ${data.data.purchaseOrder.poNo}`)
+        alert(
+          isEditMode
+            ? (locale === 'th' ? 'บันทึกการแก้ไขสำเร็จ!' : 'Changes saved successfully!')
+            : (locale === 'th' ? `สร้าง PO สำเร็จ: ${data.data.purchaseOrder.poNo}` : `PO created: ${data.data.purchaseOrder.poNo}`)
+        )
         closeModal()
         fetchData()
+        // Close detail modal if open
+        if (showDetailModal) {
+          closeDetailModal()
+        }
       } else {
         alert(`Error: ${data.error}`)
       }
     } catch (error) {
-      alert('Failed to create purchase order')
+      alert(isEditMode ? 'Failed to update purchase order' : 'Failed to create purchase order')
     } finally {
       setActionLoading(false)
     }
@@ -464,6 +553,17 @@ export default function PurchaseOrdersPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </button>
+                        {po.status === 'CONFIRMED' && (
+                          <button
+                            onClick={() => openEditModal(po)}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                            title={locale === 'th' ? 'แก้ไข' : 'Edit'}
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        )}
                         {po.status !== 'CANCELLED' && po.status !== 'COMPLETED' && (
                           <button
                             onClick={() => handleCancel(po)}
@@ -491,7 +591,10 @@ export default function PurchaseOrdersPage() {
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-[var(--color-charcoal)]">
-                {locale === 'th' ? 'สร้างใบสั่งซื้อใหม่' : 'Create New Purchase Order'}
+                {isEditMode
+                  ? (locale === 'th' ? 'แก้ไขใบสั่งซื้อ' : 'Edit Purchase Order')
+                  : (locale === 'th' ? 'สร้างใบสั่งซื้อใหม่' : 'Create New Purchase Order')
+                }
               </h3>
               <button onClick={closeModal} className="p-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] rounded-lg transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -617,6 +720,117 @@ export default function PurchaseOrdersPage() {
                 </button>
               </div>
 
+              {/* Delivery Info Section */}
+              <div className="border-t border-[var(--color-beige)] pt-5 mt-2">
+                <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                  {locale === 'th' ? 'ข้อมูลการจัดส่ง' : 'Delivery Information'}
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      IV No.
+                    </label>
+                    <input
+                      type="text"
+                      value={formDeliveryNoteNo}
+                      onChange={(e) => setFormDeliveryNoteNo(e.target.value)}
+                      className={inputClass}
+                      placeholder="OUT-2026-XXXX"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'เลข Contract' : 'Contract No.'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formContractNo}
+                      onChange={(e) => setFormContractNo(e.target.value)}
+                      className={inputClass}
+                      placeholder="CNT-2026-XXXX"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'ชื่อพนักงานขาย' : 'Sales Person'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formSalesPersonName}
+                      onChange={(e) => setFormSalesPersonName(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'ช่องทางติดต่อบริษัท' : 'Company Contact'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formCompanyContact}
+                      onChange={(e) => setFormCompanyContact(e.target.value)}
+                      className={inputClass}
+                      placeholder={locale === 'th' ? 'Line ID / เบอร์โทร / อีเมล' : 'Line ID / Phone / Email'}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}
+                    </label>
+                    <textarea
+                      value={formClinicAddress}
+                      onChange={(e) => setFormClinicAddress(e.target.value)}
+                      rows={2}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'เบอร์โทรคลินิก' : 'Clinic Phone'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formClinicPhone}
+                      onChange={(e) => setFormClinicPhone(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'อีเมลคลินิก' : 'Clinic Email'}
+                    </label>
+                    <input
+                      type="email"
+                      value={formClinicEmail}
+                      onChange={(e) => setFormClinicEmail(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                      {locale === 'th' ? 'ชื่อผู้รับสินค้า' : 'Contact Person'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formClinicContactName}
+                      onChange={(e) => setFormClinicContactName(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Remarks */}
               <div>
                 <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
@@ -647,8 +861,13 @@ export default function PurchaseOrdersPage() {
                   {actionLoading ? (
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      {locale === 'th' ? 'กำลังสร้าง...' : 'Creating...'}
+                      {isEditMode
+                        ? (locale === 'th' ? 'กำลังบันทึก...' : 'Saving...')
+                        : (locale === 'th' ? 'กำลังสร้าง...' : 'Creating...')
+                      }
                     </span>
+                  ) : isEditMode ? (
+                    locale === 'th' ? 'บันทึก' : 'Save'
                   ) : (
                     locale === 'th' ? 'สร้าง PO' : 'Create PO'
                   )}
@@ -772,6 +991,17 @@ export default function PurchaseOrdersPage() {
               >
                 {locale === 'th' ? 'ปิด' : 'Close'}
               </button>
+              {selectedPO.status === 'CONFIRMED' && (
+                <button
+                  onClick={() => {
+                    closeDetailModal()
+                    openEditModal(selectedPO)
+                  }}
+                  className="px-6 py-2 border border-blue-500 text-blue-500 rounded-xl font-medium hover:bg-blue-50 transition-all"
+                >
+                  {locale === 'th' ? 'แก้ไข' : 'Edit'}
+                </button>
+              )}
               {selectedPO.summary.totalRemaining > 0 && selectedPO.status !== 'CANCELLED' && (
                 <Link
                   href={`/${locale}/dashboard/outbound/new?clinicId=${selectedPO.clinicId}&poId=${selectedPO.id}`}

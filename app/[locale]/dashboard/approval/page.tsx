@@ -251,7 +251,7 @@ export default function ApprovalBoardPage() {
             <span className="text-3xl font-bold text-[var(--color-charcoal)]">{stats.grn.pending}</span>
           </div>
           <p className="text-sm text-[var(--color-foreground-muted)]">
-            {locale === 'th' ? 'GRN รออนุมัติ' : 'GRN Pending'}
+            {locale === 'th' ? 'รับเข้า รออนุมัติ' : 'GRN Pending'}
           </p>
         </button>
 

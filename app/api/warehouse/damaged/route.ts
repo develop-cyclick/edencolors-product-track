@@ -125,10 +125,12 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     const body = await request.json()
     const user = context.user
 
-    const { productItemIds, reason, note } = body as {
+    const { productItemIds, reason, note, outboundLineId, replacementItemId } = body as {
       productItemIds: number[]
       reason: string
       note?: string
+      outboundLineId?: number
+      replacementItemId?: number
     }
 
     if (!productItemIds || productItemIds.length === 0) {
@@ -150,7 +152,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
 
     // Only allow marking as damaged if in certain statuses
     const invalidItems = items.filter(
-      (item) => !['IN_STOCK', 'SHIPPED', 'RETURNED'].includes(item.status)
+      (item) => !['IN_STOCK', 'PENDING_OUT', 'SHIPPED', 'RETURNED'].includes(item.status)
     )
 
     if (invalidItems.length > 0) {
@@ -159,9 +161,26 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       )
     }
 
+    // If replacement is requested, verify the replacement item
+    let replacementItem = null
+    if (replacementItemId) {
+      replacementItem = await prisma.productItem.findUnique({
+        where: { id: replacementItemId },
+      })
+
+      if (!replacementItem) {
+        return errorResponse('Replacement product not found')
+      }
+
+      if (replacementItem.status !== ProductStatus.IN_STOCK) {
+        return errorResponse('Replacement product is not available in stock')
+      }
+    }
+
     // Update status and log events
     await prisma.$transaction(async (tx) => {
       for (const item of items) {
+        // Mark original item as damaged
         await tx.productItem.update({
           where: { id: item.id },
           data: { status: ProductStatus.DAMAGED },
@@ -176,15 +195,50 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               reason,
               note,
               previousStatus: item.status,
+              replacedBy: replacementItemId || null,
+            },
+          },
+        })
+      }
+
+      // Handle replacement if requested
+      if (replacementItemId && outboundLineId && replacementItem) {
+        // Update the outbound line to use the replacement item
+        await tx.outboundLine.update({
+          where: { id: outboundLineId },
+          data: { productItemId: replacementItemId },
+        })
+
+        // Mark replacement item as PENDING_OUT
+        await tx.productItem.update({
+          where: { id: replacementItemId },
+          data: { status: ProductStatus.PENDING_OUT },
+        })
+
+        // Log the replacement event
+        await tx.eventLog.create({
+          data: {
+            eventType: 'REPLACE',
+            productItemId: replacementItemId,
+            userId: user.userId,
+            details: {
+              replacedItemId: productItemIds[0],
+              outboundLineId,
+              reason: 'Replacement for damaged product',
             },
           },
         })
       }
     })
 
+    const message = replacementItemId
+      ? `Product marked as damaged and replaced`
+      : `${productItemIds.length} product(s) marked as damaged`
+
     return successResponse({
-      message: `${productItemIds.length} product(s) marked as damaged`,
+      message,
       count: productItemIds.length,
+      replaced: !!replacementItemId,
     })
   } catch (error) {
     console.error('Mark products as damaged error:', error)

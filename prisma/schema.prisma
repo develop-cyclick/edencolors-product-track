@@ -480,14 +480,23 @@ enum POStatus {
 }
 
 model PurchaseOrder {
-  id              Int       @id @default(autoincrement())
-  poNo            String    @unique @map("po_no") // Auto: PO-2026-000001
-  clinicId        Int       @map("clinic_id")
-  status          POStatus  @default(DRAFT)
-  remarks         String?
-  createdById     Int       @map("created_by_id")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                Int       @id @default(autoincrement())
+  poNo              String    @unique @map("po_no") // Auto: PO-2026-000001
+  clinicId          Int       @map("clinic_id")
+  status            POStatus  @default(DRAFT)
+  remarks           String?
+  // Delivery info (ย้ายมาจาก outbound)
+  deliveryNoteNo    String?   @map("delivery_note_no") // IV No.
+  contractNo        String?   @map("contract_no")
+  salesPersonName   String?   @map("sales_person_name")
+  companyContact    String?   @map("company_contact")
+  clinicAddress     String?   @map("clinic_address")
+  clinicPhone       String?   @map("clinic_phone")
+  clinicEmail       String?   @map("clinic_email")
+  clinicContactName String?   @map("clinic_contact_name")
+  createdById       Int       @map("created_by_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   clinic          Clinic    @relation(fields: [clinicId], references: [id])
   createdBy       User      @relation("POCreatedBy", fields: [createdById], references: [id])

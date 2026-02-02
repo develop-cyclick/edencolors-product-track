@@ -10,6 +10,7 @@ export const GET = withWarehouse(async (request: NextRequest) => {
     const clinicId = searchParams.get('clinicId')
     const status = searchParams.get('status')
     const hasRemaining = searchParams.get('hasRemaining') // filter POs that still have items to ship
+    const excludeCancelled = searchParams.get('excludeCancelled') // exclude cancelled POs
 
     const where: Record<string, unknown> = {}
 
@@ -19,6 +20,11 @@ export const GET = withWarehouse(async (request: NextRequest) => {
 
     if (status) {
       where.status = status
+    }
+
+    // Exclude cancelled POs if requested
+    if (excludeCancelled === 'true') {
+      where.status = { not: 'CANCELLED' }
     }
 
     const purchaseOrders = await prisma.purchaseOrder.findMany({
@@ -134,6 +140,15 @@ export const POST = withAdmin(async (request: NextRequest, context) => {
         clinicId: body.clinicId,
         status: body.status || 'CONFIRMED',
         remarks: body.remarks || null,
+        // Delivery info
+        deliveryNoteNo: body.deliveryNoteNo || null,
+        contractNo: body.contractNo || null,
+        salesPersonName: body.salesPersonName || null,
+        companyContact: body.companyContact || null,
+        clinicAddress: body.clinicAddress || null,
+        clinicPhone: body.clinicPhone || null,
+        clinicEmail: body.clinicEmail || null,
+        clinicContactName: body.clinicContactName || null,
         createdById: user.userId,
         lines: {
           create: body.lines.map((line: { productMasterId: number; quantity: number }) => ({

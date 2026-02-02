@@ -82,7 +82,7 @@ export default async function LoginPage({ params }: LoginPageProps) {
           {/* Mobile Logo */}
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Image src="/logo-black.png" alt="Eden Colors Logo" width={120} height={34} className="h-[220px] sm:h-[320px] w-auto mx-auto mb-4" />
+            <Image src="/logo-black3.png" alt="Eden Colors Logo" width={120} height={80} className="h-[80px] object-contain  w-auto mx-auto mb-10" />
           </Link>
 
           {/* Login Card */}
@@ -111,7 +111,7 @@ export default async function LoginPage({ params }: LoginPageProps) {
             <div className="text-center">
               <Link
                 href={`/${locale}`}
-                className="text-sm text-[var(--color-foreground-muted)] hover:text-[var(--color-gold)] transition-colors"
+                className="text-sm text-[var(--color-foreground-muted)] hover:text-[var(--color-gold)] transition-colors "
               >
                 ← {locale === 'th' ? 'กลับหน้าหลัก' : 'Back to home'}
               </Link>

@@ -299,6 +299,18 @@ export default function GRNDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
+          {/* Edit Button - Only show when pending approval */}
+          {!grn.approvedAt && (
+            <Link
+              href={`/${locale}/dashboard/grn/new?editId=${id}`}
+              className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-gold)] text-[var(--color-gold)] rounded-xl font-medium hover:bg-[var(--color-gold)]/10 transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              {locale === 'th' ? 'แก้ไข' : 'Edit'}
+            </Link>
+          )}
           {/* View Document Button */}
           {/* <Link
             href={`/${locale}/dashboard/grn/${id}/document`}

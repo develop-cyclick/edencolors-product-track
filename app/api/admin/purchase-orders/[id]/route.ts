@@ -166,6 +166,94 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
   }
 }
 
+// PUT /api/admin/purchase-orders/[id] - Full edit of purchase order (CONFIRMED status only)
+async function handlePUT(request: NextRequest, context: HandlerContext) {
+  if (!context.params) {
+    return errorResponse('Missing params', 400)
+  }
+
+  try {
+    const { id } = await context.params
+    const purchaseOrderId = parseInt(id)
+    const body = await request.json()
+
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        lines: true,
+      },
+    })
+
+    if (!existing) {
+      return errors.notFound('Purchase order not found')
+    }
+
+    // Only allow editing CONFIRMED status
+    if (existing.status !== 'CONFIRMED') {
+      return errorResponse('Can only edit purchase orders with CONFIRMED status', 400)
+    }
+
+    // Validate required fields
+    if (!body.clinicId) {
+      return errorResponse('Clinic is required', 400)
+    }
+
+    if (!body.lines || body.lines.length === 0) {
+      return errorResponse('At least one product line is required', 400)
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Delete existing lines
+      await tx.purchaseOrderLine.deleteMany({
+        where: { purchaseOrderId },
+      })
+
+      // Create new lines
+      await tx.purchaseOrderLine.createMany({
+        data: body.lines.map((line: { productMasterId: number; quantity: number }) => ({
+          purchaseOrderId,
+          productMasterId: line.productMasterId,
+          quantity: line.quantity,
+          shippedQuantity: 0, // Reset shipped quantity when editing
+        })),
+      })
+
+      // Update header
+      const updated = await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          clinicId: body.clinicId,
+          remarks: body.remarks || null,
+          // Delivery info fields
+          deliveryNoteNo: body.deliveryNoteNo || null,
+          contractNo: body.contractNo || null,
+          salesPersonName: body.salesPersonName || null,
+          companyContact: body.companyContact || null,
+          clinicAddress: body.clinicAddress || null,
+          clinicPhone: body.clinicPhone || null,
+          clinicEmail: body.clinicEmail || null,
+          clinicContactName: body.clinicContactName || null,
+        },
+        include: {
+          clinic: true,
+          lines: {
+            include: {
+              productMaster: true,
+            },
+          },
+        },
+      })
+
+      return updated
+    })
+
+    return successResponse({ purchaseOrder: result })
+  } catch (error) {
+    console.error('Update purchase order error:', error)
+    return errors.internalError()
+  }
+}
+
 // DELETE /api/admin/purchase-orders/[id] - Delete/Cancel purchase order
 async function handleDELETE(request: NextRequest, context: HandlerContext) {
   if (!context.params) {
@@ -216,4 +304,5 @@ async function handleDELETE(request: NextRequest, context: HandlerContext) {
 
 export const GET = withWarehouse<RouteParams>(handleGET)
 export const PATCH = withAdmin<RouteParams>(handlePATCH)
+export const PUT = withAdmin<RouteParams>(handlePUT)
 export const DELETE = withAdmin<RouteParams>(handleDELETE)

@@ -46,6 +46,15 @@ interface PurchaseOrder {
   poNo: string
   clinicId: number
   status: string
+  // Delivery info from PO
+  deliveryNoteNo: string | null
+  contractNo: string | null
+  salesPersonName: string | null
+  companyContact: string | null
+  clinicAddress: string | null
+  clinicPhone: string | null
+  clinicEmail: string | null
+  clinicContactName: string | null
   lines: PurchaseOrderLine[]
   summary: {
     totalOrdered: number
@@ -70,8 +79,13 @@ export default function NewOutboundPage() {
   // URL params
   const urlClinicId = searchParams.get('clinicId')
   const urlPoId = searchParams.get('poId')
+  const editId = searchParams.get('editId')
 
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingOutboundId, setEditingOutboundId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(!!editId)
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -132,10 +146,85 @@ export default function NewOutboundPage() {
     })
   }, [urlClinicId])
 
-  // Fetch POs when clinic changes
+  // Fetch existing outbound data when in edit mode
+  useEffect(() => {
+    if (editId && productMasters.length > 0) {
+      setIsEditMode(true)
+      setEditingOutboundId(parseInt(editId))
+
+      fetch(`/api/warehouse/outbound/${editId}`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && res.data?.outbound) {
+            const ob = res.data.outbound
+
+            // Check if still editable (PENDING status)
+            if (ob.status !== 'PENDING') {
+              alert(locale === 'th' ? 'ไม่สามารถแก้ไขได้ สถานะไม่ใช่รออนุมัติ' : 'Cannot edit, status is not pending')
+              router.push(`/${locale}/dashboard/outbound/${editId}`)
+              return
+            }
+
+            // Pre-fill form data
+            setWarehouseId(ob.warehouse?.id || 0)
+            setShippingMethodId(ob.shippingMethod?.id || 0)
+            setClinicId(ob.clinic?.id || 0)
+            setDeliveryNoteNo(ob.deliveryNoteNo || '')
+            setContractNo(ob.contractNo || '')
+            setSalesPersonName(ob.salesPersonName || '')
+            setCompanyContact(ob.companyContact || '')
+            setClinicAddress(ob.clinicAddress || '')
+            setClinicPhone(ob.clinicPhone || '')
+            setClinicEmail(ob.clinicEmail || '')
+            setClinicContactName(ob.clinicContactName || '')
+            setPurchaseOrderId(ob.purchaseOrder?.id || 0)
+            setRemarks(ob.remarks || '')
+
+            // Pre-fill lines from existing outbound
+            if (ob.lines && ob.lines.length > 0) {
+              const editLines: LineItem[] = ob.lines.map((line: { productItem: { id: number; sku: string; name: string; modelSize: string | null } }) => {
+                // Find product master by SKU
+                const pm = productMasters.find((p) => p.sku === line.productItem.sku) || null
+                return {
+                  id: crypto.randomUUID(),
+                  productMasterId: pm?.id || 0,
+                  productMaster: pm,
+                  quantity: 1, // Each line is 1 item
+                }
+              })
+
+              // Group by productMasterId and sum quantities
+              const groupedLines: Record<number, LineItem> = {}
+              editLines.forEach((line) => {
+                if (line.productMasterId) {
+                  if (groupedLines[line.productMasterId]) {
+                    groupedLines[line.productMasterId].quantity += 1
+                  } else {
+                    groupedLines[line.productMasterId] = { ...line }
+                  }
+                }
+              })
+
+              const finalLines = Object.values(groupedLines)
+              if (finalLines.length > 0) {
+                setLines(finalLines)
+              }
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch outbound for edit:', err)
+        })
+        .finally(() => {
+          setInitialLoading(false)
+        })
+    }
+  }, [editId, productMasters, locale, router])
+
+  // Fetch POs when clinic changes (exclude CANCELLED)
   useEffect(() => {
     if (clinicId) {
-      fetch(`/api/admin/purchase-orders?clinicId=${clinicId}&hasRemaining=true`)
+      fetch(`/api/admin/purchase-orders?clinicId=${clinicId}&hasRemaining=true&excludeCancelled=true`)
         .then((r) => r.json())
         .then((res) => {
           if (res.success && res.data?.purchaseOrders) {
@@ -147,6 +236,16 @@ export default function NewOutboundPage() {
               if (po) {
                 setPurchaseOrderId(po.id)
                 setSelectedPO(po)
+
+                // Pre-fill delivery info from PO
+                if (po.contractNo) setContractNo(po.contractNo)
+                if (po.salesPersonName) setSalesPersonName(po.salesPersonName)
+                if (po.companyContact) setCompanyContact(po.companyContact)
+                if (po.clinicAddress) setClinicAddress(po.clinicAddress)
+                if (po.clinicPhone) setClinicPhone(po.clinicPhone)
+                if (po.clinicEmail) setClinicEmail(po.clinicEmail)
+                if (po.clinicContactName) setClinicContactName(po.clinicContactName)
+
                 // Pre-fill lines from PO
                 const newLines: LineItem[] = po.lines
                   .filter((l: PurchaseOrderLine) => l.quantity > l.shippedQuantity)
@@ -189,6 +288,16 @@ export default function NewOutboundPage() {
     setSelectedPO(po || null)
 
     if (po) {
+      // Pre-fill delivery info from PO
+      if (po.deliveryNoteNo) setDeliveryNoteNo(po.deliveryNoteNo)
+      if (po.contractNo) setContractNo(po.contractNo)
+      if (po.salesPersonName) setSalesPersonName(po.salesPersonName)
+      if (po.companyContact) setCompanyContact(po.companyContact)
+      if (po.clinicAddress) setClinicAddress(po.clinicAddress)
+      if (po.clinicPhone) setClinicPhone(po.clinicPhone)
+      if (po.clinicEmail) setClinicEmail(po.clinicEmail)
+      if (po.clinicContactName) setClinicContactName(po.clinicContactName)
+
       // Pre-fill lines from PO (remaining items only)
       const newLines: LineItem[] = po.lines
         .filter((l) => l.quantity > l.shippedQuantity)
@@ -300,44 +409,62 @@ export default function NewOutboundPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/warehouse/outbound', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          warehouseId,
-          shippingMethodId,
-          clinicId,
-          deliveryNoteNo: deliveryNoteNo || null,
-          contractNo: contractNo || null,
-          salesPersonName: salesPersonName || null,
-          companyContact: companyContact || null,
-          clinicAddress: clinicAddress || null,
-          clinicPhone: clinicPhone || null,
-          clinicEmail: clinicEmail || null,
-          clinicContactName: clinicContactName || null,
-          purchaseOrderId: purchaseOrderId || null,
-          remarks: remarks || null,
-          // Send productMasterId + quantity, API will do FIFO selection
-          linesByProductMaster: lines.map((l) => ({
-            productMasterId: l.productMasterId,
-            quantity: l.quantity,
-          })),
-        }),
-      })
+      const payload = {
+        warehouseId,
+        shippingMethodId,
+        clinicId,
+        deliveryNoteNo: deliveryNoteNo || null,
+        contractNo: contractNo || null,
+        salesPersonName: salesPersonName || null,
+        companyContact: companyContact || null,
+        clinicAddress: clinicAddress || null,
+        clinicPhone: clinicPhone || null,
+        clinicEmail: clinicEmail || null,
+        clinicContactName: clinicContactName || null,
+        purchaseOrderId: purchaseOrderId || null,
+        remarks: remarks || null,
+        // Send productMasterId + quantity, API will do FIFO selection
+        linesByProductMaster: lines.map((l) => ({
+          productMasterId: l.productMasterId,
+          quantity: l.quantity,
+        })),
+      }
+
+      let res
+      if (isEditMode && editingOutboundId) {
+        // Update existing outbound
+        res = await fetch(`/api/warehouse/outbound/${editingOutboundId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        // Create new outbound
+        res = await fetch('/api/warehouse/outbound', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      }
 
       const data = await res.json()
       if (data.success) {
+        const outboundId = isEditMode ? editingOutboundId : data.data.id
         alert(
           locale === 'th'
-            ? `สร้างใบส่งสินค้าสำเร็จ!\nDelivery No: ${data.data.deliveryNoteNo}\nจำนวน: ${data.data.linesCreated} รายการ`
-            : `Outbound created!\nDelivery No: ${data.data.deliveryNoteNo}\nItems: ${data.data.linesCreated}`
+            ? isEditMode
+              ? 'บันทึกการแก้ไขสำเร็จ!'
+              : `สร้างใบส่งสินค้าสำเร็จ!\nDelivery No: ${data.data.deliveryNoteNo}\nจำนวน: ${data.data.linesCreated} รายการ`
+            : isEditMode
+              ? 'Changes saved successfully!'
+              : `Outbound created!\nDelivery No: ${data.data.deliveryNoteNo}\nItems: ${data.data.linesCreated}`
         )
-        router.push(`/${locale}/dashboard/outbound/${data.data.id}`)
+        router.push(`/${locale}/dashboard/outbound/${outboundId}`)
       } else {
         alert(`Error: ${data.error}`)
       }
     } catch (error) {
-      alert('Failed to create outbound')
+      alert(isEditMode ? 'Failed to update outbound' : 'Failed to create outbound')
     } finally {
       setLoading(false)
     }
@@ -350,24 +477,39 @@ export default function NewOutboundPage() {
   // Calculate total items
   const totalItems = lines.reduce((sum, l) => sum + (l.productMasterId ? l.quantity : 0), 0)
 
+  // Show loading state for edit mode
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-12 h-12 relative">
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <Link
-          href={`/${locale}/dashboard/outbound`}
+          href={isEditMode ? `/${locale}/dashboard/outbound/${editingOutboundId}` : `/${locale}/dashboard/outbound`}
           className="inline-flex items-center gap-1 text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors mb-3"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          {locale === 'th' ? 'กลับหน้ารายการ' : 'Back to list'}
+          {locale === 'th' ? (isEditMode ? 'กลับหน้ารายละเอียด' : 'กลับหน้ารายการ') : (isEditMode ? 'Back to detail' : 'Back to list')}
         </Link>
         <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">
-          {locale === 'th' ? 'สร้างใบส่งสินค้าใหม่' : 'Create New Outbound'}
+          {locale === 'th' ? (isEditMode ? 'แก้ไขใบส่งสินค้า' : 'สร้างใบส่งสินค้าใหม่') : (isEditMode ? 'Edit Outbound' : 'Create New Outbound')}
         </h1>
         <p className="text-[var(--color-foreground-muted)] mt-1">
-          {locale === 'th' ? 'เลือกสินค้าตาม SKU และจำนวน ระบบจะเลือก Serial ตามหลัก FIFO อัตโนมัติ' : 'Select products by SKU and quantity. System will auto-select serials using FIFO.'}
+          {isEditMode
+            ? (locale === 'th' ? 'แก้ไขข้อมูลใบส่งสินค้า' : 'Edit outbound information')
+            : (locale === 'th' ? 'เลือกสินค้าตาม SKU และจำนวน ระบบจะเลือก Serial ตามหลัก FIFO อัตโนมัติ' : 'Select products by SKU and quantity. System will auto-select serials using FIFO.')
+          }
         </p>
       </div>
 
@@ -494,60 +636,10 @@ export default function NewOutboundPage() {
               </div>
             </div>
 
+            {/* PO Dropdown - Show after clinic is selected */}
             <div>
               <label className={labelClass}>
-                IV No. <span className="text-xs text-[var(--color-foreground-muted)]">({locale === 'th' ? 'ถ้าไม่กรอกจะสร้างอัตโนมัติ' : 'Auto-generate if empty'})</span>
-              </label>
-              <input
-                type="text"
-                value={deliveryNoteNo}
-                onChange={(e) => setDeliveryNoteNo(e.target.value)}
-                placeholder={locale === 'th' ? 'เช่น OUT-2026-000001' : 'e.g. OUT-2026-000001'}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                Contract No.
-              </label>
-              <input
-                type="text"
-                value={contractNo}
-                onChange={(e) => setContractNo(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'ชื่อพนักงานขาย' : 'Sales Person'}
-              </label>
-              <input
-                type="text"
-                value={salesPersonName}
-                onChange={(e) => setSalesPersonName(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'ช่องทางติดต่อบริษัท' : 'Company Contact'}
-              </label>
-              <input
-                type="text"
-                value={companyContact}
-                onChange={(e) => setCompanyContact(e.target.value)}
-                placeholder="Line ID / Phone / Email"
-                className={inputClass}
-              />
-            </div>
-
-            {/* PO Dropdown */}
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'เลข PO (ถ้ามี)' : 'PO No. (if any)'}
+                {locale === 'th' ? 'เลข PO' : 'PO No.'} <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <select
@@ -556,7 +648,7 @@ export default function NewOutboundPage() {
                   className={selectClass}
                   disabled={!clinicId || purchaseOrders.length === 0}
                 >
-                  <option value={0}>{locale === 'th' ? '-- ไม่ระบุ PO --' : '-- No PO --'}</option>
+                  <option value={0}>{locale === 'th' ? '-- เลือก PO --' : '-- Select PO --'}</option>
                   {purchaseOrders.map((po) => (
                     <option key={po.id} value={po.id}>
                       {po.poNo} ({locale === 'th' ? 'คงเหลือ' : 'Remaining'}: {po.summary.totalRemaining})
@@ -574,68 +666,133 @@ export default function NewOutboundPage() {
                   {locale === 'th' ? 'ไม่มี PO ที่รอส่งสำหรับคลินิกนี้' : 'No pending POs for this clinic'}
                 </p>
               )}
-            </div>
-
-            <div className="lg:col-span-2">
-              <label className={labelClass}>
-                {locale === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}
-              </label>
-              <input
-                type="text"
-                value={clinicAddress}
-                onChange={(e) => setClinicAddress(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'เบอร์โทรคลินิก' : 'Clinic Phone'}
-              </label>
-              <input
-                type="text"
-                value={clinicPhone}
-                onChange={(e) => setClinicPhone(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'อีเมลคลินิก' : 'Clinic Email'}
-              </label>
-              <input
-                type="email"
-                value={clinicEmail}
-                onChange={(e) => setClinicEmail(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>
-                {locale === 'th' ? 'ชื่อผู้รับสินค้า' : 'Contact Name'}
-              </label>
-              <input
-                type="text"
-                value={clinicContactName}
-                onChange={(e) => setClinicContactName(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div className="lg:col-span-3">
-              <label className={labelClass}>
-                {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
-              </label>
-              <textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                rows={2}
-                className={`${inputClass} resize-none`}
-              />
+              {!clinicId && (
+                <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                  {locale === 'th' ? 'กรุณาเลือกคลินิกก่อน' : 'Please select a clinic first'}
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Delivery Info - Show only after PO is selected */}
+          {selectedPO && (
+            <div className="mt-6 pt-6 border-t border-[var(--color-beige)]">
+              <h3 className="text-md font-semibold text-[var(--color-charcoal)] mb-4">
+                {locale === 'th' ? 'ข้อมูลการจัดส่ง (จาก PO)' : 'Delivery Info (from PO)'}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div>
+                  <label className={labelClass}>
+                    IV No.
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryNoteNo}
+                    onChange={(e) => setDeliveryNoteNo(e.target.value)}
+                    placeholder={locale === 'th' ? 'เช่น OUT-2026-000001' : 'e.g. OUT-2026-000001'}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    Contract No.
+                  </label>
+                  <input
+                    type="text"
+                    value={contractNo}
+                    onChange={(e) => setContractNo(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'ชื่อพนักงานขาย' : 'Sales Person'}
+                  </label>
+                  <input
+                    type="text"
+                    value={salesPersonName}
+                    onChange={(e) => setSalesPersonName(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'ช่องทางติดต่อบริษัท' : 'Company Contact'}
+                  </label>
+                  <input
+                    type="text"
+                    value={companyContact}
+                    onChange={(e) => setCompanyContact(e.target.value)}
+                    placeholder="Line ID / Phone / Email"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}
+                  </label>
+                  <input
+                    type="text"
+                    value={clinicAddress}
+                    onChange={(e) => setClinicAddress(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'เบอร์โทรคลินิก' : 'Clinic Phone'}
+                  </label>
+                  <input
+                    type="text"
+                    value={clinicPhone}
+                    onChange={(e) => setClinicPhone(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'อีเมลคลินิก' : 'Clinic Email'}
+                  </label>
+                  <input
+                    type="email"
+                    value={clinicEmail}
+                    onChange={(e) => setClinicEmail(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'ชื่อผู้รับสินค้า' : 'Contact Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={clinicContactName}
+                    onChange={(e) => setClinicContactName(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className={labelClass}>
+                    {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
+                  </label>
+                  <textarea
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    rows={2}
+                    className={`${inputClass} resize-none`}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Selected PO Summary */}
           {selectedPO && (
@@ -830,14 +987,14 @@ export default function NewOutboundPage() {
             {loading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                {locale === 'th' ? 'กำลังส่ง...' : 'Submitting...'}
+                {locale === 'th' ? 'กำลังบันทึก...' : 'Saving...'}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isEditMode ? "M5 13l4 4L19 7" : "M17 8l4 4m0 0l-4 4m4-4H3"} />
                 </svg>
-                {locale === 'th' ? 'ส่งเพื่อขออนุมัติ' : 'Submit for Approval'}
+                {locale === 'th' ? (isEditMode ? 'บันทึกการแก้ไข' : 'ส่งเพื่อขออนุมัติ') : (isEditMode ? 'Save Changes' : 'Submit for Approval')}
               </>
             )}
           </button>

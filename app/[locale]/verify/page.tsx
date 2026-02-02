@@ -71,11 +71,11 @@ export default async function VerifyPage({
             {locale === 'th' ? 'ตรวจสอบความแท้ของสินค้า' : 'Verify product authenticity'}
           </p>*/}
           <Image
-            src="/logo-black.png"
+            src="/logo-black3.png"
             alt="Eden Colors Logo"
             width={120}
-            height={34}
-            className="h-[220px] sm:h-[320px] w-auto mx-auto"
+            height={80}
+            className="h-[40px] w-auto mx-auto object-contain  mt-4"
           />
         </div>
 

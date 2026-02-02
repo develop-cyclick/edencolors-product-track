@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { QRScanner } from '@/components/ui/qr-scanner'
 
@@ -62,7 +62,14 @@ interface LineItem {
 export default function NewGRNPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const locale = params.locale as string
+
+  // Edit mode
+  const editId = searchParams.get('editId')
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingGrnId, setEditingGrnId] = useState<number | null>(null)
+  const [initialLoading, setInitialLoading] = useState(!!editId)
 
   const [loading, setLoading] = useState(false)
   const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
@@ -126,6 +133,111 @@ export default function NewGRNPage() {
       if (preGenRes.success && preGenRes.data?.items) setAvailablePreGenItems(preGenRes.data.items)
     })
   }, [])
+
+  // Fetch existing GRN data when in edit mode
+  useEffect(() => {
+    if (editId && productMasters.length > 0) {
+      setIsEditMode(true)
+      setEditingGrnId(parseInt(editId))
+
+      fetch(`/api/warehouse/grn/${editId}`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && res.data?.grn) {
+            const grn = res.data.grn
+
+            // Check if still editable (not approved)
+            if (grn.approvedAt) {
+              alert(locale === 'th' ? 'ไม่สามารถแก้ไขได้ ใบรับสินค้านี้ถูกอนุมัติแล้ว' : 'Cannot edit, this GRN is already approved')
+              router.push(`/${locale}/dashboard/grn/${editId}`)
+              return
+            }
+
+            // Pre-fill header data
+            setReceivedAt(grn.receivedAt ? grn.receivedAt.split('T')[0] : '')
+            setWarehouseId(grn.warehouse?.id || 0)
+            setPoNo(grn.poNo || '')
+            setSupplierName(grn.supplierName || '')
+            setDeliveryNoteNo(grn.deliveryNoteNo || '')
+            setSupplierAddress(grn.supplierAddress || '')
+            setSupplierPhone(grn.supplierPhone || '')
+            setSupplierContact(grn.supplierContact || '')
+            setDeliveryDocDate(grn.deliveryDocDate ? grn.deliveryDocDate.split('T')[0] : '')
+            setRemarks(grn.remarks || '')
+
+            // Pre-fill lines from existing GRN - group by productMaster + lot + expDate
+            if (grn.lines && grn.lines.length > 0) {
+              interface GrnLineItem {
+                productItem: {
+                  sku: string
+                  lot: string | null
+                  mfgDate: string | null
+                  expDate: string | null
+                }
+                unit: { id: number }
+              }
+
+              const groupedLines: Record<string, LineItem> = {}
+
+              grn.lines.forEach((line: GrnLineItem) => {
+                const pm = productMasters.find((p) => p.sku === line.productItem.sku)
+                if (!pm) return
+
+                // Create unique key based on productMaster + lot + expDate
+                const key = `${pm.id}-${line.productItem.lot || ''}-${line.productItem.expDate || ''}`
+
+                if (groupedLines[key]) {
+                  groupedLines[key].quantity += 1
+                } else {
+                  groupedLines[key] = {
+                    id: crypto.randomUUID(),
+                    productMasterId: pm.id,
+                    productMaster: pm,
+                    quantity: 1,
+                    unitId: line.unit?.id || pm.defaultUnitId || 0,
+                    lot: line.productItem.lot || '',
+                    mfgDate: line.productItem.mfgDate ? line.productItem.mfgDate.split('T')[0] : '',
+                    expDate: line.productItem.expDate ? line.productItem.expDate.split('T')[0] : '',
+                    inspectionStatus: 'OK',
+                    remarks: '',
+                    usePreGen: false,
+                    preGeneratedItemIds: [],
+                    scannedItems: [],
+                  }
+                }
+              })
+
+              const editLines = Object.values(groupedLines)
+              if (editLines.length > 0) {
+                setLines(editLines)
+              } else {
+                setLines([{
+                  id: crypto.randomUUID(),
+                  productMasterId: 0,
+                  productMaster: null,
+                  quantity: 1,
+                  unitId: 0,
+                  lot: '',
+                  mfgDate: '',
+                  expDate: '',
+                  inspectionStatus: 'OK',
+                  remarks: '',
+                  usePreGen: false,
+                  preGeneratedItemIds: [],
+                  scannedItems: [],
+                }])
+              }
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch GRN for edit:', err)
+        })
+        .finally(() => {
+          setInitialLoading(false)
+        })
+    }
+  }, [editId, productMasters, locale, router])
 
   const addLine = () => {
     setLines([
@@ -350,6 +462,78 @@ export default function NewGRNPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // In edit mode, update header and lines (will delete old items and create new)
+    if (isEditMode && editingGrnId) {
+      // Validate lines same as create mode
+      const invalidLines = lines.filter((l) => !l.productMasterId)
+      if (invalidLines.length > 0) {
+        alert(locale === 'th' ? 'กรุณาเลือกสินค้าให้ครบทุกรายการ' : 'Please select product for all lines')
+        return
+      }
+
+      const noUnitLines = lines.filter((l) => !l.productMaster?.defaultUnitId)
+      if (noUnitLines.length > 0) {
+        alert(locale === 'th' ? 'สินค้าบางรายการยังไม่มีการกำหนดหน่วย กรุณาไปกำหนดที่หน้าจัดการสินค้าก่อน' : 'Some products have no unit defined. Please set unit in product management first.')
+        return
+      }
+
+      // Confirm before editing (this will regenerate all serials)
+      const confirmed = window.confirm(
+        locale === 'th'
+          ? 'การแก้ไขจะลบ Serial Numbers เดิมทั้งหมดและสร้างใหม่ ต้องการดำเนินการต่อหรือไม่?'
+          : 'This will delete all existing Serial Numbers and regenerate them. Continue?'
+      )
+      if (!confirmed) return
+
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/warehouse/grn/${editingGrnId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            receivedAt,
+            warehouseId,
+            poNo: poNo || null,
+            supplierName,
+            deliveryNoteNo: deliveryNoteNo || null,
+            supplierAddress: supplierAddress || null,
+            supplierPhone: supplierPhone || null,
+            supplierContact: supplierContact || null,
+            deliveryDocDate: deliveryDocDate || null,
+            remarks: remarks || null,
+            lines: lines.map((l) => ({
+              productMasterId: l.productMasterId,
+              quantity: l.usePreGen ? l.preGeneratedItemIds.length : l.quantity,
+              unitId: l.unitId,
+              lot: l.lot || null,
+              mfgDate: l.mfgDate || null,
+              expDate: l.expDate || null,
+              inspectionStatus: l.inspectionStatus,
+              remarks: l.remarks || null,
+              preGeneratedItemIds: l.usePreGen ? l.preGeneratedItemIds : undefined,
+            })),
+          }),
+        })
+
+        const data = await res.json()
+        if (data.success) {
+          alert(
+            locale === 'th'
+              ? `บันทึกการแก้ไขสำเร็จ!\nจำนวน: ${data.data.linesCreated} รายการ`
+              : `Changes saved!\nItems: ${data.data.linesCreated}`
+          )
+          router.push(`/${locale}/dashboard/grn/${editingGrnId}`)
+        } else {
+          alert(`Error: ${data.error}`)
+        }
+      } catch (error) {
+        alert('Failed to update GRN')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     // Validate all lines have ProductMaster selected
     const invalidLines = lines.filter((l) => !l.productMasterId)
     if (invalidLines.length > 0) {
@@ -424,24 +608,39 @@ export default function NewGRNPage() {
   const labelClass = "block text-sm font-medium text-[var(--color-charcoal)] mb-1.5"
   const selectClass = "appearance-none w-full px-4 py-2.5 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] pr-10"
 
+  // Show loading state for edit mode
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-12 h-12 relative">
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
+          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <Link
-          href={`/${locale}/dashboard/grn`}
+          href={isEditMode ? `/${locale}/dashboard/grn/${editingGrnId}` : `/${locale}/dashboard/grn`}
           className="inline-flex items-center gap-1 text-xs sm:text-sm text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] font-medium transition-colors mb-3"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          {locale === 'th' ? 'กลับหน้ารายการ' : 'Back to list'}
+          {locale === 'th' ? (isEditMode ? 'กลับหน้ารายละเอียด' : 'กลับหน้ารายการ') : (isEditMode ? 'Back to detail' : 'Back to list')}
         </Link>
         <h1 className="text-display text-xl sm:text-2xl font-bold text-[var(--color-charcoal)]">
-          {locale === 'th' ? 'สร้างใบรับสินค้าใหม่' : 'Create New GRN'}
+          {locale === 'th' ? (isEditMode ? 'แก้ไขใบรับสินค้า' : 'สร้างใบรับสินค้าใหม่') : (isEditMode ? 'Edit GRN' : 'Create New GRN')}
         </h1>
         <p className="text-sm sm:text-base text-[var(--color-foreground-muted)] mt-1">
-          {locale === 'th' ? 'กรอกข้อมูลการรับสินค้าเข้าคลัง' : 'Fill in goods receipt information'}
+          {isEditMode
+            ? (locale === 'th' ? 'แก้ไขข้อมูลใบรับสินค้า (Serial Numbers เดิมจะถูกลบและสร้างใหม่)' : 'Edit GRN info (existing Serial Numbers will be deleted and regenerated)')
+            : (locale === 'th' ? 'กรอกข้อมูลการรับสินค้าเข้าคลัง' : 'Fill in goods receipt information')
+          }
         </p>
       </div>
 
@@ -873,7 +1072,7 @@ export default function NewGRNPage() {
                 <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                {locale === 'th' ? 'บันทึกและสร้าง Serial' : 'Save & Generate Serials'}
+                {locale === 'th' ? (isEditMode ? 'บันทึกการแก้ไข' : 'บันทึกและสร้าง Serial') : (isEditMode ? 'Save Changes' : 'Save & Generate Serials')}
               </>
             )}
           </button>
