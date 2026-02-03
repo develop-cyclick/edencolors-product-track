@@ -340,7 +340,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
 
         {/* Status Text */}
         <h2 className={`text-display text-2xl font-bold mb-2 ${statusConfig.textColor}`}>
-          {response.data.productName}
+          {response.data?.productName}
         </h2>
         <p className="text-[var(--color-foreground-muted)]">{statusText.subtitle}</p>
 
