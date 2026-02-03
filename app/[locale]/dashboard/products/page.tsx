@@ -466,9 +466,9 @@ export default function ProductMasterPage() {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/${locale}/dashboard/products/${pm.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg font-medium transition-colors"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-center text-[var(--color-gold)] hover:bg-[var(--color-gold)]/10 rounded-lg font-medium transition-colors"
                         >
-                          {locale === 'th' ? 'ดู Serial' : 'View Items'}
+                          {locale === 'th' ? 'รายละเอียด' : 'View Items'}
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>

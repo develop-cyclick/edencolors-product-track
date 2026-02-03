@@ -34,15 +34,15 @@ export default async function LandingPage({ params }: PageProps) {
         <div className="container mx-auto px-6 relative">
           <div className="max-w-4xl mx-auto text-center">
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[var(--color-beige)] shadow-sm mb-8 animate-slideDown">
+            {/*<div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[var(--color-beige)] shadow-sm mb-8 animate-slideDown">
               <span className="w-2 h-2 rounded-full bg-[var(--color-mint)] animate-pulse" />
               <span className="text-sm font-medium text-[var(--color-charcoal)]">
                 {locale === 'th' ? 'ระบบยืนยันความแท้ของสินค้า' : 'Product Authenticity System'}
               </span>
-            </div>
+            </div>*/}
 
             {/* Heading */}
-            <h1 className="text-display text-5xl md:text-6xl lg:text-7xl font-bold text-[var(--color-charcoal)] leading-tight mb-6 animate-slideUp">
+            <h1 className="text-display text-5xl md:text-6xl lg:text-7xl font-bold text-[var(--color-charcoal)] leading-tight my-6 animate-slideUp">
               {locale === 'th' ? (
                 <>
                   ปกป้องแบรนด์ของคุณ

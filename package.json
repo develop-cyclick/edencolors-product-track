@@ -48,6 +48,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
     "local-ssl-proxy": "^2.0.5",
+    "md-to-pdf": "^5.2.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"

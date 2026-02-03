@@ -38,7 +38,8 @@
       "Bash(npx md-to-pdf:*)",
       "Bash(ipconfig:*)",
       "Bash(npx ts-node:*)",
-      "Bash(npx prisma db seed:*)"
+      "Bash(npx prisma db seed:*)",
+      "Bash(dir \"C:\\\\Code\\\\Work\\\\ED\\\\edencolors\\\\docs\\\\New-Version\\\\*.pdf\" /o:n)"
     ]
   }
 }
