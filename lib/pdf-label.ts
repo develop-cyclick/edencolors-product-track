@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf'
 import QRCode from 'qrcode'
 import { loadSarabunFont } from './fonts/sarabun-font'
+import fs from 'fs'
+import path from 'path'
 
 // 4x6 inch label dimensions in mm
 const LABEL_WIDTH_MM = 101.6  // 4 inches
@@ -20,6 +22,28 @@ const QR_SIZE_MM = 60
 const GRID_COLUMNS = 8
 const GRID_MARGIN_MM = 5
 const GRID_GAP_MM = 2
+
+// Banner image cache
+let bannerImageBase64: string | null = null
+
+/**
+ * Load the banner image as base64 from public folder
+ */
+function loadBannerImage(): string | null {
+  if (bannerImageBase64) return bannerImageBase64
+
+  try {
+    const bannerPath = path.join(process.cwd(), 'public', 'banner-qrcode.jpg')
+    if (fs.existsSync(bannerPath)) {
+      const imageBuffer = fs.readFileSync(bannerPath)
+      bannerImageBase64 = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`
+      return bannerImageBase64
+    }
+  } catch (error) {
+    console.error('Failed to load banner image:', error)
+  }
+  return null
+}
 
 interface LabelData {
   serialNumber: string
@@ -54,6 +78,13 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
     // Ignore font loading errors, use helvetica fallback
   }
 
+  // Load banner image
+  const bannerImage = loadBannerImage()
+
+  // Banner dimensions for 4x6 label (aspect ratio ~3.5:1)
+  const bannerWidth = LABEL_WIDTH_MM - (MARGIN_MM * 2)
+  const bannerHeight = bannerImage ? bannerWidth * 0.28 : 0
+
   for (let i = 0; i < labels.length; i++) {
     const label = labels[i]
 
@@ -73,13 +104,20 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
     const centerX = LABEL_WIDTH_MM / 2
 
     // Calculate positions
-    let yPos = MARGIN_MM + 10
+    let yPos = MARGIN_MM
 
-    // Company/Brand Header (optional)
-    doc.setFontSize(14)
-    doc.setFont(fontFamily, 'bold')
-    doc.text('QR Authenticity', centerX, yPos, { align: 'center' })
-    yPos += 8
+    // Draw banner image on top if available
+    if (bannerImage) {
+      doc.addImage(bannerImage, 'JPEG', MARGIN_MM, yPos, bannerWidth, bannerHeight)
+      yPos += bannerHeight + 4
+    } else {
+      // Fallback: Company/Brand Header (text only)
+      yPos += 10
+      doc.setFontSize(14)
+      doc.setFont(fontFamily, 'bold')
+      doc.text('QR Authenticity', centerX, yPos, { align: 'center' })
+      yPos += 8
+    }
 
     // QR Code - centered
     const qrX = (LABEL_WIDTH_MM - QR_SIZE_MM) / 2
@@ -104,11 +142,6 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
 
       doc.setFontSize(8)
       doc.setFont(fontFamily, 'normal')
-
-      // if (label.productName) {
-      //   doc.text(`Product: ${label.productName}`, MARGIN_MM, yPos)
-      //   yPos += 4
-      // }
 
       if (label.sku) {
         doc.text(`SKU: ${label.sku}`, MARGIN_MM, yPos)
@@ -163,6 +196,7 @@ export async function generateSingleLabelPDF(label: LabelData): Promise<Buffer> 
 /**
  * Generate a PDF with QR codes in a grid layout on A4 paper
  * 8 columns, multiple rows per page
+ * Each cell includes: banner image on top, QR code, and serial number
  */
 export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer> {
   // Create PDF with A4 page size
@@ -181,11 +215,19 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
     // Ignore font loading errors
   }
 
+  // Load banner image
+  const bannerImage = loadBannerImage()
+
   // Calculate cell dimensions
   const usableWidth = A4_WIDTH_MM - (GRID_MARGIN_MM * 2)
   const cellWidth = (usableWidth - (GRID_GAP_MM * (GRID_COLUMNS - 1))) / GRID_COLUMNS
+
+  // Banner dimensions (aspect ratio ~3.5:1 based on the original image)
+  const bannerHeight = bannerImage ? cellWidth * 0.28 : 0
+
+  // QR size adjusted to fit with banner
   const qrSize = cellWidth - 2 // Slightly smaller than cell for padding
-  const cellHeight = qrSize + 12 // QR + space for serial number
+  const cellHeight = bannerHeight + qrSize + 8 // Banner + QR + space for serial number
 
   // Calculate rows per page
   const usableHeight = A4_HEIGHT_MM - (GRID_MARGIN_MM * 2)
@@ -227,31 +269,31 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
     doc.rect(x, y, cellWidth, cellHeight)
     doc.setLineDashPattern([], 0)
 
-    // Draw QR code - centered in cell
+    let currentY = y
+
+    // Draw banner image on top if available
+    if (bannerImage) {
+      doc.addImage(bannerImage, 'JPEG', x, currentY, cellWidth, bannerHeight)
+      currentY += bannerHeight
+    }
+
+    // Draw QR code - centered in cell, below banner
     const qrX = x + (cellWidth - qrSize) / 2
-    const qrY = y + 1
-    doc.addImage(qrDataUrls[i], 'PNG', qrX, qrY, qrSize, qrSize)
+    doc.addImage(qrDataUrls[i], 'PNG', qrX, currentY, qrSize, qrSize)
+    currentY += qrSize
 
     // Draw serial number below QR
     doc.setFontSize(5)
     doc.setFont(fontFamily, 'bold')
     doc.setTextColor(0, 0, 0)
 
-    // Format serial: last 8 digits with dash
+    // Format serial: full 12 digits
     const serial = labels[i].serialNumber
-    const shortSerial = serial.length === 12
-      ? `${serial.slice(4, 8)}-${serial.slice(8, 12)}`
-      : serial.slice(-8)
+    const formattedSerial = serial.length === 12
+      ? serial
+      : serial.padStart(12, '0')
 
-    doc.text(shortSerial, x + cellWidth / 2, y + qrSize + 5, { align: 'center' })
-
-    // Draw EXP date if present (very small)
-    if (labels[i].expDate) {
-      doc.setFontSize(4)
-      doc.setFont(fontFamily, 'normal')
-      doc.setTextColor(100, 100, 100)
-      doc.text(`EXP:${labels[i].expDate}`, x + cellWidth / 2, y + qrSize + 9, { align: 'center' })
-    }
+    doc.text(formattedSerial, x + cellWidth / 2, currentY + 4, { align: 'center' })
   }
 
   // Add page info in footer

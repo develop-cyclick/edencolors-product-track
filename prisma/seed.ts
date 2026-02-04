@@ -202,6 +202,7 @@ async function main() {
     { name: 'GRN', prefix: `GRN-${year}-`, currentVal: BigInt(0) },
     { name: 'OUTBOUND', prefix: `OUT-${year}-`, currentVal: BigInt(0) },
     { name: 'PRE_GEN', prefix: `PG-${year}-`, currentVal: BigInt(0) },
+    { name: 'BORROW', prefix: `BR-${year}-`, currentVal: BigInt(0) },
   ]
 
   for (const counter of counters) {

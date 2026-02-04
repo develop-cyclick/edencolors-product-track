@@ -428,6 +428,8 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
             data: {
               outboundId: outboundId,
               productItemId: item.id,
+              sku: productMaster.sku,
+              itemName: productMaster.nameTh || productMaster.nameEn || productMaster.sku,
               quantity: 1,
               unitId: lineUnit.id,
             },

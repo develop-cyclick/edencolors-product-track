@@ -311,7 +311,7 @@ export default function OutboundDetailPage() {
       PENDING_OUT: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'รอส่งออก', labelEn: 'Pending Out' },
       SHIPPED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'คืนสินค้า', labelEn: 'Returned' },
+      RETURNED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'รับคืนสินค้า', labelEn: 'Returned' },
       DAMAGED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'เสียหาย', labelEn: 'Damaged' },
     }
     const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }

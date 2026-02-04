@@ -41,7 +41,7 @@ async function handlePOST(request: NextRequest, context: any) {
     // Set response headers for PDF download
     const filename = `monthly-summary-${startMonth}-to-${endMonth}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,

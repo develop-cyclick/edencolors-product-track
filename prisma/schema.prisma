@@ -28,6 +28,14 @@ enum ProductStatus {
   ACTIVATED     // ลูกค้าเปิดใช้แล้ว
   RETURNED      // คืนสินค้า
   DAMAGED       // เสียหาย รอซ่อม
+  BORROWED      // ยืมสินค้า
+}
+
+enum BorrowStatus {
+  PENDING       // รออนุมัติ
+  APPROVED      // อนุมัติแล้ว
+  REJECTED      // ปฏิเสธ
+  RETURNED      // คืนแล้ว
 }
 
 enum QRTokenStatus {
@@ -110,6 +118,7 @@ model Unit {
   grnLines              GRNLine[]
   outboundLines         OutboundLine[]
   productMastersDefault ProductMaster[]
+  borrowLines           BorrowTransactionLine[]
 
   @@map("units")
 }
@@ -155,14 +164,17 @@ model User {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  grnHeadersCreated       GRNHeader[]         @relation("GRNCreatedBy")
-  grnHeadersApproved      GRNHeader[]         @relation("GRNApprovedBy")
-  grnHeadersRejected      GRNHeader[]         @relation("GRNRejectedBy")
-  outboundsCreated        OutboundHeader[]    @relation("OutboundCreatedBy")
-  outboundsApproved       OutboundHeader[]    @relation("OutboundApprovedBy")
-  purchaseOrdersCreated   PurchaseOrder[]     @relation("POCreatedBy")
-  preGeneratedBatches     PreGeneratedBatch[] @relation("PreGenBatchCreatedBy")
+  grnHeadersCreated       GRNHeader[]           @relation("GRNCreatedBy")
+  grnHeadersApproved      GRNHeader[]           @relation("GRNApprovedBy")
+  grnHeadersRejected      GRNHeader[]           @relation("GRNRejectedBy")
+  outboundsCreated        OutboundHeader[]      @relation("OutboundCreatedBy")
+  outboundsApproved       OutboundHeader[]      @relation("OutboundApprovedBy")
+  purchaseOrdersCreated   PurchaseOrder[]       @relation("POCreatedBy")
+  preGeneratedBatches     PreGeneratedBatch[]   @relation("PreGenBatchCreatedBy")
   eventLogs               EventLog[]
+  borrowsCreated          BorrowTransaction[]   @relation("BorrowCreatedBy")
+  borrowsApproved         BorrowTransaction[]   @relation("BorrowApprovedBy")
+  borrowsRejected         BorrowTransaction[]   @relation("BorrowRejectedBy")
 
   @@map("users")
 }
@@ -215,6 +227,7 @@ model ProductItem {
   outboundLines       OutboundLine[]
   scanLogs            ScanLog[]
   eventLogs           EventLog[]
+  borrowLines         BorrowTransactionLine[]
 
   @@index([serial12])
   @@index([status])
@@ -520,4 +533,59 @@ model PurchaseOrderLine {
   productMaster    ProductMaster @relation(fields: [productMasterId], references: [id])
 
   @@map("purchase_order_lines")
+}
+
+// ============================================
+// BORROW TRANSACTION - ยืม/คืนสินค้า
+// ============================================
+
+model BorrowTransaction {
+  id                Int           @id @default(autoincrement())
+  transactionNo     String        @unique @map("transaction_no") // Auto: BR-YYYY-NNNNNN
+  type              String        // 'BORROW' | 'RETURN'
+  status            BorrowStatus  @default(PENDING)
+  borrowerName      String        @map("borrower_name")
+  clinicName        String?       @map("clinic_name")
+  clinicAddress     String?       @map("clinic_address")
+  taxInvoiceRef     String?       @map("tax_invoice_ref")
+  reason            String?
+  remarks           String?
+  createdById       Int           @map("created_by_id")
+  approvedById      Int?          @map("approved_by_id")
+  approvedAt        DateTime?     @map("approved_at")
+  rejectedById      Int?          @map("rejected_by_id")
+  rejectedAt        DateTime?     @map("rejected_at")
+  rejectedReason    String?       @map("rejected_reason")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  createdBy         User          @relation("BorrowCreatedBy", fields: [createdById], references: [id])
+  approvedBy        User?         @relation("BorrowApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy        User?         @relation("BorrowRejectedBy", fields: [rejectedById], references: [id])
+  lines             BorrowTransactionLine[]
+
+  @@index([status])
+  @@index([type])
+  @@map("borrow_transactions")
+}
+
+model BorrowTransactionLine {
+  id                    Int               @id @default(autoincrement())
+  borrowTransactionId   Int               @map("borrow_transaction_id")
+  productItemId         Int               @map("product_item_id")
+  sku                   String
+  itemName              String            @map("item_name")
+  modelSize             String?           @map("model_size")
+  quantity              Int               @default(1)
+  unitId                Int               @map("unit_id")
+  lot                   String?
+  expDate               DateTime?         @map("exp_date") @db.Date
+  remarks               String?
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  borrowTransaction     BorrowTransaction @relation(fields: [borrowTransactionId], references: [id], onDelete: Cascade)
+  productItem           ProductItem       @relation(fields: [productItemId], references: [id])
+  unit                  Unit              @relation(fields: [unitId], references: [id])
+
+  @@map("borrow_transaction_lines")
 }

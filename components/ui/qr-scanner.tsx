@@ -150,10 +150,7 @@ export function QRScanner({ onScan, onError, isActive }: QRScannerProps) {
             },
             aspectRatio: 1,
             disableFlip: false,
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true, // Use native BarcodeDetector API if available (faster)
-            },
-          },
+          } as any,
           (decodedText) => {
             console.log('QR Scanned:', decodedText)
             if (mounted && onScanRef.current) {

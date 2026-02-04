@@ -103,6 +103,32 @@ export async function generatePreGenBatchNumber(): Promise<string> {
 }
 
 /**
+ * Generate next Borrow Transaction number (format: BR-YYYY-NNNNNN)
+ */
+export async function generateBorrowNumber(): Promise<string> {
+  const year = new Date().getFullYear()
+  const prefix = `BR-${year}-`
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Update prefix if year changed
+    const counter = await tx.sequenceCounter.update({
+      where: { name: 'BORROW' },
+      data: {
+        prefix: prefix,
+        currentVal: {
+          increment: 1,
+        },
+      },
+    })
+
+    return counter
+  })
+
+  // Format as 6-digit number
+  return `${result.prefix}${result.currentVal.toString().padStart(6, '0')}`
+}
+
+/**
  * Validate serial number format (12 digits)
  */
 export function isValidSerialNumber(serial: string): boolean {

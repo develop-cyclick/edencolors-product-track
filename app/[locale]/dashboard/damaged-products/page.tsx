@@ -65,9 +65,50 @@ interface LotProduct {
   } | null
 }
 
-type MainTab = 'list' | 'return'
+type MainTab = 'list' | 'borrow'
 type ReturnMode = 'individual' | 'lot'
 type StatusFilter = 'all' | 'DAMAGED' | 'RETURNED'
+type BorrowMode = 'borrow' | 'return_borrowed' | 'return_to_stock' | 'history'
+type BorrowHistoryFilter = 'all' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'RETURNED'
+
+interface BorrowTransaction {
+  id: number
+  transactionNo: string
+  type: string
+  status: string
+  borrowerName: string
+  clinicName: string | null
+  reason: string | null
+  createdAt: string
+  approvedAt: string | null
+  createdBy: { displayName: string }
+  approvedBy: { displayName: string } | null
+  lines: BorrowTransactionLine[]
+}
+
+interface BorrowTransactionLine {
+  id: number
+  sku: string
+  itemName: string
+  productItem: { serial12: string; status: string }
+}
+
+interface BorrowSearchResult {
+  id: number
+  serial12: string
+  name: string
+  sku: string
+  lot?: string
+  modelSize?: string
+  expDate?: string
+  status: string
+  productMaster?: {
+    nameTh: string
+    nameEn: string | null
+    modelSize: string | null
+    defaultUnitId: number | null
+  }
+}
 
 export default function DamagedProductsPage() {
   const params = useParams()
@@ -114,6 +155,45 @@ export default function DamagedProductsPage() {
   const [returnReason, setReturnReason] = useState('')
   const [returnNotes, setReturnNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Borrow tab states
+  const [borrowMode, setBorrowMode] = useState<BorrowMode>('borrow')
+  const [borrowProductsList, setBorrowProductsList] = useState<BorrowSearchResult[]>([])
+  const [borrowProductsLoading, setBorrowProductsLoading] = useState(false)
+  const [borrowProductsFilter, setBorrowProductsFilter] = useState('')
+  const [selectedBorrowProducts, setSelectedBorrowProducts] = useState<number[]>([])
+  const [borrowProductsPagination, setBorrowProductsPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+  })
+
+  // Borrow form states
+  const [borrowerName, setBorrowerName] = useState('')
+  const [borrowClinicName, setBorrowClinicName] = useState('')
+  const [borrowClinicAddress, setBorrowClinicAddress] = useState('')
+  const [borrowTaxInvoice, setBorrowTaxInvoice] = useState('')
+  const [borrowReason, setBorrowReason] = useState('')
+  const [borrowRemarks, setBorrowRemarks] = useState('')
+  const [isBorrowSubmitting, setIsBorrowSubmitting] = useState(false)
+
+  // Borrow history states
+  const [borrowHistory, setBorrowHistory] = useState<BorrowTransaction[]>([])
+  const [borrowHistoryFilter, setBorrowHistoryFilter] = useState<BorrowHistoryFilter>('all')
+  const [borrowHistoryLoading, setBorrowHistoryLoading] = useState(false)
+  const [borrowHistoryPagination, setBorrowHistoryPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+  })
+
+  // Approve/Reject modal states
+  const [showApproveModal, setShowApproveModal] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState<BorrowTransaction | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isApproving, setIsApproving] = useState(false)
 
   const fetchItems = async () => {
     setLoading(true)
@@ -368,13 +448,229 @@ export default function DamagedProductsPage() {
     })
   }
 
+  // Borrow tab functions
+  const fetchBorrowHistory = async () => {
+    setBorrowHistoryLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: borrowHistoryPagination.page.toString(),
+        limit: borrowHistoryPagination.limit.toString(),
+        ...(borrowHistoryFilter !== 'all' && { status: borrowHistoryFilter }),
+      })
+
+      const res = await fetch(`/api/warehouse/borrow?${params}`)
+      const data = await res.json()
+
+      if (data.success && data.data) {
+        setBorrowHistory(data.data.items || [])
+        setBorrowHistoryPagination((prev) => ({
+          ...prev,
+          ...data.data.pagination,
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to fetch borrow history:', error)
+    } finally {
+      setBorrowHistoryLoading(false)
+    }
+  }
+
+  // Fetch products for borrow/return selection
+  const fetchBorrowProducts = async () => {
+    setBorrowProductsLoading(true)
+    try {
+      const statusParam = borrowMode === 'borrow' ? 'IN_STOCK' : 'BORROWED'
+      const params = new URLSearchParams({
+        page: borrowProductsPagination.page.toString(),
+        limit: borrowProductsPagination.limit.toString(),
+        status: statusParam,
+        ...(borrowProductsFilter && { search: borrowProductsFilter }),
+      })
+
+      const res = await fetch(`/api/warehouse/products?${params}`)
+      const data = await res.json()
+
+      if (data.success && data.data) {
+        setBorrowProductsList(data.data.items || [])
+        setBorrowProductsPagination((prev) => ({
+          ...prev,
+          total: data.data.pagination?.total || 0,
+          totalPages: data.data.pagination?.totalPages || 0,
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to fetch borrow products:', error)
+    } finally {
+      setBorrowProductsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (mainTab === 'borrow' && borrowMode === 'history') {
+      fetchBorrowHistory()
+    }
+  }, [mainTab, borrowMode, borrowHistoryPagination.page, borrowHistoryFilter])
+
+  useEffect(() => {
+    if (mainTab === 'borrow' && (borrowMode === 'borrow' || borrowMode === 'return_borrowed')) {
+      fetchBorrowProducts()
+    }
+  }, [mainTab, borrowMode, borrowProductsPagination.page, borrowProductsFilter])
+
+  const toggleBorrowProductSelection = (productId: number) => {
+    setSelectedBorrowProducts((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    )
+  }
+
+  const selectAllBorrowProducts = () => {
+    const allIds = borrowProductsList.map((p) => p.id)
+    const allSelected = allIds.every((id) => selectedBorrowProducts.includes(id))
+    if (allSelected) {
+      setSelectedBorrowProducts((prev) => prev.filter((id) => !allIds.includes(id)))
+    } else {
+      setSelectedBorrowProducts((prev) => [...new Set([...prev, ...allIds])])
+    }
+  }
+
+  const clearBorrowForm = () => {
+    setSelectedBorrowProducts([])
+    setBorrowerName('')
+    setBorrowClinicName('')
+    setBorrowClinicAddress('')
+    setBorrowTaxInvoice('')
+    setBorrowReason('')
+    setBorrowRemarks('')
+    setBorrowProductsFilter('')
+    setBorrowProductsPagination((prev) => ({ ...prev, page: 1 }))
+  }
+
+  const handleBorrowSubmit = async () => {
+    if (selectedBorrowProducts.length === 0) {
+      alert(locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product')
+      return
+    }
+
+    if (!borrowerName.trim()) {
+      alert(locale === 'th' ? 'กรุณากรอกชื่อผู้ยืม/คืนสินค้า' : 'Please enter borrower name')
+      return
+    }
+
+    setIsBorrowSubmitting(true)
+    try {
+      const res = await fetch('/api/warehouse/borrow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: borrowMode === 'borrow' ? 'BORROW' : 'RETURN',
+          borrowerName: borrowerName.trim(),
+          clinicName: borrowClinicName.trim() || undefined,
+          clinicAddress: borrowClinicAddress.trim() || undefined,
+          taxInvoiceRef: borrowTaxInvoice.trim() || undefined,
+          reason: borrowReason.trim() || undefined,
+          remarks: borrowRemarks.trim() || undefined,
+          productItemIds: selectedBorrowProducts,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        const message =
+          borrowMode === 'borrow'
+            ? locale === 'th'
+              ? `สร้างคำขอยืมสินค้าสำเร็จ (${data.data.transactionNo}) รออนุมัติ`
+              : `Borrow request created (${data.data.transactionNo}) - pending approval`
+            : locale === 'th'
+              ? `คืนสินค้าเข้าคลังสำเร็จ (${data.data.transactionNo})`
+              : `Products returned to stock (${data.data.transactionNo})`
+        alert(message)
+        clearBorrowForm()
+        fetchBorrowHistory()
+      } else {
+        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+      }
+    } catch (error) {
+      console.error('Borrow submit error:', error)
+      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการดำเนินการ' : 'Operation failed')
+    } finally {
+      setIsBorrowSubmitting(false)
+    }
+  }
+
+  const handleApproveReject = async (action: 'approve' | 'reject') => {
+    if (!selectedTransaction) return
+
+    if (action === 'reject' && !rejectReason.trim()) {
+      alert(locale === 'th' ? 'กรุณากรอกเหตุผลในการปฏิเสธ' : 'Please enter rejection reason')
+      return
+    }
+
+    setIsApproving(true)
+    try {
+      const res = await fetch(`/api/warehouse/borrow/${selectedTransaction.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          rejectedReason: action === 'reject' ? rejectReason.trim() : undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        alert(
+          action === 'approve'
+            ? locale === 'th'
+              ? 'อนุมัติคำขอยืมสินค้าสำเร็จ'
+              : 'Borrow request approved'
+            : locale === 'th'
+              ? 'ปฏิเสธคำขอยืมสินค้าสำเร็จ'
+              : 'Borrow request rejected'
+        )
+        setShowApproveModal(false)
+        setSelectedTransaction(null)
+        setRejectReason('')
+        fetchBorrowHistory()
+      } else {
+        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+      }
+    } catch (error) {
+      console.error('Approve/Reject error:', error)
+      alert(locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Operation failed')
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  const openBorrowDocument = (transactionId: number) => {
+    window.open(`/${locale}/dashboard/borrow/${transactionId}/document`, '_blank')
+  }
+
+  const getBorrowStatusBadge = (status: string) => {
+    const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
+      PENDING: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รออนุมัติ', labelEn: 'Pending' },
+      APPROVED: { bg: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'อนุมัติแล้ว', labelEn: 'Approved' },
+      REJECTED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'ปฏิเสธ', labelEn: 'Rejected' },
+      RETURNED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'คืนแล้ว', labelEn: 'Returned' },
+    }
+    const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+        {locale === 'th' ? badge.label : badge.labelEn}
+      </span>
+    )
+  }
+
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'ในคลัง', labelEn: 'In Stock' },
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้แล้ว', labelEn: 'Activated' },
-      RETURNED: { bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', label: 'คืนสินค้า', labelEn: 'Returned' },
+      RETURNED: { bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', label: 'รับคืนสินค้า', labelEn: 'Returned' },
       DAMAGED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'เสียหาย', labelEn: 'Damaged' },
     }
     const badge = badges[status] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: status, labelEn: status }
@@ -392,7 +688,7 @@ export default function DamagedProductsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-[var(--color-charcoal)]">
-            {locale === 'th' ? 'สินค้าเสียหาย / คืนสินค้า' : 'Damaged / Returned Products'}
+            {locale === 'th' ? 'สินค้าเสียหาย / รับคืนสินค้า' : 'Damaged / Returned Products'}
           </h1>
           <p className="text-[var(--color-gray-500)] mt-1">
             {locale === 'th'
@@ -421,14 +717,14 @@ export default function DamagedProductsPage() {
             )}
           </button>
           <button
-            onClick={() => setMainTab('return')}
+            onClick={() => setMainTab('borrow')}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-all ${
-              mainTab === 'return'
+              mainTab === 'borrow'
                 ? 'text-[var(--color-gold)] border-b-2 border-[var(--color-gold)] bg-[var(--color-gold)]/5'
                 : 'text-[var(--color-gray-500)] hover:text-[var(--color-charcoal)]'
             }`}
           >
-            {locale === 'th' ? 'รับคืนสินค้า' : 'Return Product'}
+            {locale === 'th' ? 'รับคืน/ยืม/คืนสินค้า' : 'Return/Borrow'}
           </button>
         </div>
 
@@ -479,7 +775,7 @@ export default function DamagedProductsPage() {
                     }`}
                   >
                     <span className={`w-2 h-2 rounded-full ${statusFilter === 'RETURNED' ? 'bg-white' : 'bg-orange-500'}`} />
-                    {locale === 'th' ? 'คืนสินค้า' : 'Returned'}
+                    {locale === 'th' ? 'รับคืนสินค้า' : 'Returned'}
                   </button>
                 </div>
 
@@ -590,96 +886,137 @@ export default function DamagedProductsPage() {
           </div>
         )}
 
-        {/* Return Tab Content */}
-        {mainTab === 'return' && (
+        {/* Borrow Tab Content */}
+        {mainTab === 'borrow' && (
           <div className="p-4 md:p-6">
-            {/* Return Mode Selection Cards */}
-            <div className="grid md:grid-cols-2 gap-4 mb-6">
-              {/* Individual Return Card */}
+            {/* Borrow Mode Selection Cards */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {/* Return to Stock Card */}
               <button
                 onClick={() => {
-                  setReturnMode('individual')
+                  setBorrowMode('return_to_stock')
                   setLotProducts([])
                   setSelectedLotProducts([])
                   setSearchLot('')
                   setLotError('')
+                  setSearchResult(null)
+                  setSearchSerial('')
+                  setSearchError('')
                 }}
                 className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  returnMode === 'individual'
+                  borrowMode === 'return_to_stock'
                     ? 'border-orange-500 bg-orange-50 shadow-md'
                     : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300 hover:bg-orange-50/50'
                 }`}
               >
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    returnMode === 'individual' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
+                    borrowMode === 'return_to_stock' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
                   }`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${returnMode === 'individual' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'รับคืนรายชิ้น' : 'Individual Return'}
+                    <h3 className={`font-semibold text-lg ${borrowMode === 'return_to_stock' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
+                      {locale === 'th' ? 'รับคืนสินค้า' : 'Return to Stock'}
                     </h3>
                     <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th'
-                        ? 'ค้นหาและรับคืนสินค้าทีละชิ้นด้วยหมายเลข Serial'
-                        : 'Search and return products one by one using Serial number'}
+                      {locale === 'th' ? 'รับคืนสินค้าที่ส่งออกแล้ว' : 'Return shipped/activated products'}
                     </p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    returnMode === 'individual' ? 'border-orange-500 bg-orange-500' : 'border-[var(--color-gray-300)]'
-                  }`}>
-                    {returnMode === 'individual' && (
-                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
                   </div>
                 </div>
               </button>
 
-              {/* Lot Return Card */}
+              {/* Borrow Card */}
               <button
                 onClick={() => {
-                  setReturnMode('lot')
-                  setSearchResult(null)
-                  setSearchSerial('')
-                  setSearchError('')
+                  setBorrowMode('borrow')
+                  clearBorrowForm()
                 }}
                 className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  returnMode === 'lot'
-                    ? 'border-orange-500 bg-orange-50 shadow-md'
-                    : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300 hover:bg-orange-50/50'
+                  borrowMode === 'borrow'
+                    ? 'border-purple-500 bg-purple-50 shadow-md'
+                    : 'border-[var(--color-gray-200)] bg-white hover:border-purple-300 hover:bg-purple-50/50'
                 }`}
               >
                 <div className="flex items-start gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    returnMode === 'lot' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
+                    borrowMode === 'borrow' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-500'
                   }`}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${returnMode === 'lot' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'รับคืนทั้ง Lot' : 'Lot Return'}
+                    <h3 className={`font-semibold text-lg ${borrowMode === 'borrow' ? 'text-purple-700' : 'text-[var(--color-charcoal)]'}`}>
+                      {locale === 'th' ? 'ยืมสินค้า' : 'Borrow'}
                     </h3>
                     <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th'
-                        ? 'ค้นหาและรับคืนสินค้าหลายชิ้นพร้อมกันในล็อตเดียวกัน'
-                        : 'Search and return multiple products in the same lot at once'}
+                      {locale === 'th' ? 'ยืมสินค้าจากคลัง (รออนุมัติ)' : 'Borrow from stock (pending approval)'}
                     </p>
                   </div>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    returnMode === 'lot' ? 'border-orange-500 bg-orange-500' : 'border-[var(--color-gray-300)]'
+                </div>
+              </button>
+
+              {/* Return Borrowed Card */}
+              <button
+                onClick={() => {
+                  setBorrowMode('return_borrowed')
+                  clearBorrowForm()
+                }}
+                className={`p-5 rounded-xl border-2 text-left transition-all ${
+                  borrowMode === 'return_borrowed'
+                    ? 'border-green-500 bg-green-50 shadow-md'
+                    : 'border-[var(--color-gray-200)] bg-white hover:border-green-300 hover:bg-green-50/50'
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    borrowMode === 'return_borrowed' ? 'bg-green-500 text-white' : 'bg-green-100 text-green-500'
                   }`}>
-                    {returnMode === 'lot' && (
-                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className={`font-semibold text-lg ${borrowMode === 'return_borrowed' ? 'text-green-700' : 'text-[var(--color-charcoal)]'}`}>
+                      {locale === 'th' ? 'คืนสินค้ายืม' : 'Return Borrowed'}
+                    </h3>
+                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
+                      {locale === 'th' ? 'คืนสินค้าที่ยืมเข้าคลัง' : 'Return borrowed products to stock'}
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {/* History Card */}
+              <button
+                onClick={() => {
+                  setBorrowMode('history')
+                  clearBorrowForm()
+                }}
+                className={`p-5 rounded-xl border-2 text-left transition-all ${
+                  borrowMode === 'history'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-[var(--color-gray-200)] bg-white hover:border-blue-300 hover:bg-blue-50/50'
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    borrowMode === 'history' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-500'
+                  }`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className={`font-semibold text-lg ${borrowMode === 'history' ? 'text-blue-700' : 'text-[var(--color-charcoal)]'}`}>
+                      {locale === 'th' ? 'ประวัติ' : 'History'}
+                    </h3>
+                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
+                      {locale === 'th' ? 'ดูประวัติการยืม/คืน' : 'View borrow/return history'}
+                    </p>
                   </div>
                 </div>
               </button>
@@ -688,237 +1025,711 @@ export default function DamagedProductsPage() {
             {/* Divider */}
             <div className="border-t border-[var(--color-gray-200)] my-6" />
 
-            {/* Individual Return Mode */}
-            {returnMode === 'individual' && (
-              <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
-                <h3 className="font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {locale === 'th' ? 'ค้นหาสินค้าด้วย Serial' : 'Search Product by Serial'}
-                </h3>
-
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={searchSerial}
-                      onChange={(e) => setSearchSerial(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                      placeholder={locale === 'th' ? 'กรอก Serial 12 หลัก' : 'Enter 12-digit Serial'}
-                      className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
-                  </div>
+            {/* Return to Stock Mode */}
+            {borrowMode === 'return_to_stock' && (
+              <div className="space-y-6">
+                {/* Return Mode Selection */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Individual Return Card */}
                   <button
-                    onClick={handleSearch}
-                    disabled={isSearching}
-                    className="px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setReturnMode('individual')
+                      setLotProducts([])
+                      setSelectedLotProducts([])
+                      setSearchLot('')
+                      setLotError('')
+                    }}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      returnMode === 'individual'
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300'
+                    }`}
                   >
-                    {isSearching ? (
-                      <>
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        returnMode === 'individual' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
+                      }`}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
-                        {locale === 'th' ? 'กำลังค้นหา...' : 'Searching...'}
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </div>
+                      <div>
+                        <h4 className={`font-medium ${returnMode === 'individual' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
+                          {locale === 'th' ? 'รับคืนรายชิ้น' : 'Individual Return'}
+                        </h4>
+                        <p className="text-xs text-[var(--color-gray-500)]">
+                          {locale === 'th' ? 'ค้นหาด้วย Serial' : 'Search by Serial'}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Lot Return Card */}
+                  <button
+                    onClick={() => {
+                      setReturnMode('lot')
+                      setSearchResult(null)
+                      setSearchSerial('')
+                      setSearchError('')
+                    }}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      returnMode === 'lot'
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        returnMode === 'lot' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
+                      }`}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
-                        {locale === 'th' ? 'ค้นหา' : 'Search'}
-                      </>
-                    )}
+                      </div>
+                      <div>
+                        <h4 className={`font-medium ${returnMode === 'lot' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
+                          {locale === 'th' ? 'รับคืนทั้ง Lot' : 'Lot Return'}
+                        </h4>
+                        <p className="text-xs text-[var(--color-gray-500)]">
+                          {locale === 'th' ? 'ค้นหาด้วยหมายเลข Lot' : 'Search by Lot number'}
+                        </p>
+                      </div>
+                    </div>
                   </button>
                 </div>
 
-                {searchError && (
-                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
-                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {searchError}
+                {/* Individual Return Mode Content */}
+                {returnMode === 'individual' && (
+                  <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
+                    <h3 className="font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      {locale === 'th' ? 'ค้นหาสินค้าด้วย Serial' : 'Search Product by Serial'}
+                    </h3>
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={searchSerial}
+                          onChange={(e) => setSearchSerial(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                          placeholder={locale === 'th' ? 'กรอก Serial 12 หลัก' : 'Enter 12-digit Serial'}
+                          className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                        />
+                      </div>
+                      <button
+                        onClick={handleSearch}
+                        disabled={isSearching}
+                        className="px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isSearching ? (
+                          <>
+                            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {locale === 'th' ? 'กำลังค้นหา...' : 'Searching...'}
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            {locale === 'th' ? 'ค้นหา' : 'Search'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {searchError && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {searchError}
+                      </div>
+                    )}
+
+                    {searchResult && (
+                      <div className="mt-5 p-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm">
+                        <div className="flex items-center gap-2 mb-4">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <h3 className="font-semibold text-green-700">{locale === 'th' ? 'พบสินค้า' : 'Product Found'}</h3>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                          <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
+                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">Serial</span>
+                            <p className="font-mono font-semibold text-[var(--color-gold)] mt-1">{searchResult.serial12}</p>
+                          </div>
+                          <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
+                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'สถานะ' : 'Status'}</span>
+                            <div className="mt-1">{getStatusBadge(searchResult.status)}</div>
+                          </div>
+                          <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
+                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}</span>
+                            <p className="font-medium mt-1">{searchResult.name}</p>
+                          </div>
+                          {searchResult.assignedClinic && (
+                            <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
+                              <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'คลินิก' : 'Clinic'}</span>
+                              <p className="font-medium mt-1">{searchResult.assignedClinic.name}</p>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setShowReturnModal(true)}
+                          className="mt-5 w-full sm:w-auto px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                          </svg>
+                          {locale === 'th' ? 'รับคืนสินค้านี้' : 'Return this Product'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {searchResult && (
-                  <div className="mt-5 p-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm">
-                    <div className="flex items-center gap-2 mb-4">
-                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                {/* Lot Return Mode Content */}
+                {returnMode === 'lot' && (
+                  <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
+                    <h3 className="font-semibold text-[var(--color-charcoal)] mb-2 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
-                      <h3 className="font-semibold text-green-700">{locale === 'th' ? 'พบสินค้า' : 'Product Found'}</h3>
+                      {locale === 'th' ? 'ค้นหาสินค้าด้วยหมายเลข Lot' : 'Search Products by Lot Number'}
+                    </h3>
+                    <p className="text-sm text-[var(--color-gray-500)] mb-4">
+                      {locale === 'th'
+                        ? 'เฉพาะสินค้าที่มีสถานะ SHIPPED หรือ ACTIVATED เท่านั้น'
+                        : 'Only products with SHIPPED or ACTIVATED status'}
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={searchLot}
+                          onChange={(e) => setSearchLot(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleLotSearch()}
+                          placeholder={locale === 'th' ? 'กรอกหมายเลข Lot' : 'Enter Lot number'}
+                          className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                        />
+                      </div>
+                      <button
+                        onClick={handleLotSearch}
+                        disabled={isSearchingLot}
+                        className="px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isSearchingLot ? (
+                          <>
+                            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {locale === 'th' ? 'กำลังค้นหา...' : 'Searching...'}
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            {locale === 'th' ? 'ค้นหา' : 'Search'}
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
-                        <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">Serial</span>
-                        <p className="font-mono font-semibold text-[var(--color-gold)] mt-1">{searchResult.serial12}</p>
+
+                    {lotError && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {lotError}
                       </div>
-                      <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
-                        <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'สถานะ' : 'Status'}</span>
-                        <div className="mt-1">{getStatusBadge(searchResult.status)}</div>
-                      </div>
-                      <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
-                        <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}</span>
-                        <p className="font-medium mt-1">{searchResult.name}</p>
-                      </div>
-                      {searchResult.assignedClinic && (
-                        <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
-                          <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'คลินิก' : 'Clinic'}</span>
-                          <p className="font-medium mt-1">{searchResult.assignedClinic.name}</p>
+                    )}
+
+                    {lotProducts.length > 0 && (
+                      <div className="mt-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm overflow-hidden">
+                        {/* Header */}
+                        <div className="p-4 border-b border-[var(--color-gray-200)] bg-gradient-to-r from-orange-50 to-white">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                              <span className="font-semibold text-[var(--color-charcoal)]">Lot: {searchLot}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">
+                                {selectedLotProducts.length}/{lotProducts.length} {locale === 'th' ? 'รายการ' : 'items'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setShowReturnModal(true)}
-                      className="mt-5 w-full sm:w-auto px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                      </svg>
-                      {locale === 'th' ? 'รับคืนสินค้านี้' : 'Return this Product'}
-                    </button>
+
+                        {/* Select All */}
+                        <div className="p-3 border-b border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedLotProducts.length === lotProducts.length && lotProducts.length > 0}
+                              onChange={toggleAllLotProducts}
+                              className="w-5 h-5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
+                            />
+                            <span className="text-sm font-medium">{locale === 'th' ? 'เลือกทั้งหมด' : 'Select All'}</span>
+                          </label>
+                        </div>
+
+                        {/* Product List */}
+                        <div className="max-h-72 overflow-y-auto divide-y divide-[var(--color-gray-100)]">
+                          {lotProducts.map((product) => (
+                            <label
+                              key={product.id}
+                              className={`flex items-start gap-3 p-4 cursor-pointer transition-colors ${
+                                selectedLotProducts.includes(product.id)
+                                  ? 'bg-orange-50 hover:bg-orange-100'
+                                  : 'hover:bg-[var(--color-gray-100)]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedLotProducts.includes(product.id)}
+                                onChange={() => toggleLotProductSelection(product.id)}
+                                className="w-5 h-5 mt-0.5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{product.serial12}</span>
+                                  {getStatusBadge(product.status)}
+                                </div>
+                                <p className="text-sm text-[var(--color-gray-600)] mt-1 truncate">{product.name}</p>
+                                {product.assignedClinic && (
+                                  <p className="text-xs text-[var(--color-gray-400)] mt-0.5">{product.assignedClinic.name}</p>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
+                          <button
+                            onClick={() => setShowLotReturnModal(true)}
+                            disabled={selectedLotProducts.length === 0}
+                            className="w-full px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                            {locale === 'th'
+                              ? `รับคืนสินค้าที่เลือก (${selectedLotProducts.length} รายการ)`
+                              : `Return Selected (${selectedLotProducts.length} items)`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Lot Return Mode */}
-            {returnMode === 'lot' && (
-              <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
-                <h3 className="font-semibold text-[var(--color-charcoal)] mb-2 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {locale === 'th' ? 'ค้นหาสินค้าด้วยหมายเลข Lot' : 'Search Products by Lot Number'}
-                </h3>
-                <p className="text-sm text-[var(--color-gray-500)] mb-4">
-                  {locale === 'th'
-                    ? 'เฉพาะสินค้าที่มีสถานะ SHIPPED หรือ ACTIVATED เท่านั้น'
-                    : 'Only products with SHIPPED or ACTIVATED status'}
-                </p>
+            {/* Borrow/Return Form Mode */}
+            {(borrowMode === 'borrow' || borrowMode === 'return_borrowed') && (
+              <div className="space-y-6">
+                {/* Products Selection Section */}
+                <div className="bg-white border border-[var(--color-gray-200)] rounded-xl overflow-hidden">
+                  {/* Header with search and selection info */}
+                  <div className={`p-4 border-b border-[var(--color-gray-200)] ${borrowMode === 'borrow' ? 'bg-purple-50' : 'bg-green-50'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-[var(--color-charcoal)] flex items-center gap-2">
+                          <svg className={`w-5 h-5 ${borrowMode === 'borrow' ? 'text-purple-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          {locale === 'th'
+                            ? borrowMode === 'borrow'
+                              ? 'เลือกสินค้าในคลัง (IN_STOCK)'
+                              : 'เลือกสินค้าที่ยืม (BORROWED)'
+                            : borrowMode === 'borrow'
+                              ? 'Select products in stock (IN_STOCK)'
+                              : 'Select borrowed products (BORROWED)'}
+                        </h3>
+                        <p className="text-sm text-[var(--color-gray-500)] mt-1">
+                          {locale === 'th' ? `ทั้งหมด ${borrowProductsPagination.total} รายการ` : `Total ${borrowProductsPagination.total} items`}
+                        </p>
+                      </div>
+                      <div className={`px-4 py-2 rounded-lg font-medium ${
+                        borrowMode === 'borrow' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {locale === 'th' ? `เลือกแล้ว ${selectedBorrowProducts.length} รายการ` : `${selectedBorrowProducts.length} selected`}
+                      </div>
+                    </div>
 
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={searchLot}
-                      onChange={(e) => setSearchLot(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLotSearch()}
-                      placeholder={locale === 'th' ? 'กรอกหมายเลข Lot' : 'Enter Lot number'}
-                      className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
+                    {/* Search Filter */}
+                    <div className="mt-4 flex gap-2">
+                      <div className="flex-1 relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-gray-400)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={borrowProductsFilter}
+                          onChange={(e) => {
+                            setBorrowProductsFilter(e.target.value)
+                            setBorrowProductsPagination((prev) => ({ ...prev, page: 1 }))
+                          }}
+                          placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อสินค้า...' : 'Search Serial, SKU, Product name...'}
+                          className="w-full pl-10 pr-4 py-2 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        />
+                      </div>
+                      <button
+                        onClick={selectAllBorrowProducts}
+                        className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg hover:bg-[var(--color-gray-100)] transition-colors text-sm whitespace-nowrap"
+                      >
+                        {borrowProductsList.every((p) => selectedBorrowProducts.includes(p.id))
+                          ? locale === 'th' ? 'ยกเลิกทั้งหมด' : 'Deselect All'
+                          : locale === 'th' ? 'เลือกทั้งหมด' : 'Select All'}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Products List */}
+                  <div className="max-h-80 overflow-y-auto">
+                    {borrowProductsLoading ? (
+                      <div className="p-8 text-center text-[var(--color-gray-500)]">
+                        <svg className="animate-spin w-8 h-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
+                      </div>
+                    ) : borrowProductsList.length === 0 ? (
+                      <div className="p-8 text-center text-[var(--color-gray-500)]">
+                        <svg className="w-12 h-12 mx-auto mb-2 text-[var(--color-gray-300)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                        {locale === 'th' ? 'ไม่พบสินค้า' : 'No products found'}
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[var(--color-gray-100)]">
+                        {borrowProductsList.map((product) => (
+                          <label
+                            key={product.id}
+                            className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-[var(--color-gray-50)] transition-colors ${
+                              selectedBorrowProducts.includes(product.id)
+                                ? borrowMode === 'borrow' ? 'bg-purple-50' : 'bg-green-50'
+                                : ''
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedBorrowProducts.includes(product.id)}
+                              onChange={() => toggleBorrowProductSelection(product.id)}
+                              className={`w-5 h-5 rounded ${
+                                borrowMode === 'borrow' ? 'text-purple-500 focus:ring-purple-200' : 'text-green-500 focus:ring-green-200'
+                              }`}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{product.serial12}</span>
+                                <span className="text-xs text-[var(--color-gray-400)]">{product.sku}</span>
+                              </div>
+                              <p className="text-sm text-[var(--color-gray-600)] truncate">{product.name}</p>
+                              <div className="flex items-center gap-3 text-xs text-[var(--color-gray-400)] mt-1">
+                                {product.lot && <span>Lot: {product.lot}</span>}
+                                {product.modelSize && <span>Size: {product.modelSize}</span>}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pagination */}
+                  {borrowProductsPagination.totalPages > 1 && (
+                    <div className="p-3 border-t border-[var(--color-gray-200)] bg-[var(--color-gray-50)] flex items-center justify-between">
+                      <p className="text-sm text-[var(--color-gray-500)]">
+                        {locale === 'th'
+                          ? `หน้า ${borrowProductsPagination.page} / ${borrowProductsPagination.totalPages}`
+                          : `Page ${borrowProductsPagination.page} / ${borrowProductsPagination.totalPages}`}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setBorrowProductsPagination((p) => ({ ...p, page: p.page - 1 }))}
+                          disabled={borrowProductsPagination.page === 1}
+                          className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50 hover:bg-white"
+                        >
+                          {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
+                        </button>
+                        <button
+                          onClick={() => setBorrowProductsPagination((p) => ({ ...p, page: p.page + 1 }))}
+                          disabled={borrowProductsPagination.page >= borrowProductsPagination.totalPages}
+                          className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50 hover:bg-white"
+                        >
+                          {locale === 'th' ? 'ถัดไป' : 'Next'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form Fields */}
+                <div className="bg-[var(--color-gray-100)] rounded-xl p-5 space-y-4">
+                  <h3 className="font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ข้อมูลการยืม/คืน' : 'Borrow/Return Information'}
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'ชื่อผู้ยืม/คืนสินค้า' : 'Borrower Name'} <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowerName}
+                        onChange={(e) => setBorrowerName(e.target.value)}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'กรอกชื่อ' : 'Enter name'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'ชื่อคลินิก' : 'Clinic Name'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowClinicName}
+                        onChange={(e) => setBorrowClinicName(e.target.value)}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'กรอกชื่อคลินิก' : 'Enter clinic name'}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'ที่อยู่' : 'Address'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowClinicAddress}
+                        onChange={(e) => setBorrowClinicAddress(e.target.value)}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'กรอกที่อยู่' : 'Enter address'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'เลขที่ใบกำกับภาษี' : 'Tax Invoice Ref'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowTaxInvoice}
+                        onChange={(e) => setBorrowTaxInvoice(e.target.value)}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'กรอกเลขที่' : 'Enter reference'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'สาเหตุการยืม/คืน' : 'Reason'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowReason}
+                        onChange={(e) => setBorrowReason(e.target.value)}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'กรอกสาเหตุ' : 'Enter reason'}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
+                      </label>
+                      <textarea
+                        value={borrowRemarks}
+                        onChange={(e) => setBorrowRemarks(e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        placeholder={locale === 'th' ? 'หมายเหตุเพิ่มเติม' : 'Additional remarks'}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex justify-end gap-3">
                   <button
-                    onClick={handleLotSearch}
-                    disabled={isSearchingLot}
-                    className="px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                    onClick={clearBorrowForm}
+                    className="px-6 py-3 border border-[var(--color-gray-200)] rounded-lg font-medium hover:bg-[var(--color-gray-100)] transition-colors"
                   >
-                    {isSearchingLot ? (
+                    {locale === 'th' ? 'ล้างข้อมูล' : 'Clear'}
+                  </button>
+                  <button
+                    onClick={handleBorrowSubmit}
+                    disabled={selectedBorrowProducts.length === 0 || !borrowerName.trim() || isBorrowSubmitting}
+                    className={`px-6 py-3 text-white rounded-lg font-medium disabled:opacity-50 transition-colors flex items-center gap-2 ${
+                      borrowMode === 'borrow' ? 'bg-purple-500 hover:bg-purple-600' : 'bg-green-500 hover:bg-green-600'
+                    }`}
+                  >
+                    {isBorrowSubmitting ? (
                       <>
                         <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {locale === 'th' ? 'กำลังค้นหา...' : 'Searching...'}
+                        {locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...'}
                       </>
                     ) : (
                       <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        {locale === 'th' ? 'ค้นหา' : 'Search'}
+                        {borrowMode === 'borrow'
+                          ? locale === 'th' ? 'ส่งคำขอยืมสินค้า' : 'Submit Borrow Request'
+                          : locale === 'th' ? 'คืนสินค้าเข้าคลัง' : 'Return to Stock'}
                       </>
                     )}
                   </button>
                 </div>
+              </div>
+            )}
 
-                {lotError && (
-                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
-                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {lotError}
-                  </div>
-                )}
+            {/* History Mode */}
+            {borrowMode === 'history' && (
+              <div>
+                {/* Filter Buttons */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {(['all', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => {
+                        setBorrowHistoryFilter(filter)
+                        setBorrowHistoryPagination((p) => ({ ...p, page: 1 }))
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        borrowHistoryFilter === filter
+                          ? filter === 'all'
+                            ? 'bg-[var(--color-charcoal)] text-white'
+                            : filter === 'PENDING'
+                              ? 'bg-amber-500 text-white'
+                              : filter === 'APPROVED'
+                                ? 'bg-green-500 text-white'
+                                : 'bg-red-500 text-white'
+                          : 'bg-[var(--color-gray-100)] text-[var(--color-gray-600)] hover:bg-[var(--color-gray-200)]'
+                      }`}
+                    >
+                      {filter === 'all'
+                        ? locale === 'th' ? 'ทั้งหมด' : 'All'
+                        : filter === 'PENDING'
+                          ? locale === 'th' ? 'รออนุมัติ' : 'Pending'
+                          : filter === 'APPROVED'
+                            ? locale === 'th' ? 'อนุมัติแล้ว' : 'Approved'
+                            : locale === 'th' ? 'ปฏิเสธ' : 'Rejected'}
+                    </button>
+                  ))}
+                </div>
 
-                {lotProducts.length > 0 && (
-                  <div className="mt-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm overflow-hidden">
-                    {/* Header */}
-                    <div className="p-4 border-b border-[var(--color-gray-200)] bg-gradient-to-r from-orange-50 to-white">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                          </svg>
-                          <span className="font-semibold text-[var(--color-charcoal)]">Lot: {searchLot}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">
-                            {selectedLotProducts.length}/{lotProducts.length} {locale === 'th' ? 'รายการ' : 'items'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                {/* History Table */}
+                <div className="overflow-x-auto bg-white rounded-xl border border-[var(--color-gray-200)]">
+                  <table className="w-full">
+                    <thead className="bg-[var(--color-gray-100)]">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'เลขที่' : 'No.'}</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'ประเภท' : 'Type'}</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'ผู้ยืม/คืน' : 'Borrower'}</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'จำนวน' : 'Items'}</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'วันที่' : 'Date'}</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-gray-200)]">
+                      {borrowHistoryLoading ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
+                            {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
+                          </td>
+                        </tr>
+                      ) : borrowHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
+                            {locale === 'th' ? 'ไม่พบรายการ' : 'No records found'}
+                          </td>
+                        </tr>
+                      ) : (
+                        borrowHistory.map((txn) => (
+                          <tr key={txn.id} className="hover:bg-[var(--color-gray-100)]">
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{txn.transactionNo}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                txn.type === 'BORROW' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                              }`}>
+                                {txn.type === 'BORROW' ? (locale === 'th' ? 'ยืม' : 'Borrow') : (locale === 'th' ? 'คืน' : 'Return')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium">{txn.borrowerName}</p>
+                              {txn.clinicName && <p className="text-xs text-[var(--color-gray-500)]">{txn.clinicName}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-1 bg-[var(--color-gray-100)] rounded text-sm">{txn.lines.length}</span>
+                            </td>
+                            <td className="px-4 py-3">{getBorrowStatusBadge(txn.status)}</td>
+                            <td className="px-4 py-3 text-sm text-[var(--color-gray-500)]">{formatDate(txn.createdAt)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {txn.status === 'PENDING' && txn.type === 'BORROW' && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTransaction(txn)
+                                      setShowApproveModal(true)
+                                    }}
+                                    className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+                                  >
+                                    {locale === 'th' ? 'อนุมัติ' : 'Review'}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openBorrowDocument(txn.id)}
+                                  className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg hover:bg-[var(--color-gray-100)] transition-colors"
+                                >
+                                  {locale === 'th' ? 'พิมพ์' : 'Print'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-                    {/* Select All */}
-                    <div className="p-3 border-b border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedLotProducts.length === lotProducts.length && lotProducts.length > 0}
-                          onChange={toggleAllLotProducts}
-                          className="w-5 h-5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
-                        />
-                        <span className="text-sm font-medium">{locale === 'th' ? 'เลือกทั้งหมด' : 'Select All'}</span>
-                      </label>
-                    </div>
-
-                    {/* Product List */}
-                    <div className="max-h-72 overflow-y-auto divide-y divide-[var(--color-gray-100)]">
-                      {lotProducts.map((product) => (
-                        <label
-                          key={product.id}
-                          className={`flex items-start gap-3 p-4 cursor-pointer transition-colors ${
-                            selectedLotProducts.includes(product.id)
-                              ? 'bg-orange-50 hover:bg-orange-100'
-                              : 'hover:bg-[var(--color-gray-100)]'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedLotProducts.includes(product.id)}
-                            onChange={() => toggleLotProductSelection(product.id)}
-                            className="w-5 h-5 mt-0.5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{product.serial12}</span>
-                              {getStatusBadge(product.status)}
-                            </div>
-                            <p className="text-sm text-[var(--color-gray-600)] mt-1 truncate">{product.name}</p>
-                            {product.assignedClinic && (
-                              <p className="text-xs text-[var(--color-gray-400)] mt-0.5">{product.assignedClinic.name}</p>
-                            )}
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="p-4 border-t border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
+                {/* Pagination */}
+                {borrowHistoryPagination.totalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-sm text-[var(--color-gray-500)]">
+                      {locale === 'th'
+                        ? `แสดง ${borrowHistory.length} จาก ${borrowHistoryPagination.total} รายการ`
+                        : `Showing ${borrowHistory.length} of ${borrowHistoryPagination.total} items`}
+                    </p>
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setShowLotReturnModal(true)}
-                        disabled={selectedLotProducts.length === 0}
-                        className="w-full px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                        onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page - 1 }))}
+                        disabled={borrowHistoryPagination.page === 1}
+                        className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                        </svg>
-                        {locale === 'th'
-                          ? `รับคืนสินค้าที่เลือก (${selectedLotProducts.length} รายการ)`
-                          : `Return Selected (${selectedLotProducts.length} items)`}
+                        {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
+                      </button>
+                      <button
+                        onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page + 1 }))}
+                        disabled={borrowHistoryPagination.page >= borrowHistoryPagination.totalPages}
+                        className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+                      >
+                        {locale === 'th' ? 'ถัดไป' : 'Next'}
                       </button>
                     </div>
                   </div>
@@ -1131,6 +1942,99 @@ export default function DamagedProductsPage() {
                   setReturnNotes('')
                 }}
                 className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg"
+              >
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Borrow Approve/Reject Modal */}
+      {showApproveModal && selectedTransaction && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+            <h3 className="text-lg font-semibold mb-4">
+              {locale === 'th' ? 'อนุมัติ/ปฏิเสธคำขอยืมสินค้า' : 'Approve/Reject Borrow Request'}
+            </h3>
+
+            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'เลขที่' : 'No.'}</span>
+                  <p className="font-mono font-semibold text-[var(--color-gold)]">{selectedTransaction.transactionNo}</p>
+                </div>
+                <div>
+                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'ผู้ยืม' : 'Borrower'}</span>
+                  <p className="font-medium">{selectedTransaction.borrowerName}</p>
+                </div>
+                <div>
+                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</span>
+                  <p className="font-medium">{selectedTransaction.lines.length} {locale === 'th' ? 'รายการ' : 'items'}</p>
+                </div>
+                <div>
+                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'สร้างโดย' : 'Created by'}</span>
+                  <p className="font-medium">{selectedTransaction.createdBy?.displayName || '-'}</p>
+                </div>
+              </div>
+              {selectedTransaction.reason && (
+                <div className="mt-3 pt-3 border-t border-[var(--color-gray-200)]">
+                  <span className="text-[var(--color-gray-500)] text-sm">{locale === 'th' ? 'เหตุผล' : 'Reason'}</span>
+                  <p className="text-sm">{selectedTransaction.reason}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Products List */}
+            <div className="mb-4">
+              <h4 className="text-sm font-medium mb-2">{locale === 'th' ? 'รายการสินค้า' : 'Products'}</h4>
+              <div className="max-h-32 overflow-y-auto bg-[var(--color-gray-100)] rounded-lg p-3 space-y-1 text-sm">
+                {selectedTransaction.lines.map((line) => (
+                  <div key={line.id} className="flex justify-between">
+                    <span className="font-mono text-[var(--color-gold)]">{line.productItem.serial12}</span>
+                    <span className="text-[var(--color-gray-600)] truncate ml-2">{line.itemName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Rejection Reason */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                {locale === 'th' ? 'เหตุผลในการปฏิเสธ (ถ้าปฏิเสธ)' : 'Rejection Reason (if rejecting)'}
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                placeholder={locale === 'th' ? 'กรอกเหตุผลในการปฏิเสธ' : 'Enter rejection reason'}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleApproveReject('approve')}
+                disabled={isApproving}
+                className="flex-1 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 font-medium"
+              >
+                {isApproving ? '...' : (locale === 'th' ? 'อนุมัติ' : 'Approve')}
+              </button>
+              <button
+                onClick={() => handleApproveReject('reject')}
+                disabled={isApproving || !rejectReason.trim()}
+                className="flex-1 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 font-medium"
+              >
+                {isApproving ? '...' : (locale === 'th' ? 'ปฏิเสธ' : 'Reject')}
+              </button>
+              <button
+                onClick={() => {
+                  setShowApproveModal(false)
+                  setSelectedTransaction(null)
+                  setRejectReason('')
+                }}
+                disabled={isApproving}
+                className="px-4 py-2.5 border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>

@@ -105,7 +105,7 @@ export async function generateMonthlySummaryPDF(
           'สินค้า\nส่งออก',
           'เปิด\nใช้งาน',
           'เสียหาย',
-          'คืนสินค้า'
+          'รับคืนสินค้า'
         ]
       : [
           'Month',

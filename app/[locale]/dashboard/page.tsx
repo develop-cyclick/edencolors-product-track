@@ -346,7 +346,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
                     ),
                   },
                   ITEM_RETURNED: {
-                    th: 'คืนสินค้า',
+                    th: 'รับคืนสินค้า',
                     en: 'Item Returned',
                     color: 'bg-red-100 text-red-700',
                     icon: (

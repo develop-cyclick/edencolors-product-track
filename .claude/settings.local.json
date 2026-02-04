@@ -39,7 +39,8 @@
       "Bash(ipconfig:*)",
       "Bash(npx ts-node:*)",
       "Bash(npx prisma db seed:*)",
-      "Bash(dir \"C:\\\\Code\\\\Work\\\\ED\\\\edencolors\\\\docs\\\\New-Version\\\\*.pdf\" /o:n)"
+      "Bash(dir \"C:\\\\Code\\\\Work\\\\ED\\\\edencolors\\\\docs\\\\New-Version\\\\*.pdf\" /o:n)",
+      "Bash(find:*)"
     ]
   }
 }

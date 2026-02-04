@@ -143,7 +143,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
     },
     
     {
-      label: 'เสียหาย/คืนสินค้า',
+      label: 'เสียหาย/รับคืนสินค้า',
       labelEn: 'Damaged/Return',
       href: `/${locale}/dashboard/damaged-products`,
       icon: (

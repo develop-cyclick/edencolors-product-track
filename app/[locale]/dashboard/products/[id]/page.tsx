@@ -50,7 +50,7 @@ const statusLabels: Record<string, { th: string; en: string; color: string }> = 
   PENDING_OUT: { th: 'รอส่งออก', en: 'Pending Out', color: 'bg-amber-100 text-amber-700' },
   SHIPPED: { th: 'ส่งออกแล้ว', en: 'Shipped', color: 'bg-blue-100 text-blue-700' },
   ACTIVATED: { th: 'เปิดใช้แล้ว', en: 'Activated', color: 'bg-purple-100 text-purple-700' },
-  RETURNED: { th: 'คืนสินค้า', en: 'Returned', color: 'bg-orange-100 text-orange-700' },
+  RETURNED: { th: 'รับคืนสินค้า', en: 'Returned', color: 'bg-orange-100 text-orange-700' },
   DAMAGED: { th: 'เสียหาย', en: 'Damaged', color: 'bg-red-100 text-red-700' },
 }
 
@@ -216,7 +216,7 @@ export default function ProductMasterDetailPage() {
           <p className="text-2xl font-bold text-purple-700 mt-1">{productMaster.stats.activated}</p>
         </div>
         <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-          <p className="text-sm text-red-600">{locale === 'th' ? 'คืนสินค้า' : 'Returned'}</p>
+          <p className="text-sm text-red-600">{locale === 'th' ? 'รับคืนสินค้า' : 'Returned'}</p>
           <p className="text-2xl font-bold text-red-700 mt-1">{productMaster.stats.returned}</p>
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function ProductMasterDetailPage() {
             <option value="PENDING_OUT">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</option>
             <option value="SHIPPED">{locale === 'th' ? 'ส่งออกแล้ว' : 'Shipped'}</option>
             <option value="ACTIVATED">{locale === 'th' ? 'เปิดใช้แล้ว' : 'Activated'}</option>
-            <option value="RETURNED">{locale === 'th' ? 'คืนสินค้า' : 'Returned'}</option>
+            <option value="RETURNED">{locale === 'th' ? 'รับคืนสินค้า' : 'Returned'}</option>
           </select>
         </div>
 
