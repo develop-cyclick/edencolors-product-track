@@ -95,7 +95,16 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
           receivedBy: { select: { id: true, displayName: true, username: true } },
           approvedBy: { select: { id: true, displayName: true, username: true } },
           lines: {
-            include: {
+            select: {
+              id: true,
+              sku: true,
+              itemName: true,
+              modelSize: true,
+              lot: true,
+              mfgDate: true,
+              expDate: true,
+              inspectionStatus: true,
+              remarks: true,
               productItem: {
                 select: {
                   id: true,
@@ -106,6 +115,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
               },
               unit: { select: { id: true, nameTh: true } },
             },
+            orderBy: { id: 'asc' },
           },
           _count: { select: { lines: true } },
         },
@@ -127,7 +137,13 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
         lines: {
-          include: {
+          select: {
+            id: true,
+            sku: true,
+            itemName: true,
+            modelSize: true,
+            lot: true,
+            expDate: true,
             productItem: {
               select: {
                 id: true,
@@ -136,12 +152,14 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
                 name: true,
                 modelSize: true,
                 lot: true,
+                mfgDate: true,
                 expDate: true,
                 status: true,
               },
             },
             unit: { select: { nameTh: true } },
           },
+          orderBy: { id: 'asc' },
         },
         _count: { select: { lines: true } },
       },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decryptQRToken, hashToken } from '@/lib/qr-token'
 import { checkRateLimit, rateLimitPresets } from '@/lib/rate-limit'
+import { isValidSerialNumber } from '@/lib/serial-generator'
 
 const CURRENT_POLICY_VERSION = '1.0'
 
@@ -89,8 +90,8 @@ export async function POST(request: NextRequest) {
 
     // Method 1: Short URL with serial (NEW)
     if (serial) {
-      // Validate serial format (12 digits)
-      if (!/^\d{12}$/.test(serial)) {
+      // Validate serial format
+      if (!isValidSerialNumber(serial)) {
         return NextResponse.json({
           success: false,
           error: 'Invalid serial number format',

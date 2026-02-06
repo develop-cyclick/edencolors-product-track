@@ -63,6 +63,11 @@ enum ActivationType {
   PACK          // Activate ได้หลายครั้ง (กำหนดจำนวน)
 }
 
+enum GRNReceivingStatus {
+  PARTIAL       // รับบางส่วน
+  COMPLETE      // รับครบแล้ว
+}
+
 // ============================================
 // MASTER DATA TABLES (Dropdowns)
 // ============================================
@@ -70,6 +75,7 @@ enum ActivationType {
 model ProductMaster {
   id              Int            @id @default(autoincrement())
   sku             String         @unique
+  serialCode      String         @unique @db.Char(5) @map("serial_code")
   nameTh          String         @map("name_th")
   nameEn          String?        @map("name_en")
   imageUrl        String?        @map("image_url")
@@ -87,6 +93,8 @@ model ProductMaster {
   defaultUnit         Unit?               @relation(fields: [defaultUnitId], references: [id])
   productItems        ProductItem[]
   purchaseOrderLines  PurchaseOrderLine[]
+  preGeneratedBatches PreGeneratedBatch[]
+  grnPlanLines        GRNPlanLine[]
 
   @@index([sku])
   @@index([isActive])
@@ -119,6 +127,7 @@ model Unit {
   outboundLines         OutboundLine[]
   productMastersDefault ProductMaster[]
   borrowLines           BorrowTransactionLine[]
+  grnPlanLines          GRNPlanLine[]
 
   @@map("units")
 }
@@ -175,6 +184,7 @@ model User {
   borrowsCreated          BorrowTransaction[]   @relation("BorrowCreatedBy")
   borrowsApproved         BorrowTransaction[]   @relation("BorrowApprovedBy")
   borrowsRejected         BorrowTransaction[]   @relation("BorrowRejectedBy")
+  grnReceivingSessions    GRNReceivingSession[] @relation("GRNSessionReceivedBy")
 
   @@map("users")
 }
@@ -201,7 +211,7 @@ model Clinic {
 
 model ProductItem {
   id                    Int           @id @default(autoincrement())
-  serial12              String        @unique @db.Char(12)
+  serial12              String        @unique @db.VarChar(20)
   productMasterId       Int?          @map("product_master_id")
   sku                   String
   name                  String
@@ -277,15 +287,18 @@ model GRNHeader {
   rejectedById      Int?      @map("rejected_by_id")
   rejectedAt        DateTime? @map("rejected_at")
   rejectReason      String?   @map("reject_reason")
-  remarks           String?
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  remarks             String?
+  receivingStatus     GRNReceivingStatus @default(COMPLETE) @map("receiving_status")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  receivedBy  User       @relation("GRNCreatedBy", fields: [receivedById], references: [id])
-  approvedBy  User?      @relation("GRNApprovedBy", fields: [approvedById], references: [id])
-  rejectedBy  User?      @relation("GRNRejectedBy", fields: [rejectedById], references: [id])
-  warehouse   Warehouse  @relation(fields: [warehouseId], references: [id])
-  lines       GRNLine[]
+  receivedBy          User       @relation("GRNCreatedBy", fields: [receivedById], references: [id])
+  approvedBy          User?      @relation("GRNApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy          User?      @relation("GRNRejectedBy", fields: [rejectedById], references: [id])
+  warehouse           Warehouse  @relation(fields: [warehouseId], references: [id])
+  lines               GRNLine[]
+  planLines           GRNPlanLine[]
+  receivingSessions   GRNReceivingSession[]
 
   @@map("grn_headers")
 }
@@ -303,14 +316,56 @@ model GRNLine {
   mfgDate           DateTime?        @map("mfg_date") @db.Date
   expDate           DateTime?        @map("exp_date") @db.Date
   inspectionStatus  InspectionStatus @default(OK) @map("inspection_status")
-  remarks           String?
-  createdAt         DateTime         @default(now()) @map("created_at")
+  remarks              String?
+  receivingSessionId   Int?             @map("receiving_session_id")
+  createdAt            DateTime         @default(now()) @map("created_at")
 
-  grnHeader   GRNHeader   @relation(fields: [grnHeaderId], references: [id])
-  productItem ProductItem @relation(fields: [productItemId], references: [id])
-  unit        Unit        @relation(fields: [unitId], references: [id])
+  grnHeader         GRNHeader            @relation(fields: [grnHeaderId], references: [id])
+  productItem       ProductItem          @relation(fields: [productItemId], references: [id])
+  unit              Unit                 @relation(fields: [unitId], references: [id])
+  receivingSession  GRNReceivingSession? @relation(fields: [receivingSessionId], references: [id])
 
   @@map("grn_lines")
+}
+
+model GRNPlanLine {
+  id               Int              @id @default(autoincrement())
+  grnHeaderId      Int              @map("grn_header_id")
+  productMasterId  Int              @map("product_master_id")
+  totalQty         Int              @map("total_qty")
+  receivedQty      Int              @default(0) @map("received_qty")
+  unitId           Int              @map("unit_id")
+  lot              String?
+  mfgDate          DateTime?        @map("mfg_date") @db.Date
+  expDate          DateTime?        @map("exp_date") @db.Date
+  inspectionStatus InspectionStatus @default(OK) @map("inspection_status")
+  remarks          String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  grnHeader     GRNHeader     @relation(fields: [grnHeaderId], references: [id])
+  productMaster ProductMaster @relation(fields: [productMasterId], references: [id])
+  unit          Unit          @relation(fields: [unitId], references: [id])
+
+  @@map("grn_plan_lines")
+}
+
+model GRNReceivingSession {
+  id           Int      @id @default(autoincrement())
+  grnHeaderId  Int      @map("grn_header_id")
+  sessionNo    Int      @map("session_no")
+  receivedById Int      @map("received_by_id")
+  receivedAt   DateTime @map("received_at")
+  itemCount    Int      @map("item_count")
+  remarks      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  grnHeader  GRNHeader @relation(fields: [grnHeaderId], references: [id])
+  receivedBy User      @relation("GRNSessionReceivedBy", fields: [receivedById], references: [id])
+  lines      GRNLine[]
+
+  @@unique([grnHeaderId, sessionNo])
+  @@map("grn_receiving_sessions")
 }
 
 // ============================================
@@ -452,15 +507,17 @@ model SequenceCounter {
 // ============================================
 
 model PreGeneratedBatch {
-  id            Int           @id @default(autoincrement())
-  batchNo       String        @unique @map("batch_no") // PG-2026-000001
-  quantity      Int
-  linkedCount   Int           @default(0) @map("linked_count")
-  createdById   Int           @map("created_by_id")
-  remarks       String?
-  createdAt     DateTime      @default(now()) @map("created_at")
+  id              Int           @id @default(autoincrement())
+  batchNo         String        @unique @map("batch_no") // PG-2026-000001
+  quantity        Int
+  linkedCount     Int           @default(0) @map("linked_count")
+  productMasterId Int           @map("product_master_id")
+  createdById     Int           @map("created_by_id")
+  remarks         String?
+  createdAt       DateTime      @default(now()) @map("created_at")
 
-  createdBy     User          @relation("PreGenBatchCreatedBy", fields: [createdById], references: [id])
+  productMaster ProductMaster   @relation(fields: [productMasterId], references: [id])
+  createdBy     User            @relation("PreGenBatchCreatedBy", fields: [createdById], references: [id])
   productItems  ProductItem[]
 
   @@index([batchNo])

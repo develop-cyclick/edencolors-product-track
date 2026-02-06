@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useAlert } from '@/components/ui/confirm-modal'
 
 interface Clinic {
   id: number
@@ -75,6 +76,7 @@ export default function NewOutboundPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const locale = params.locale as string
+  const alert = useAlert()
 
   // URL params
   const urlClinicId = searchParams.get('clinicId')
@@ -152,15 +154,17 @@ export default function NewOutboundPage() {
       setIsEditMode(true)
       setEditingOutboundId(parseInt(editId))
 
-      fetch(`/api/warehouse/outbound/${editId}`)
-        .then((r) => r.json())
-        .then((res) => {
+      const fetchOutbound = async () => {
+        try {
+          const r = await fetch(`/api/warehouse/outbound/${editId}`)
+          const res = await r.json()
+
           if (res.success && res.data?.outbound) {
             const ob = res.data.outbound
 
             // Check if still editable (PENDING status)
             if (ob.status !== 'PENDING') {
-              alert(locale === 'th' ? 'ไม่สามารถแก้ไขได้ สถานะไม่ใช่รออนุมัติ' : 'Cannot edit, status is not pending')
+              await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถแก้ไขได้ สถานะไม่ใช่รออนุมัติ' : 'Cannot edit, status is not pending', variant: 'error', icon: 'error' })
               router.push(`/${locale}/dashboard/outbound/${editId}`)
               return
             }
@@ -211,15 +215,16 @@ export default function NewOutboundPage() {
               }
             }
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           console.error('Failed to fetch outbound for edit:', err)
-        })
-        .finally(() => {
+        } finally {
           setInitialLoading(false)
-        })
+        }
+      }
+
+      fetchOutbound()
     }
-  }, [editId, productMasters, locale, router])
+  }, [editId, productMasters, locale, router, alert])
 
   // Fetch POs when clinic changes (exclude CANCELLED)
   useEffect(() => {
@@ -387,22 +392,22 @@ export default function NewOutboundPage() {
     // Validate lines
     const invalidLines = lines.filter((l) => !l.productMasterId || l.quantity < 1)
     if (invalidLines.length > 0) {
-      alert(locale === 'th' ? 'กรุณาเลือกสินค้าและระบุจำนวนให้ครบทุกรายการ' : 'Please select product and quantity for all lines')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้าและระบุจำนวนให้ครบทุกรายการ' : 'Please select product and quantity for all lines', variant: 'warning', icon: 'warning' })
       return
     }
 
     // Check stock availability
     for (const line of lines) {
       if (line.productMaster && line.quantity > line.productMaster.stats.inStock) {
-        alert(locale === 'th'
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th'
           ? `สินค้า ${line.productMaster.sku} มีในคลังไม่เพียงพอ (ต้องการ ${line.quantity}, มี ${line.productMaster.stats.inStock})`
-          : `Insufficient stock for ${line.productMaster.sku} (need ${line.quantity}, have ${line.productMaster.stats.inStock})`)
+          : `Insufficient stock for ${line.productMaster.sku} (need ${line.quantity}, have ${line.productMaster.stats.inStock})`, variant: 'warning', icon: 'warning' })
         return
       }
     }
 
     if (!clinicId) {
-      alert(locale === 'th' ? 'กรุณาเลือกคลินิก' : 'Please select a clinic')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกคลินิก' : 'Please select a clinic', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -450,21 +455,24 @@ export default function NewOutboundPage() {
       const data = await res.json()
       if (data.success) {
         const outboundId = isEditMode ? editingOutboundId : data.data.id
-        alert(
-          locale === 'th'
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th'
             ? isEditMode
               ? 'บันทึกการแก้ไขสำเร็จ!'
               : `สร้างใบส่งสินค้าสำเร็จ!\nDelivery No: ${data.data.deliveryNoteNo}\nจำนวน: ${data.data.linesCreated} รายการ`
             : isEditMode
               ? 'Changes saved successfully!'
-              : `Outbound created!\nDelivery No: ${data.data.deliveryNoteNo}\nItems: ${data.data.linesCreated}`
-        )
+              : `Outbound created!\nDelivery No: ${data.data.deliveryNoteNo}\nItems: ${data.data.linesCreated}`,
+          variant: 'success',
+          icon: 'success'
+        })
         router.push(`/${locale}/dashboard/outbound/${outboundId}`)
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })
       }
     } catch (error) {
-      alert(isEditMode ? 'Failed to update outbound' : 'Failed to create outbound')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: isEditMode ? (locale === 'th' ? 'ไม่สามารถแก้ไขใบส่งสินค้าได้' : 'Failed to update outbound') : (locale === 'th' ? 'ไม่สามารถสร้างใบส่งสินค้าได้' : 'Failed to create outbound'), variant: 'error', icon: 'error' })
     } finally {
       setLoading(false)
     }

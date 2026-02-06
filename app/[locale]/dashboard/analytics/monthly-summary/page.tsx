@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useAlert } from '@/components/ui/confirm-modal';
 
 interface MonthlySummary {
   month: string;
@@ -35,6 +36,7 @@ interface MonthlySummaryData {
 export default function MonthlySummaryPage() {
   const params = useParams();
   const locale = params?.locale as string || 'th';
+  const alert = useAlert();
 
   // State
   const [data, setData] = useState<MonthlySummaryData | null>(null);
@@ -73,7 +75,7 @@ export default function MonthlySummaryPage() {
       setData(result.data);
     } catch (error) {
       console.error(error);
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : 'Failed to load data');
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการโหลดข้อมูล' : 'Failed to load data', variant: 'error', icon: 'error' });
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface GRN {
   id: number
@@ -10,6 +11,12 @@ interface GRN {
   receivedAt: string
   poNo: string | null
   supplierName: string
+  supplierAddress: string | null
+  supplierPhone: string | null
+  supplierContact: string | null
+  deliveryNoteNo: string | null
+  deliveryDocDate: string | null
+  remarks: string | null
   approvedAt: string | null
   createdAt: string
   warehouse: { id: number; name: string }
@@ -19,6 +26,12 @@ interface GRN {
     id: number
     sku: string
     itemName: string
+    modelSize: string | null
+    lot: string | null
+    mfgDate: string | null
+    expDate: string | null
+    inspectionStatus: string
+    remarks: string | null
     productItem: { id: number; serial12: string; sku: string; name: string }
     unit: { nameTh: string }
   }>
@@ -41,12 +54,16 @@ interface Outbound {
     id: number
     sku: string
     itemName: string
+    modelSize: string | null
+    lot: string | null
+    expDate: string | null
     productItem: {
       id: number
       serial12: string
       sku: string
       name: string
       lot: string | null
+      mfgDate: string | null
       expDate: string | null
       status: string
     }
@@ -64,6 +81,8 @@ interface Stats {
 export default function ApprovalBoardPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [grnItems, setGrnItems] = useState<GRN[]>([])
   const [outboundItems, setOutboundItems] = useState<Outbound[]>([])
@@ -75,6 +94,8 @@ export default function ApprovalBoardPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'approved'>('all')
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [expandedGrn, setExpandedGrn] = useState<number | null>(null)
+  const [expandedOutbound, setExpandedOutbound] = useState<number | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -100,7 +121,15 @@ export default function ApprovalBoardPage() {
   }
 
   const handleApproveGRN = async (id: number) => {
-    if (!confirm(locale === 'th' ? 'ยืนยันอนุมัติใบรับสินค้านี้?' : 'Confirm approve this GRN?')) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติใบรับสินค้า' : 'Approve GRN',
+      message: locale === 'th' ? 'ยืนยันอนุมัติใบรับสินค้านี้?' : 'Confirm approve this GRN?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
 
     setProcessingId(`grn-${id}`)
     try {
@@ -111,13 +140,13 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully', variant: 'success', icon: 'success' })
         fetchData()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to approve')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
     } finally {
       setProcessingId(null)
     }
@@ -136,20 +165,28 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ปฏิเสธสำเร็จ' : 'Rejected successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธสำเร็จ' : 'Rejected successfully', variant: 'success', icon: 'success' })
         fetchData()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to reject')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to reject', variant: 'error', icon: 'error' })
     } finally {
       setProcessingId(null)
     }
   }
 
   const handleApproveOutbound = async (id: number) => {
-    if (!confirm(locale === 'th' ? 'ยืนยันอนุมัติใบส่งสินค้านี้?' : 'Confirm approve this outbound?')) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติใบส่งสินค้า' : 'Approve Outbound',
+      message: locale === 'th' ? 'ยืนยันอนุมัติใบส่งสินค้านี้?' : 'Confirm approve this outbound?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
 
     setProcessingId(`out-${id}`)
     try {
@@ -160,13 +197,13 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully', variant: 'success', icon: 'success' })
         fetchData()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to approve')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
     } finally {
       setProcessingId(null)
     }
@@ -185,13 +222,13 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ปฏิเสธสำเร็จ' : 'Rejected successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธสำเร็จ' : 'Rejected successfully', variant: 'success', icon: 'success' })
         fetchData()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to reject')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to reject', variant: 'error', icon: 'error' })
     } finally {
       setProcessingId(null)
     }
@@ -205,6 +242,23 @@ export default function ApprovalBoardPage() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  const formatDateShort = (dateStr: string | null) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  const toggleGrnExpand = (id: number) => {
+    setExpandedGrn(expandedGrn === id ? null : id)
+  }
+
+  const toggleOutboundExpand = (id: number) => {
+    setExpandedOutbound(expandedOutbound === id ? null : id)
   }
 
   return (
@@ -329,14 +383,20 @@ export default function ApprovalBoardPage() {
               <div className="space-y-4">
                 {grnItems.map((grn) => (
                   <div key={grn.id} className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden hover:shadow-[var(--shadow-lg)] transition-shadow">
+                    {/* Header with actions */}
                     <div className="p-5 border-b border-[var(--color-beige)] bg-blue-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
-                        <Link
-                          href={`/${locale}/dashboard/grn/${grn.id}`}
-                          className="text-lg font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-                        >
-                          {grn.grnNo}
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/${locale}/dashboard/grn/${grn.id}`}
+                            className="text-lg font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                          >
+                            {grn.grnNo}
+                          </Link>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                            {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
+                          </span>
+                        </div>
                         <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
                           {locale === 'th' ? 'รับเมื่อ' : 'Received'}: {formatDate(grn.receivedAt)} {locale === 'th' ? 'โดย' : 'by'} {grn.receivedBy.displayName}
                         </p>
@@ -364,8 +424,10 @@ export default function ApprovalBoardPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Summary Info */}
                     <div className="p-5">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'ผู้จัดส่ง' : 'Supplier'}</p>
                           <p className="font-medium text-[var(--color-charcoal)]">{grn.supplierName}</p>
@@ -378,34 +440,153 @@ export default function ApprovalBoardPage() {
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</p>
                           <p className="font-medium text-[var(--color-charcoal)]">{grn._count.lines} {locale === 'th' ? 'รายการ' : 'items'}</p>
                         </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'เลขที่ PO' : 'PO No'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{grn.poNo || '-'}</p>
+                        </div>
                       </div>
-                      {grn.lines.length > 0 && (
-                        <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-[var(--color-off-white)]">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Serial</th>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">SKU</th>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Item'}</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[var(--color-beige)]">
-                              {grn.lines.slice(0, 3).map((line) => (
-                                <tr key={line.id}>
-                                  <td className="px-4 py-2 font-mono text-xs text-blue-600">{line.productItem.serial12}</td>
-                                  <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.sku}</td>
-                                  <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.itemName}</td>
-                                </tr>
-                              ))}
-                              {grn.lines.length > 3 && (
-                                <tr>
-                                  <td colSpan={3} className="px-4 py-2 text-center text-[var(--color-foreground-muted)] text-xs">
-                                    ... {locale === 'th' ? `และอีก ${grn.lines.length - 3} รายการ` : `and ${grn.lines.length - 3} more`}
-                                  </td>
-                                </tr>
+
+                      {/* Expand Button */}
+                      <button
+                        onClick={() => toggleGrnExpand(grn.id)}
+                        className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] bg-[var(--color-gold)]/5 hover:bg-[var(--color-gold)]/10 rounded-xl transition-colors"
+                      >
+                        <svg
+                          className={`w-5 h-5 transition-transform duration-200 ${expandedGrn === grn.id ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        {expandedGrn === grn.id
+                          ? (locale === 'th' ? 'ซ่อนรายละเอียด' : 'Hide Details')
+                          : (locale === 'th' ? 'ดูรายละเอียดทั้งหมด' : 'View All Details')}
+                      </button>
+
+                      {/* Expanded Details */}
+                      {expandedGrn === grn.id && (
+                        <div className="mt-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                          {/* Supplier Details */}
+                          <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                            <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-3 flex items-center gap-2">
+                              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              {locale === 'th' ? 'ข้อมูลผู้จัดส่ง' : 'Supplier Information'}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ชื่อ:' : 'Name:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)] font-medium">{grn.supplierName}</span>
+                              </div>
+                              {grn.supplierContact && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ผู้ติดต่อ:' : 'Contact:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{grn.supplierContact}</span>
+                                </div>
                               )}
-                            </tbody>
-                          </table>
+                              {grn.supplierPhone && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'โทร:' : 'Phone:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{grn.supplierPhone}</span>
+                                </div>
+                              )}
+                              {grn.supplierAddress && (
+                                <div className="md:col-span-2">
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่:' : 'Address:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{grn.supplierAddress}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Document Details */}
+                          <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                            <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-3 flex items-center gap-2">
+                              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              {locale === 'th' ? 'ข้อมูลเอกสาร' : 'Document Information'}
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ PO:' : 'PO No:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{grn.poNo || '-'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ใบส่ง:' : 'DN No:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{grn.deliveryNoteNo || '-'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'วันที่เอกสาร:' : 'Doc Date:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{formatDateShort(grn.deliveryDocDate)}</span>
+                              </div>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'วันที่รับ:' : 'Received:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{formatDateShort(grn.receivedAt)}</span>
+                              </div>
+                            </div>
+                            {grn.remarks && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <span className="text-[var(--color-foreground-muted)] text-sm">{locale === 'th' ? 'หมายเหตุ:' : 'Remarks:'}</span>
+                                <p className="mt-1 text-sm text-[var(--color-charcoal)]">{grn.remarks}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* All Items Table */}
+                          {grn.lines.length > 0 && (
+                            <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
+                              <div className="bg-[var(--color-off-white)] px-4 py-2 border-b border-[var(--color-beige)]">
+                                <h4 className="text-sm font-semibold text-[var(--color-charcoal)]">
+                                  {locale === 'th' ? `รายการสินค้าทั้งหมด (${grn.lines.length} รายการ)` : `All Items (${grn.lines.length} items)`}
+                                </h4>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-[var(--color-off-white)]">
+                                    <tr>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">#</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Serial</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">SKU</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Item'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'รุ่น/ขนาด' : 'Model'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Lot</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ผลิต' : 'MFG'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'หมดอายุ' : 'EXP'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ตรวจสอบ' : 'QC'}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[var(--color-beige)]">
+                                    {grn.lines.map((line, idx) => (
+                                      <tr key={line.id} className="hover:bg-[var(--color-off-white)]/50">
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-mono text-xs text-blue-600">{line.productItem.serial12}</td>
+                                        <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.sku}</td>
+                                        <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.itemName}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{line.modelSize || '-'}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{line.lot || '-'}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)] text-xs">{formatDateShort(line.mfgDate)}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)] text-xs">{formatDateShort(line.expDate)}</td>
+                                        <td className="px-4 py-2">
+                                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                            line.inspectionStatus === 'OK'
+                                              ? 'bg-green-100 text-green-700'
+                                              : line.inspectionStatus === 'HOLD'
+                                              ? 'bg-yellow-100 text-yellow-700'
+                                              : 'bg-red-100 text-red-700'
+                                          }`}>
+                                            {line.inspectionStatus}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -542,14 +723,20 @@ export default function ApprovalBoardPage() {
               <div className="space-y-4">
                 {outboundItems.map((ob) => (
                   <div key={ob.id} className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden hover:shadow-[var(--shadow-lg)] transition-shadow">
+                    {/* Header with actions */}
                     <div className="p-5 border-b border-[var(--color-beige)] bg-purple-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
-                        <Link
-                          href={`/${locale}/dashboard/outbound/${ob.id}`}
-                          className="text-lg font-semibold text-purple-600 hover:text-purple-700 transition-colors"
-                        >
-                          {ob.deliveryNoteNo}
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/${locale}/dashboard/outbound/${ob.id}`}
+                            className="text-lg font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+                          >
+                            {ob.deliveryNoteNo}
+                          </Link>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                            {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
+                          </span>
+                        </div>
                         <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
                           {locale === 'th' ? 'สร้างเมื่อ' : 'Created'}: {formatDate(ob.createdAt)} {locale === 'th' ? 'โดย' : 'by'} {ob.createdBy.displayName}
                         </p>
@@ -577,12 +764,16 @@ export default function ApprovalBoardPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Summary Info */}
                     <div className="p-5">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'คลินิก' : 'Clinic'}</p>
                           <p className="font-medium text-[var(--color-charcoal)]">{ob.clinic.name}</p>
-                          <p className="text-sm text-[var(--color-foreground-muted)]">{ob.clinic.province}</p>
+                          {ob.clinic.branchName && (
+                            <p className="text-xs text-[var(--color-foreground-muted)]">{ob.clinic.branchName}</p>
+                          )}
                         </div>
                         <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'คลังต้นทาง' : 'Warehouse'}</p>
@@ -592,36 +783,141 @@ export default function ApprovalBoardPage() {
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'วิธีส่ง' : 'Shipping'}</p>
                           <p className="font-medium text-[var(--color-charcoal)]">{ob.shippingMethod.nameTh}</p>
                         </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{ob._count.lines} {locale === 'th' ? 'รายการ' : 'items'}</p>
+                        </div>
                       </div>
-                      {ob.lines.length > 0 && (
-                        <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-[var(--color-off-white)]">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Serial</th>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">SKU</th>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Item'}</th>
-                                <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Lot</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[var(--color-beige)]">
-                              {ob.lines.slice(0, 3).map((line) => (
-                                <tr key={line.id}>
-                                  <td className="px-4 py-2 font-mono text-xs text-purple-600">{line.productItem.serial12}</td>
-                                  <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.sku}</td>
-                                  <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.itemName}</td>
-                                  <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{line.productItem.lot || '-'}</td>
-                                </tr>
-                              ))}
-                              {ob.lines.length > 3 && (
-                                <tr>
-                                  <td colSpan={4} className="px-4 py-2 text-center text-[var(--color-foreground-muted)] text-xs">
-                                    ... {locale === 'th' ? `และอีก ${ob.lines.length - 3} รายการ` : `and ${ob.lines.length - 3} more`}
-                                  </td>
-                                </tr>
+
+                      {/* Expand Button */}
+                      <button
+                        onClick={() => toggleOutboundExpand(ob.id)}
+                        className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] bg-[var(--color-gold)]/5 hover:bg-[var(--color-gold)]/10 rounded-xl transition-colors"
+                      >
+                        <svg
+                          className={`w-5 h-5 transition-transform duration-200 ${expandedOutbound === ob.id ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        {expandedOutbound === ob.id
+                          ? (locale === 'th' ? 'ซ่อนรายละเอียด' : 'Hide Details')
+                          : (locale === 'th' ? 'ดูรายละเอียดทั้งหมด' : 'View All Details')}
+                      </button>
+
+                      {/* Expanded Details */}
+                      {expandedOutbound === ob.id && (
+                        <div className="mt-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                          {/* Clinic Details */}
+                          <div className="p-4 bg-purple-50/50 rounded-xl border border-purple-100">
+                            <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-3 flex items-center gap-2">
+                              <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              {locale === 'th' ? 'ข้อมูลคลินิก' : 'Clinic Information'}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ชื่อ:' : 'Name:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)] font-medium">{ob.clinic.name}</span>
+                              </div>
+                              {ob.clinic.branchName && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'สาขา:' : 'Branch:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.branchName}</span>
+                                </div>
                               )}
-                            </tbody>
-                          </table>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'จังหวัด:' : 'Province:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.province}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Document Details */}
+                          <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                            <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-3 flex items-center gap-2">
+                              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              {locale === 'th' ? 'ข้อมูลเอกสาร' : 'Document Information'}
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ PO:' : 'PO No:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.poNo || '-'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'วิธีส่ง:' : 'Shipping:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.shippingMethod.nameTh}</span>
+                              </div>
+                              <div>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'วันที่สร้าง:' : 'Created:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{formatDateShort(ob.createdAt)}</span>
+                              </div>
+                            </div>
+                            {ob.remarks && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <span className="text-[var(--color-foreground-muted)] text-sm">{locale === 'th' ? 'หมายเหตุ:' : 'Remarks:'}</span>
+                                <p className="mt-1 text-sm text-[var(--color-charcoal)]">{ob.remarks}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* All Items Table */}
+                          {ob.lines.length > 0 && (
+                            <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
+                              <div className="bg-[var(--color-off-white)] px-4 py-2 border-b border-[var(--color-beige)]">
+                                <h4 className="text-sm font-semibold text-[var(--color-charcoal)]">
+                                  {locale === 'th' ? `รายการสินค้าทั้งหมด (${ob.lines.length} รายการ)` : `All Items (${ob.lines.length} items)`}
+                                </h4>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-[var(--color-off-white)]">
+                                    <tr>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">#</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Serial</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">SKU</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Item'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'รุ่น/ขนาด' : 'Model'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Lot</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ผลิต' : 'MFG'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'หมดอายุ' : 'EXP'}</th>
+                                      <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[var(--color-beige)]">
+                                    {ob.lines.map((line, idx) => (
+                                      <tr key={line.id} className="hover:bg-[var(--color-off-white)]/50">
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-mono text-xs text-purple-600">{line.productItem.serial12}</td>
+                                        <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.sku}</td>
+                                        <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.itemName}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{line.modelSize || '-'}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{line.productItem.lot || '-'}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)] text-xs">{formatDateShort(line.productItem.mfgDate)}</td>
+                                        <td className="px-4 py-2 text-[var(--color-foreground-muted)] text-xs">{formatDateShort(line.productItem.expDate)}</td>
+                                        <td className="px-4 py-2">
+                                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                            line.productItem.status === 'IN_STOCK'
+                                              ? 'bg-green-100 text-green-700'
+                                              : line.productItem.status === 'RESERVED'
+                                              ? 'bg-yellow-100 text-yellow-700'
+                                              : 'bg-gray-100 text-gray-700'
+                                          }`}>
+                                            {line.productItem.status}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

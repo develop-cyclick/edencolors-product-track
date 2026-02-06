@@ -49,6 +49,7 @@ async function handleGET(request: NextRequest) {
       where,
       include: {
         category: { select: { id: true, nameTh: true, nameEn: true } },
+        productMaster: { select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true, defaultUnitId: true } },
         assignedClinic: { select: { id: true, name: true, province: true } },
         qrTokens: {
           where: { status: 'ACTIVE' },

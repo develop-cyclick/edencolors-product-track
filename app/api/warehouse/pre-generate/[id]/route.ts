@@ -19,6 +19,7 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
     where: { id },
     include: {
       createdBy: { select: { id: true, displayName: true } },
+      productMaster: { select: { id: true, sku: true, nameTh: true, serialCode: true } },
       productItems: {
         include: {
           qrTokens: {
@@ -50,6 +51,7 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
     quantity: batch.quantity,
     linkedCount,
     availableCount,
+    productMaster: batch.productMaster,
     createdBy: batch.createdBy,
     remarks: batch.remarks,
     createdAt: batch.createdAt,

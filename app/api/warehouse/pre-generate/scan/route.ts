@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse } from '@/lib/api-response'
 import { decryptQRToken } from '@/lib/qr-token'
+import { isValidSerialNumber } from '@/lib/serial-generator'
 import type { JWTPayload } from '@/lib/auth'
 
 type HandlerContext = { user: JWTPayload }
@@ -44,8 +45,8 @@ async function handlePOST(request: NextRequest, _context: HandlerContext) {
       const url = new URL(qrContent)
 
       // NEW: Check if it's a short URL format: /v/{serial}
-      const pathMatch = url.pathname.match(/\/v\/(\d{12})$/)
-      if (pathMatch) {
+      const pathMatch = url.pathname.match(/\/v\/([A-Z0-9]+)$/)
+      if (pathMatch && isValidSerialNumber(pathMatch[1])) {
         serialNumber = pathMatch[1]
         console.log('Detected new short URL format, serial:', serialNumber)
       }
@@ -66,8 +67,8 @@ async function handlePOST(request: NextRequest, _context: HandlerContext) {
         }
       }
     } catch {
-      // Not a URL, check if it's a raw serial number (12 digits)
-      if (/^\d{12}$/.test(qrContent)) {
+      // Not a URL, check if it's a raw serial number (new 19-char format)
+      if (isValidSerialNumber(qrContent)) {
         serialNumber = qrContent
         console.log('Detected raw serial format:', serialNumber)
       }

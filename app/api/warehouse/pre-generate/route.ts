@@ -9,7 +9,8 @@ import type { JWTPayload } from '@/lib/auth'
 type HandlerContext = { user: JWTPayload }
 
 interface CreatePreGenInput {
-  quantity: number  // 1-100
+  productMasterId: number
+  quantity: number
   remarks?: string
 }
 
@@ -33,6 +34,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       where,
       include: {
         createdBy: { select: { id: true, displayName: true } },
+        productMaster: { select: { id: true, sku: true, nameTh: true, serialCode: true } },
         _count: { select: { productItems: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -76,8 +78,27 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
   const user = context.user
 
   // Validate quantity
-  if (!body.quantity || body.quantity < 1 || body.quantity > 100) {
-    return errorResponse('Quantity must be between 1 and 100')
+  if (!body.quantity || body.quantity < 1) {
+    return errorResponse('Quantity must be greater than 0')
+  }
+
+  // Validate productMasterId
+  if (!body.productMasterId) {
+    return errorResponse('Product Master is required')
+  }
+
+  // Fetch ProductMaster with category
+  const productMaster = await prisma.productMaster.findUnique({
+    where: { id: body.productMasterId },
+    include: { category: true },
+  })
+
+  if (!productMaster) {
+    return errorResponse('Product Master not found')
+  }
+
+  if (!productMaster.isActive) {
+    return errorResponse('Product Master is inactive')
   }
 
   try {
@@ -85,12 +106,13 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       // Generate batch number
       const batchNo = await generatePreGenBatchNumber()
 
-      // Create batch
+      // Create batch with productMasterId
       const batch = await tx.preGeneratedBatch.create({
         data: {
           batchNo,
           quantity: body.quantity,
           linkedCount: 0,
+          productMasterId: productMaster.id,
           createdById: user.userId,
           remarks: body.remarks,
         },
@@ -100,16 +122,22 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       const createdItems = []
 
       for (let i = 0; i < body.quantity; i++) {
-        // Generate serial number
-        const serialNumber = await generateSerialNumber()
+        // Generate serial number with product info
+        const serialNumber = await generateSerialNumber({
+          activationType: productMaster.activationType,
+          categoryId: productMaster.categoryId,
+          serialCode: productMaster.serialCode,
+        })
 
-        // Create placeholder product item
+        // Create product item with real product data
         const productItem = await tx.productItem.create({
           data: {
             serial12: serialNumber,
-            sku: 'PRE-GEN',
-            name: 'Pre-Generated',
-            categoryId: 1, // Placeholder category (will be updated when linked)
+            sku: productMaster.sku,
+            name: productMaster.nameTh,
+            categoryId: productMaster.categoryId,
+            productMasterId: productMaster.id,
+            modelSize: productMaster.modelSize,
             status: 'PENDING_LINK',
             preGeneratedBatchId: batch.id,
           },

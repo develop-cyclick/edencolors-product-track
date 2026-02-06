@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface OutboundLine {
   id: number
@@ -57,6 +58,8 @@ export default function OutboundDetailPage() {
   const router = useRouter()
   const locale = params.locale as string
   const id = params.id as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [outbound, setOutbound] = useState<OutboundHeader | null>(null)
   const [loading, setLoading] = useState(true)
@@ -122,7 +125,15 @@ export default function OutboundDetailPage() {
   const canApprove = userRole === 'ADMIN' || userRole === 'MANAGER'
 
   const handleApprove = async () => {
-    if (!confirm(locale === 'th' ? 'ยืนยันการอนุมัติ?' : 'Confirm approval?')) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติการส่งออก' : 'Approve Outbound',
+      message: locale === 'th' ? 'ยืนยันการอนุมัติ?' : 'Confirm approval?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
 
     setActionLoading(true)
     try {
@@ -135,7 +146,7 @@ export default function OutboundDetailPage() {
       if (data.success) {
         fetchOutbound()
       } else {
-        alert(data.error || 'Failed to approve')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Failed to approve', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Failed to approve:', error)
@@ -146,7 +157,7 @@ export default function OutboundDetailPage() {
 
   const handleReject = async () => {
     if (!rejectReason.trim()) {
-      alert(locale === 'th' ? 'กรุณาระบุเหตุผล' : 'Please provide a reason')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาระบุเหตุผล' : 'Please provide a reason', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -163,7 +174,7 @@ export default function OutboundDetailPage() {
         setRejectReason('')
         fetchOutbound()
       } else {
-        alert(data.error || 'Failed to reject')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Failed to reject', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Failed to reject:', error)
@@ -183,7 +194,7 @@ export default function OutboundDetailPage() {
 
       if (!res.ok) {
         const data = await res.json()
-        alert(`Error: ${data.error || 'Failed to generate label'}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate label'}`, variant: 'error', icon: 'error' })
         return
       }
 
@@ -197,7 +208,7 @@ export default function OutboundDetailPage() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch {
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
     } finally {
       setPrintingItemId(null)
     }
@@ -205,12 +216,12 @@ export default function OutboundDetailPage() {
 
   const handleMarkDamaged = async () => {
     if (!selectedLine || !damageReason.trim()) {
-      alert(locale === 'th' ? 'กรุณาระบุสาเหตุความเสียหาย' : 'Please provide damage reason')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาระบุสาเหตุความเสียหาย' : 'Please provide damage reason', variant: 'warning', icon: 'warning' })
       return
     }
 
     if (wantReplacement && !selectedReplacement) {
-      alert(locale === 'th' ? 'กรุณาเลือกสินค้าทดแทน' : 'Please select a replacement product')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้าทดแทน' : 'Please select a replacement product', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -241,13 +252,13 @@ export default function OutboundDetailPage() {
         const message = wantReplacement
           ? (locale === 'th' ? 'บันทึกสินค้าเสียหายและเปลี่ยนสินค้าทดแทนเรียบร้อย' : 'Product marked as damaged and replaced')
           : (locale === 'th' ? 'บันทึกสินค้าเสียหายเรียบร้อย' : 'Product marked as damaged')
-        alert(message)
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
       } else {
-        alert(data.message || 'Error marking as damaged')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.message || 'Error marking as damaged', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Failed to mark as damaged:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred', variant: 'error', icon: 'error' })
     } finally {
       setDamageLoading(false)
     }

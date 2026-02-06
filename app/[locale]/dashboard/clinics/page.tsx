@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface Clinic {
   id: number
@@ -16,6 +17,8 @@ interface Clinic {
 export default function ClinicsPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,16 +118,31 @@ export default function ClinicsPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'อัปเดตคลินิกสำเร็จ' : 'Clinic updated successfully')
+          await alert({
+            title: locale === 'th' ? 'สำเร็จ' : 'Success',
+            message: locale === 'th' ? 'อัปเดตคลินิกสำเร็จ' : 'Clinic updated successfully',
+            variant: 'success',
+            icon: 'success',
+          })
           closeModal()
           fetchClinics()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({
+            title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+            message: data.error,
+            variant: 'error',
+            icon: 'error',
+          })
         }
       } else {
         // Create clinic
         if (!formData.name || !formData.province) {
-          alert(locale === 'th' ? 'กรุณากรอกชื่อและจังหวัด' : 'Please enter name and province')
+          await alert({
+            title: locale === 'th' ? 'ข้อมูลไม่ครบถ้วน' : 'Missing Information',
+            message: locale === 'th' ? 'กรุณากรอกชื่อและจังหวัด' : 'Please enter name and province',
+            variant: 'warning',
+            icon: 'warning',
+          })
           setActionLoading(false)
           return
         }
@@ -141,25 +159,47 @@ export default function ClinicsPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'สร้างคลินิกสำเร็จ' : 'Clinic created successfully')
+          await alert({
+            title: locale === 'th' ? 'สำเร็จ' : 'Success',
+            message: locale === 'th' ? 'สร้างคลินิกสำเร็จ' : 'Clinic created successfully',
+            variant: 'success',
+            icon: 'success',
+          })
           closeModal()
           fetchClinics()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({
+            title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+            message: data.error,
+            variant: 'error',
+            icon: 'error',
+          })
         }
       }
     } catch (error) {
-      alert('Failed to save clinic')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถบันทึกคลินิกได้' : 'Failed to save clinic',
+        variant: 'error',
+        icon: 'error',
+      })
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleDeactivate = async (clinic: Clinic) => {
-    if (!confirm(locale === 'th'
-      ? `ยืนยันการปิดใช้งานคลินิก "${clinic.name}"?`
-      : `Confirm deactivate clinic "${clinic.name}"?`
-    )) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ปิดใช้งานคลินิก' : 'Deactivate Clinic',
+      message: locale === 'th'
+        ? `ยืนยันการปิดใช้งานคลินิก "${clinic.name}"?`
+        : `Confirm deactivate clinic "${clinic.name}"?`,
+      confirmText: locale === 'th' ? 'ปิดใช้งาน' : 'Deactivate',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'warning',
+      icon: 'warning',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/admin/clinics/${clinic.id}`, {
@@ -167,13 +207,28 @@ export default function ClinicsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ปิดใช้งานคลินิกสำเร็จ' : 'Clinic deactivated successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'ปิดใช้งานคลินิกสำเร็จ' : 'Clinic deactivated successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchClinics()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to deactivate clinic')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถปิดใช้งานคลินิกได้' : 'Failed to deactivate clinic',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 
@@ -186,21 +241,43 @@ export default function ClinicsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'เปิดใช้งานคลินิกสำเร็จ' : 'Clinic activated successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'เปิดใช้งานคลินิกสำเร็จ' : 'Clinic activated successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchClinics()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to activate clinic')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถเปิดใช้งานคลินิกได้' : 'Failed to activate clinic',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 
   const handleDelete = async (clinic: Clinic) => {
-    if (!confirm(locale === 'th'
-      ? `ยืนยันการลบคลินิก "${clinic.name}" ถาวร?\n\nการลบจะไม่สามารถกู้คืนได้!`
-      : `Confirm permanently delete clinic "${clinic.name}"?\n\nThis action cannot be undone!`
-    )) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ลบคลินิกถาวร' : 'Delete Clinic Permanently',
+      message: locale === 'th'
+        ? `ยืนยันการลบคลินิก "${clinic.name}" ถาวร?\n\nการลบจะไม่สามารถกู้คืนได้!`
+        : `Confirm permanently delete clinic "${clinic.name}"?\n\nThis action cannot be undone!`,
+      confirmText: locale === 'th' ? 'ลบถาวร' : 'Delete',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'danger',
+      icon: 'delete',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/admin/clinics/${clinic.id}?hard=true`, {
@@ -208,13 +285,28 @@ export default function ClinicsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ลบคลินิกสำเร็จ' : 'Clinic deleted successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'ลบคลินิกสำเร็จ' : 'Clinic deleted successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchClinics()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to delete clinic')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถลบคลินิกได้' : 'Failed to delete clinic',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 
@@ -266,10 +358,20 @@ export default function ClinicsPage() {
         })
         fetchClinics() // Refresh the list
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to import file')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถนำเข้าไฟล์ได้' : 'Failed to import file',
+        variant: 'error',
+        icon: 'error',
+      })
     } finally {
       setImportLoading(false)
       if (fileInputRef.current) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface User {
   id: number
@@ -23,6 +24,8 @@ const ROLES = [
 export default function UsersPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -117,16 +120,31 @@ export default function UsersPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'อัปเดตผู้ใช้สำเร็จ' : 'User updated successfully')
+          await alert({
+            title: locale === 'th' ? 'สำเร็จ' : 'Success',
+            message: locale === 'th' ? 'อัปเดตผู้ใช้สำเร็จ' : 'User updated successfully',
+            variant: 'success',
+            icon: 'success',
+          })
           closeModal()
           fetchUsers()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({
+            title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+            message: data.error,
+            variant: 'error',
+            icon: 'error',
+          })
         }
       } else {
         // Create user
         if (!formData.username || !formData.password || !formData.displayName) {
-          alert(locale === 'th' ? 'กรุณากรอกข้อมูลให้ครบ' : 'Please fill in all required fields')
+          await alert({
+            title: locale === 'th' ? 'ข้อมูลไม่ครบ' : 'Missing Information',
+            message: locale === 'th' ? 'กรุณากรอกข้อมูลให้ครบ' : 'Please fill in all required fields',
+            variant: 'warning',
+            icon: 'warning',
+          })
           setActionLoading(false)
           return
         }
@@ -138,25 +156,47 @@ export default function UsersPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'สร้างผู้ใช้สำเร็จ' : 'User created successfully')
+          await alert({
+            title: locale === 'th' ? 'สำเร็จ' : 'Success',
+            message: locale === 'th' ? 'สร้างผู้ใช้สำเร็จ' : 'User created successfully',
+            variant: 'success',
+            icon: 'success',
+          })
           closeModal()
           fetchUsers()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({
+            title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+            message: data.error,
+            variant: 'error',
+            icon: 'error',
+          })
         }
       }
     } catch (error) {
-      alert('Failed to save user')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถบันทึกผู้ใช้ได้' : 'Failed to save user',
+        variant: 'error',
+        icon: 'error',
+      })
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleDeactivate = async (user: User) => {
-    if (!confirm(locale === 'th'
-      ? `ยืนยันการปิดใช้งานผู้ใช้ "${user.displayName}"?`
-      : `Confirm deactivate user "${user.displayName}"?`
-    )) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ปิดใช้งานผู้ใช้' : 'Deactivate User',
+      message: locale === 'th'
+        ? `ยืนยันการปิดใช้งานผู้ใช้ "${user.displayName}"?`
+        : `Confirm deactivate user "${user.displayName}"?`,
+      confirmText: locale === 'th' ? 'ปิดใช้งาน' : 'Deactivate',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'warning',
+      icon: 'warning',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
@@ -164,13 +204,28 @@ export default function UsersPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ปิดใช้งานผู้ใช้สำเร็จ' : 'User deactivated successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'ปิดใช้งานผู้ใช้สำเร็จ' : 'User deactivated successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchUsers()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to deactivate user')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถปิดใช้งานผู้ใช้ได้' : 'Failed to deactivate user',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 
@@ -183,21 +238,43 @@ export default function UsersPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'เปิดใช้งานผู้ใช้สำเร็จ' : 'User activated successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'เปิดใช้งานผู้ใช้สำเร็จ' : 'User activated successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchUsers()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to activate user')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถเปิดใช้งานผู้ใช้ได้' : 'Failed to activate user',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 
   const handleDelete = async (user: User) => {
-    if (!confirm(locale === 'th'
-      ? `ยืนยันการลบผู้ใช้ "${user.displayName}" ถาวร?\n\nการลบจะไม่สามารถกู้คืนได้!`
-      : `Confirm permanently delete user "${user.displayName}"?\n\nThis action cannot be undone!`
-    )) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ลบผู้ใช้ถาวร' : 'Delete User Permanently',
+      message: locale === 'th'
+        ? `ยืนยันการลบผู้ใช้ "${user.displayName}" ถาวร?\n\nการลบจะไม่สามารถกู้คืนได้!`
+        : `Confirm permanently delete user "${user.displayName}"?\n\nThis action cannot be undone!`,
+      confirmText: locale === 'th' ? 'ลบถาวร' : 'Delete',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'danger',
+      icon: 'delete',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/admin/users/${user.id}?hard=true`, {
@@ -205,13 +282,28 @@ export default function UsersPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ลบผู้ใช้สำเร็จ' : 'User deleted successfully')
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'ลบผู้ใช้สำเร็จ' : 'User deleted successfully',
+          variant: 'success',
+          icon: 'success',
+        })
         fetchUsers()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({
+          title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+          message: data.error,
+          variant: 'error',
+          icon: 'error',
+        })
       }
     } catch (error) {
-      alert('Failed to delete user')
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถลบผู้ใช้ได้' : 'Failed to delete user',
+        variant: 'error',
+        icon: 'error',
+      })
     }
   }
 

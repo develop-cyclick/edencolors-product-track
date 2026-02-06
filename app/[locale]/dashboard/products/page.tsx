@@ -3,10 +3,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface ProductMaster {
   id: number
   sku: string
+  serialCode: string
   nameTh: string
   nameEn: string | null
   imageUrl: string | null
@@ -36,6 +38,8 @@ interface Category {
 export default function ProductMasterPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [productMasters, setProductMasters] = useState<ProductMaster[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -49,6 +53,7 @@ export default function ProductMasterPage() {
 
   const [formData, setFormData] = useState({
     sku: '',
+    serialCode: '',
     nameTh: '',
     nameEn: '',
     imageUrl: '',
@@ -148,11 +153,11 @@ export default function ProductMasterPage() {
       if (data.success && data.data?.url) {
         setFormData({ ...formData, imageUrl: data.data.url })
       } else {
-        alert(data.error || 'Upload failed')
+        await alert({ title: locale === 'th' ? 'อัพโหลดล้มเหลว' : 'Upload Failed', message: data.error || 'Upload failed', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Upload error:', error)
-      alert('Upload failed')
+      await alert({ title: locale === 'th' ? 'อัพโหลดล้มเหลว' : 'Upload Failed', message: locale === 'th' ? 'ไม่สามารถอัพโหลดได้' : 'Upload failed', variant: 'error', icon: 'error' })
     } finally {
       setUploadingImage(false)
     }
@@ -162,6 +167,7 @@ export default function ProductMasterPage() {
     setEditingItem(null)
     setFormData({
       sku: '',
+      serialCode: '',
       nameTh: '',
       nameEn: '',
       imageUrl: '',
@@ -179,6 +185,7 @@ export default function ProductMasterPage() {
     setEditingItem(pm)
     setFormData({
       sku: pm.sku,
+      serialCode: pm.serialCode || '',
       nameTh: pm.nameTh,
       nameEn: pm.nameEn || '',
       imageUrl: pm.imageUrl || '',
@@ -226,22 +233,28 @@ export default function ProductMasterPage() {
         setShowModal(false)
         fetchProductMasters()
       } else {
-        alert(data.error || 'Failed to save')
+        await alert({ title: locale === 'th' ? 'บันทึกล้มเหลว' : 'Save Failed', message: data.error || 'Failed to save', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Submit error:', error)
-      alert('Failed to save')
+      await alert({ title: locale === 'th' ? 'บันทึกล้มเหลว' : 'Save Failed', message: locale === 'th' ? 'ไม่สามารถบันทึกได้' : 'Failed to save', variant: 'error', icon: 'error' })
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleDelete = async (pm: ProductMaster) => {
-    const confirmMsg = locale === 'th'
-      ? `ต้องการลบ "${pm.nameTh}" หรือไม่?`
-      : `Delete "${pm.nameTh}"?`
-
-    if (!confirm(confirmMsg)) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ลบสินค้า' : 'Delete Product',
+      message: locale === 'th'
+        ? `ต้องการลบ "${pm.nameTh}" หรือไม่?`
+        : `Delete "${pm.nameTh}"?`,
+      confirmText: locale === 'th' ? 'ลบ' : 'Delete',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'danger',
+      icon: 'delete',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch('/api/admin/masters/products', {
@@ -254,11 +267,11 @@ export default function ProductMasterPage() {
       if (data.success) {
         fetchProductMasters()
       } else {
-        alert(data.error || 'Failed to delete')
+        await alert({ title: locale === 'th' ? 'ลบล้มเหลว' : 'Delete Failed', message: data.error || 'Failed to delete', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Delete error:', error)
-      alert('Failed to delete')
+      await alert({ title: locale === 'th' ? 'ลบล้มเหลว' : 'Delete Failed', message: locale === 'th' ? 'ไม่สามารถลบได้' : 'Failed to delete', variant: 'error', icon: 'error' })
     }
   }
 
@@ -369,6 +382,7 @@ export default function ProductMasterPage() {
                     {locale === 'th' ? 'รูป' : 'Image'}
                   </th>
                   <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">SKU</th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial Code</th>
                   <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                     {locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}
                   </th>
@@ -413,6 +427,9 @@ export default function ProductMasterPage() {
                     </td>
                     <td className="px-5 py-4">
                       <span className="font-mono text-sm font-medium text-[var(--color-charcoal)]">{pm.sku}</span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="font-mono text-sm text-[var(--color-gold)]">{pm.serialCode}</span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="font-medium text-[var(--color-charcoal)]">
@@ -577,7 +594,7 @@ export default function ProductMasterPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
                       SKU <span className="text-red-500">*</span>
@@ -590,6 +607,24 @@ export default function ProductMasterPage() {
                       required
                       placeholder="e.g., FIL-001"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      Serial Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.serialCode}
+                      onChange={(e) => setFormData({ ...formData, serialCode: e.target.value.toUpperCase().slice(0, 5) })}
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)] font-mono"
+                      required
+                      maxLength={5}
+                      pattern="[A-Z0-9]{5}"
+                      placeholder="e.g., BBN01"
+                    />
+                    <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                      {locale === 'th' ? '5 ตัวอักษร (A-Z, 0-9)' : '5 chars (A-Z, 0-9)'}
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display'
 
@@ -20,6 +21,8 @@ interface SystemSettings {
 export default function SettingsPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [activeTab, setActiveTab] = useState<TabType>('categories')
   const [items, setItems] = useState<MasterItem[]>([])
@@ -86,11 +89,11 @@ export default function SettingsPage() {
       if (data.success) {
         setSystemSettings((prev) => ({ ...prev, [key]: value }))
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Failed to update system setting:', error)
-      alert('Failed to update setting')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to update setting', variant: 'error', icon: 'error' })
     }
   }
 
@@ -165,11 +168,11 @@ export default function SettingsPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'อัปเดตสำเร็จ' : 'Updated successfully')
+          await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อัปเดตสำเร็จ' : 'Updated successfully', variant: 'success', icon: 'success' })
           closeModal()
           fetchItems()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
         }
       } else {
         // Create
@@ -178,14 +181,14 @@ export default function SettingsPage() {
         }
         if (isWarehouse) {
           if (!formData.name) {
-            alert(locale === 'th' ? 'กรุณากรอกชื่อ' : 'Please enter name')
+            await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกชื่อ' : 'Please enter name', variant: 'warning', icon: 'warning' })
             setActionLoading(false)
             return
           }
           createData.name = formData.name
         } else {
           if (!formData.nameTh) {
-            alert(locale === 'th' ? 'กรุณากรอกชื่อภาษาไทย' : 'Please enter Thai name')
+            await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกชื่อภาษาไทย' : 'Please enter Thai name', variant: 'warning', icon: 'warning' })
             setActionLoading(false)
             return
           }
@@ -200,15 +203,15 @@ export default function SettingsPage() {
         })
         const data = await res.json()
         if (data.success) {
-          alert(locale === 'th' ? 'เพิ่มสำเร็จ' : 'Created successfully')
+          await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'เพิ่มสำเร็จ' : 'Created successfully', variant: 'success', icon: 'success' })
           closeModal()
           fetchItems()
         } else {
-          alert(`Error: ${data.error}`)
+          await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
         }
       }
     } catch (error) {
-      alert('Failed to save')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to save', variant: 'error', icon: 'error' })
     } finally {
       setActionLoading(false)
     }
@@ -228,19 +231,26 @@ export default function SettingsPage() {
       if (data.success) {
         fetchItems()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch (error) {
-      alert('Failed to update')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to update', variant: 'error', icon: 'error' })
     }
   }
 
   const handleDelete = async (item: MasterItem) => {
     const itemName = item.name || item.nameTh || ''
-    if (!confirm(locale === 'th'
-      ? `ยืนยันการลบ "${itemName}"? การลบจะไม่สามารถกู้คืนได้`
-      : `Confirm delete "${itemName}"? This action cannot be undone.`
-    )) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ลบข้อมูล' : 'Delete Item',
+      message: locale === 'th'
+        ? `ยืนยันการลบ "${itemName}"? การลบจะไม่สามารถกู้คืนได้`
+        : `Confirm delete "${itemName}"? This action cannot be undone.`,
+      confirmText: locale === 'th' ? 'ลบ' : 'Delete',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'danger',
+      icon: 'delete',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(currentTab.endpoint, {
@@ -250,13 +260,13 @@ export default function SettingsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ลบสำเร็จ' : 'Deleted successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ลบสำเร็จ' : 'Deleted successfully', variant: 'success', icon: 'success' })
         fetchItems()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch (error) {
-      alert('Failed to delete')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to delete', variant: 'error', icon: 'error' })
     }
   }
 

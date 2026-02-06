@@ -179,10 +179,10 @@ export async function generateBorrowTransactionPDF(data: BorrowTransactionData):
       },
       columnStyles: {
         0: { halign: 'center', cellWidth: 12 },  // ลำดับ
-        1: { halign: 'left', cellWidth: 50 },    // รายการ
-        2: { halign: 'center', cellWidth: 20 },  // LOT
-        3: { halign: 'center', cellWidth: 20 },  // EXP
-        4: { halign: 'center', cellWidth: 30 },  // Number
+        1: { halign: 'left', cellWidth: 40 },    // รายการ
+        2: { halign: 'center', cellWidth: 18 },  // LOT
+        3: { halign: 'center', cellWidth: 18 },  // EXP
+        4: { halign: 'center', cellWidth: 40, fontSize: 7 },  // Number (19-char serial)
         5: { halign: 'center', cellWidth: 15 },  // จำนวน
         6: { halign: 'center', cellWidth: 15 },  // หน่วย
         7: { halign: 'left', cellWidth: 23 },    // หมายเหตุ

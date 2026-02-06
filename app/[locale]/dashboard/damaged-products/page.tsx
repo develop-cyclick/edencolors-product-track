@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useAlert } from '@/components/ui/confirm-modal'
 
 interface DamagedProduct {
   id: number
@@ -102,7 +103,9 @@ interface BorrowSearchResult {
   modelSize?: string
   expDate?: string
   status: string
+  productMasterId?: number
   productMaster?: {
+    id: number
     nameTh: string
     nameEn: string | null
     modelSize: string | null
@@ -113,6 +116,7 @@ interface BorrowSearchResult {
 export default function DamagedProductsPage() {
   const params = useParams()
   const locale = params.locale as string
+  const alert = useAlert()
 
   // Main tab state
   const [mainTab, setMainTab] = useState<MainTab>('list')
@@ -189,6 +193,25 @@ export default function DamagedProductsPage() {
     totalPages: 0,
   })
 
+  // Convert to outbound modal states
+  const [showConvertModal, setShowConvertModal] = useState(false)
+  const [convertClinics, setConvertClinics] = useState<{id:number,name:string,province:string,branchName:string|null}[]>([])
+  const [convertWarehouses, setConvertWarehouses] = useState<{id:number,name:string}[]>([])
+  const [convertShippingMethods, setConvertShippingMethods] = useState<{id:number,nameTh:string}[]>([])
+  const [convertClinicId, setConvertClinicId] = useState(0)
+  const [convertWarehouseId, setConvertWarehouseId] = useState(0)
+  const [convertShippingMethodId, setConvertShippingMethodId] = useState(0)
+  const [convertContractNo, setConvertContractNo] = useState('')
+  const [convertSalesPersonName, setConvertSalesPersonName] = useState('')
+  const [convertCompanyContact, setConvertCompanyContact] = useState('')
+  const [convertClinicAddress, setConvertClinicAddress] = useState('')
+  const [convertClinicPhone, setConvertClinicPhone] = useState('')
+  const [convertClinicEmail, setConvertClinicEmail] = useState('')
+  const [convertClinicContactName, setConvertClinicContactName] = useState('')
+  const [convertRemarks, setConvertRemarks] = useState('')
+  const [isConverting, setIsConverting] = useState(false)
+  const [convertClinicSearch, setConvertClinicSearch] = useState('')
+
   // Approve/Reject modal states
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<BorrowTransaction | null>(null)
@@ -244,7 +267,7 @@ export default function DamagedProductsPage() {
         setRepairNote('')
         fetchItems()
       } else {
-        alert(data.message || 'Error')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.message || 'Error', variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Failed to restore product:', error)
@@ -378,7 +401,7 @@ export default function DamagedProductsPage() {
       const data = await res.json()
 
       if (data.success) {
-        alert(locale === 'th' ? 'รับคืนสินค้าสำเร็จ' : 'Product returned successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'รับคืนสินค้าสำเร็จ' : 'Product returned successfully', variant: 'success', icon: 'success' })
         setShowReturnModal(false)
         setSearchResult(null)
         setSearchSerial('')
@@ -386,11 +409,11 @@ export default function DamagedProductsPage() {
         setReturnNotes('')
         fetchItems()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Return error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return product')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return product', variant: 'error', icon: 'error' })
     } finally {
       setIsProcessing(false)
     }
@@ -418,7 +441,7 @@ export default function DamagedProductsPage() {
         const message = locale === 'th'
           ? `รับคืนสินค้าสำเร็จ ${data.data.returnedCount} รายการ`
           : `${data.data.returnedCount} products returned successfully`
-        alert(message)
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         setShowLotReturnModal(false)
         setLotProducts([])
         setSelectedLotProducts([])
@@ -427,11 +450,11 @@ export default function DamagedProductsPage() {
         setReturnNotes('')
         fetchItems()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Lot return error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return products')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return products', variant: 'error', icon: 'error' })
     } finally {
       setIsProcessing(false)
     }
@@ -547,12 +570,12 @@ export default function DamagedProductsPage() {
 
   const handleBorrowSubmit = async () => {
     if (selectedBorrowProducts.length === 0) {
-      alert(locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product', variant: 'warning', icon: 'warning' })
       return
     }
 
     if (!borrowerName.trim()) {
-      alert(locale === 'th' ? 'กรุณากรอกชื่อผู้ยืม/คืนสินค้า' : 'Please enter borrower name')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกชื่อผู้ยืม/คืนสินค้า' : 'Please enter borrower name', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -584,15 +607,15 @@ export default function DamagedProductsPage() {
             : locale === 'th'
               ? `คืนสินค้าเข้าคลังสำเร็จ (${data.data.transactionNo})`
               : `Products returned to stock (${data.data.transactionNo})`
-        alert(message)
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         clearBorrowForm()
         fetchBorrowHistory()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Borrow submit error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการดำเนินการ' : 'Operation failed')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการดำเนินการ' : 'Operation failed', variant: 'error', icon: 'error' })
     } finally {
       setIsBorrowSubmitting(false)
     }
@@ -602,7 +625,7 @@ export default function DamagedProductsPage() {
     if (!selectedTransaction) return
 
     if (action === 'reject' && !rejectReason.trim()) {
-      alert(locale === 'th' ? 'กรุณากรอกเหตุผลในการปฏิเสธ' : 'Please enter rejection reason')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกเหตุผลในการปฏิเสธ' : 'Please enter rejection reason', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -620,27 +643,131 @@ export default function DamagedProductsPage() {
       const data = await res.json()
 
       if (data.success) {
-        alert(
-          action === 'approve'
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: action === 'approve'
             ? locale === 'th'
               ? 'อนุมัติคำขอยืมสินค้าสำเร็จ'
               : 'Borrow request approved'
             : locale === 'th'
               ? 'ปฏิเสธคำขอยืมสินค้าสำเร็จ'
-              : 'Borrow request rejected'
-        )
+              : 'Borrow request rejected',
+          variant: 'success',
+          icon: 'success'
+        })
         setShowApproveModal(false)
         setSelectedTransaction(null)
         setRejectReason('')
         fetchBorrowHistory()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Approve/Reject error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Operation failed')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Operation failed', variant: 'error', icon: 'error' })
     } finally {
       setIsApproving(false)
+    }
+  }
+
+  const openConvertModal = async () => {
+    try {
+      const [clinicsRes, warehousesRes, shippingRes] = await Promise.all([
+        fetch('/api/admin/clinics'),
+        fetch('/api/admin/masters/warehouses'),
+        fetch('/api/admin/masters/shipping-methods'),
+      ])
+
+      const [clinicsData, warehousesData, shippingData] = await Promise.all([
+        clinicsRes.json(),
+        warehousesRes.json(),
+        shippingRes.json(),
+      ])
+
+      const clinics = clinicsData.success ? (clinicsData.data?.clinics || clinicsData.data || []) : []
+      const warehouses = warehousesData.success ? (warehousesData.data?.warehouses || warehousesData.data || []) : []
+      const shippingMethods = shippingData.success ? (shippingData.data?.shippingMethods || shippingData.data || []) : []
+
+      setConvertClinics(clinics)
+      setConvertWarehouses(warehouses)
+      setConvertShippingMethods(shippingMethods)
+      setConvertClinicId(0)
+      setConvertWarehouseId(warehouses.length > 0 ? warehouses[0].id : 0)
+      setConvertShippingMethodId(shippingMethods.length > 0 ? shippingMethods[0].id : 0)
+      setConvertContractNo('')
+      setConvertSalesPersonName('')
+      setConvertCompanyContact('')
+      setConvertClinicAddress('')
+      setConvertClinicPhone('')
+      setConvertClinicEmail('')
+      setConvertClinicContactName('')
+      setConvertRemarks('')
+      setConvertClinicSearch('')
+      setShowConvertModal(true)
+    } catch (error) {
+      console.error('Failed to load master data:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถโหลดข้อมูลได้' : 'Failed to load data', variant: 'error', icon: 'error' })
+    }
+  }
+
+  const handleConvertSubmit = async () => {
+    if (selectedBorrowProducts.length === 0) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product', variant: 'warning', icon: 'warning' })
+      return
+    }
+    if (!convertClinicSearch.trim()) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกชื่อคลินิก/ชื่อคนซื้อ' : 'Please enter clinic or buyer name', variant: 'warning', icon: 'warning' })
+      return
+    }
+    if (!convertWarehouseId) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกคลังสินค้า' : 'Please select a warehouse', variant: 'warning', icon: 'warning' })
+      return
+    }
+    if (!convertShippingMethodId) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกวิธีจัดส่ง' : 'Please select a shipping method', variant: 'warning', icon: 'warning' })
+      return
+    }
+
+    setIsConverting(true)
+    try {
+      const res = await fetch('/api/warehouse/borrow/convert-to-outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productItemIds: selectedBorrowProducts,
+          clinicId: convertClinicId || undefined,
+          clinicName: convertClinicSearch.trim(),
+          warehouseId: convertWarehouseId,
+          shippingMethodId: convertShippingMethodId,
+          contractNo: convertContractNo.trim() || undefined,
+          salesPersonName: convertSalesPersonName.trim() || undefined,
+          companyContact: convertCompanyContact.trim() || undefined,
+          clinicAddress: convertClinicAddress.trim() || undefined,
+          clinicPhone: convertClinicPhone.trim() || undefined,
+          clinicEmail: convertClinicEmail.trim() || undefined,
+          clinicContactName: convertClinicContactName.trim() || convertClinicSearch.trim() || undefined,
+          remarks: convertRemarks.trim() || undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        const msg = locale === 'th'
+          ? `สร้าง PO (${data.data.poNo}) และใบส่งสินค้า (${data.data.outboundNo}) สำเร็จ\nจำนวน ${data.data.itemCount} รายการ`
+          : `Created PO (${data.data.poNo}) and Outbound (${data.data.outboundNo})\n${data.data.itemCount} items`
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: msg, variant: 'success', icon: 'success' })
+        setShowConvertModal(false)
+        clearBorrowForm()
+        fetchBorrowProducts()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
+      }
+    } catch (error) {
+      console.error('Convert error:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการดำเนินการ' : 'Operation failed', variant: 'error', icon: 'error' })
+    } finally {
+      setIsConverting(false)
     }
   }
 
@@ -1500,14 +1627,14 @@ export default function DamagedProductsPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">
-                        {locale === 'th' ? 'ชื่อคลินิก' : 'Clinic Name'}
+                        {locale === 'th' ? 'ชื่อคลินิก/ชื่อคนซื้อ' : 'Clinic / Buyer Name'}
                       </label>
                       <input
                         type="text"
                         value={borrowClinicName}
                         onChange={(e) => setBorrowClinicName(e.target.value)}
                         className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
-                        placeholder={locale === 'th' ? 'กรอกชื่อคลินิก' : 'Enter clinic name'}
+                        placeholder={locale === 'th' ? 'กรอกชื่อคลินิก/ชื่อคนซื้อ' : 'Enter clinic or buyer name'}
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -1569,6 +1696,18 @@ export default function DamagedProductsPage() {
                   >
                     {locale === 'th' ? 'ล้างข้อมูล' : 'Clear'}
                   </button>
+                  {borrowMode === 'return_borrowed' && (
+                    <button
+                      onClick={openConvertModal}
+                      disabled={selectedBorrowProducts.length === 0}
+                      className="px-6 py-3 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {locale === 'th' ? 'สร้าง PO & ใบส่งสินค้า' : 'Create PO & Outbound'}
+                    </button>
+                  )}
                   <button
                     onClick={handleBorrowSubmit}
                     disabled={selectedBorrowProducts.length === 0 || !borrowerName.trim() || isBorrowSubmitting}
@@ -2035,6 +2174,274 @@ export default function DamagedProductsPage() {
                 }}
                 disabled={isApproving}
                 className="px-4 py-2.5 border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+              >
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Convert to PO & Outbound Modal */}
+      {showConvertModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {locale === 'th' ? 'สร้าง PO & ใบส่งสินค้า' : 'Create PO & Outbound'}
+            </h3>
+
+            {/* Product Summary */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
+              <h4 className="text-sm font-medium text-indigo-700 mb-2">
+                {locale === 'th' ? 'สรุปสินค้าที่เลือก' : 'Selected Products Summary'}
+              </h4>
+              <div className="space-y-1 text-sm max-h-32 overflow-y-auto">
+                {(() => {
+                  const grouped = new Map<string, { name: string; sku: string; count: number }>()
+                  borrowProductsList
+                    .filter((p) => selectedBorrowProducts.includes(p.id))
+                    .forEach((p) => {
+                      const key = p.productMaster?.id?.toString() || p.sku
+                      const existing = grouped.get(key)
+                      if (existing) {
+                        existing.count++
+                      } else {
+                        grouped.set(key, {
+                          name: p.productMaster
+                            ? (locale === 'th' ? p.productMaster.nameTh : p.productMaster.nameEn || p.productMaster.nameTh)
+                            : p.name,
+                          sku: p.sku,
+                          count: 1,
+                        })
+                      }
+                    })
+                  return Array.from(grouped.values()).map((g, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span className="truncate flex-1">
+                        <span className="font-mono text-indigo-600">{g.sku}</span>
+                        <span className="text-[var(--color-gray-600)] ml-2">{g.name}</span>
+                      </span>
+                      <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                        x{g.count}
+                      </span>
+                    </div>
+                  ))
+                })()}
+              </div>
+              <div className="mt-2 pt-2 border-t border-indigo-200 text-sm font-medium text-indigo-700">
+                {locale === 'th' ? `รวม ${selectedBorrowProducts.length} รายการ` : `Total: ${selectedBorrowProducts.length} items`}
+              </div>
+            </div>
+
+            {/* Required Fields */}
+            <div className="space-y-4 mb-4">
+              <div className="relative">
+                <label className="block text-sm font-medium mb-1">
+                  {locale === 'th' ? 'ชื่อคลินิก/ชื่อคนซื้อ' : 'Clinic / Buyer Name'} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={convertClinicSearch}
+                  onChange={(e) => {
+                    setConvertClinicSearch(e.target.value)
+                    // Clear clinic selection if user edits the text
+                    if (convertClinicId) setConvertClinicId(0)
+                  }}
+                  placeholder={locale === 'th' ? 'กรอกชื่อคลินิก/ชื่อคนซื้อ' : 'Enter clinic or buyer name'}
+                  className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                />
+                {convertClinicId > 0 && (
+                  <span className="absolute right-3 top-[34px] text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">
+                    {locale === 'th' ? 'เชื่อมกับคลินิกในระบบ' : 'Linked to clinic'}
+                  </span>
+                )}
+                {/* Autocomplete suggestions */}
+                {convertClinicSearch.length >= 2 && convertClinicId === 0 && (
+                  (() => {
+                    const matches = convertClinics.filter((c) =>
+                      c.name.toLowerCase().includes(convertClinicSearch.toLowerCase()) ||
+                      c.province?.toLowerCase().includes(convertClinicSearch.toLowerCase()) ||
+                      c.branchName?.toLowerCase().includes(convertClinicSearch.toLowerCase())
+                    ).slice(0, 5)
+                    return matches.length > 0 ? (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-[var(--color-gray-200)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                        {matches.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setConvertClinicId(c.id)
+                              setConvertClinicSearch(c.name)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors border-b border-[var(--color-gray-100)] last:border-b-0"
+                          >
+                            <span className="font-medium">{c.name}</span>
+                            {c.branchName && <span className="text-[var(--color-gray-400)]"> ({c.branchName})</span>}
+                            <span className="text-[var(--color-gray-400)]"> - {c.province}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null
+                  })()
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    {locale === 'th' ? 'คลังสินค้า' : 'Warehouse'} <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={convertWarehouseId}
+                    onChange={(e) => setConvertWarehouseId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  >
+                    <option value={0}>{locale === 'th' ? '-- เลือกคลัง --' : '-- Select warehouse --'}</option>
+                    {convertWarehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    {locale === 'th' ? 'วิธีจัดส่ง' : 'Shipping Method'} <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={convertShippingMethodId}
+                    onChange={(e) => setConvertShippingMethodId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  >
+                    <option value={0}>{locale === 'th' ? '-- เลือกวิธีจัดส่ง --' : '-- Select shipping --'}</option>
+                    {convertShippingMethods.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nameTh}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional Delivery Info */}
+            <details className="mb-4">
+              <summary className="text-sm font-medium text-[var(--color-gray-600)] cursor-pointer hover:text-[var(--color-charcoal)]">
+                {locale === 'th' ? 'ข้อมูลเพิ่มเติม (ไม่บังคับ)' : 'Additional Info (Optional)'}
+              </summary>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'เลขที่สัญญา' : 'Contract No.'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertContractNo}
+                    onChange={(e) => setConvertContractNo(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'ชื่อพนักงานขาย' : 'Sales Person'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertSalesPersonName}
+                    onChange={(e) => setConvertSalesPersonName(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'ผู้ติดต่อบริษัท' : 'Company Contact'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertCompanyContact}
+                    onChange={(e) => setConvertCompanyContact(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'ชื่อผู้ติดต่อคลินิก' : 'Clinic Contact Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertClinicContactName}
+                    onChange={(e) => setConvertClinicContactName(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'ที่อยู่คลินิก' : 'Clinic Address'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertClinicAddress}
+                    onChange={(e) => setConvertClinicAddress(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'เบอร์โทร' : 'Phone'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertClinicPhone}
+                    onChange={(e) => setConvertClinicPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'อีเมล' : 'Email'}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertClinicEmail}
+                    onChange={(e) => setConvertClinicEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                    {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
+                  </label>
+                  <textarea
+                    value={convertRemarks}
+                    onChange={(e) => setConvertRemarks(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+            </details>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-2 border-t border-[var(--color-gray-200)]">
+              <button
+                onClick={handleConvertSubmit}
+                disabled={isConverting || !convertClinicSearch.trim() || !convertWarehouseId || !convertShippingMethodId}
+                className="flex-1 py-2.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+              >
+                {isConverting ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...'}
+                  </>
+                ) : (
+                  locale === 'th' ? 'ยืนยัน' : 'Confirm'
+                )}
+              </button>
+              <button
+                onClick={() => setShowConvertModal(false)}
+                disabled={isConverting}
+                className="px-6 py-2.5 border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>

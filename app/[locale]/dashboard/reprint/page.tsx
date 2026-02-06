@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useAlert } from '@/components/ui/confirm-modal'
 
 interface TokenHistory {
   version: number
@@ -36,6 +37,7 @@ interface ReprintResult {
 export default function ReprintPage() {
   const params = useParams()
   const locale = params.locale as string
+  const alert = useAlert()
 
   const [products, setProducts] = useState<ProductItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,10 +100,10 @@ export default function ReprintPage() {
         setReprintResult(data.data)
         fetchProducts(searchSerial)
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to reprint')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถพิมพ์ใหม่ได้' : 'Failed to reprint', variant: 'error', icon: 'error' })
     } finally {
       setReprinting(null)
       setShowModal(false)
@@ -129,10 +131,10 @@ export default function ReprintPage() {
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
       } else {
-        alert('Failed to generate label')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Label ได้' : 'Failed to generate label', variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to download label')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Label ได้' : 'Failed to download label', variant: 'error', icon: 'error' })
     }
   }
 

@@ -10,13 +10,9 @@ async function main() {
   // 1. Product Categories (หมวดหมู่สินค้า)
   // ============================================
   const categories = [
-    { nameTh: 'ฟิลเลอร์', nameEn: 'Filler' },
-    { nameTh: 'เมโส', nameEn: 'Meso' },
-    { nameTh: 'สกินแคร์', nameEn: 'Skincare' },
     { nameTh: 'ยา', nameEn: 'Medicine' },
-    { nameTh: 'เครื่องมือแพทย์', nameEn: 'Medical Device' },
+    { nameTh: 'เครื่องมือแพทย์', nameEn: 'Medical Instruments' },
     { nameTh: 'เครื่องสำอาง', nameEn: 'Cosmetic' },
-    { nameTh: 'อื่นๆ', nameEn: 'Other' },
   ]
 
   for (const cat of categories) {
@@ -32,13 +28,8 @@ async function main() {
   // 2. Units (หน่วยนับ)
   // ============================================
   const units = [
-    { nameTh: 'ชิ้น', nameEn: 'Piece' },
     { nameTh: 'กล่อง', nameEn: 'Box' },
     { nameTh: 'ขวด', nameEn: 'Bottle' },
-    { nameTh: 'ซอง', nameEn: 'Sachet' },
-    { nameTh: 'หลอด', nameEn: 'Tube' },
-    { nameTh: 'เส้น', nameEn: 'Thread' },
-    { nameTh: 'ชุด', nameEn: 'Set' },
     { nameTh: 'แพ็ก', nameEn: 'Pack' },
   ]
 
@@ -162,25 +153,16 @@ async function main() {
   // 8. Product Masters (ข้อมูลหลักสินค้า)
   // ============================================
   const productMasters = [
-    // Filler (categoryId: 1)
-    { sku: 'FIL-001', nameTh: 'Juvederm Ultra Plus XC', nameEn: 'Juvederm Ultra Plus XC', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
-    { sku: 'FIL-002', nameTh: 'Restylane', nameEn: 'Restylane', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
-    { sku: 'FIL-003', nameTh: 'Teosyal RHA', nameEn: 'Teosyal RHA', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
-    { sku: 'FIL-004', nameTh: 'Belotero Balance', nameEn: 'Belotero Balance', categoryId: 1, modelSize: '1ml', defaultUnitId: 1 },
-    // Meso (categoryId: 2)
-    { sku: 'MES-001', nameTh: 'NCTF 135HA', nameEn: 'NCTF 135HA', categoryId: 2, modelSize: '3ml', defaultUnitId: 1 },
-    { sku: 'MES-002', nameTh: 'Dermaheal SB', nameEn: 'Dermaheal SB', categoryId: 2, modelSize: '5ml', defaultUnitId: 1 },
-    { sku: 'MES-003', nameTh: 'Hyaluronic Acid Meso', nameEn: 'Hyaluronic Acid Meso', categoryId: 2, modelSize: '5ml', defaultUnitId: 3 },
-    // Skincare (categoryId: 3)
-    { sku: 'SKC-001', nameTh: 'Vitamin C Serum', nameEn: 'Vitamin C Serum', categoryId: 3, modelSize: '30ml', defaultUnitId: 3 },
-    { sku: 'SKC-002', nameTh: 'Retinol Cream', nameEn: 'Retinol Cream', categoryId: 3, modelSize: '50g', defaultUnitId: 5 },
-    { sku: 'SKC-003', nameTh: 'Sunscreen SPF50', nameEn: 'Sunscreen SPF50', categoryId: 3, modelSize: '30ml', defaultUnitId: 5 },
-    // Medicine (categoryId: 4)
-    { sku: 'MED-001', nameTh: 'Botulinum Toxin Type A', nameEn: 'Botulinum Toxin Type A', categoryId: 4, modelSize: '100 units', defaultUnitId: 1 },
-    { sku: 'MED-002', nameTh: 'Lidocaine 2%', nameEn: 'Lidocaine 2%', categoryId: 4, modelSize: '20ml', defaultUnitId: 3 },
-    // Medical Device (categoryId: 5)
-    { sku: 'DEV-001', nameTh: 'PDO Thread COG', nameEn: 'PDO Thread COG', categoryId: 5, modelSize: '19G x 100mm', defaultUnitId: 6 },
-    { sku: 'DEV-002', nameTh: 'PDO Thread Mono', nameEn: 'PDO Thread Mono', categoryId: 5, modelSize: '29G x 38mm', defaultUnitId: 6 },
+    // Medicine (categoryId: 1)
+    { sku: 'IBO01', serialCode: 'IBO01', nameTh: 'inBo', nameEn: 'inBo', categoryId: 1, modelSize: '100Unit', defaultUnitId: 2 },
+    // Medical Instruments (categoryId: 2)
+    { sku: 'TLS01', serialCode: 'TLS01', nameTh: 'TESSLIFT SOFT', nameEn: 'TESSLIFT SOFT', categoryId: 2, modelSize: 'ไหมโครงตาข่าย 10 เส้น + เข็มปลายทู่ 10 เล่ม', defaultUnitId: 1 },
+    { sku: 'TPR01', serialCode: 'TPR01', nameTh: 'TESS PREDERM', nameEn: 'TESS PREDERM', categoryId: 2, modelSize: 'ไหม PDO จำนวน 32 เส้น', defaultUnitId: 1 },
+    // Cosmetic (categoryId: 3)
+    { sku: 'BBN01', serialCode: 'BBN01', nameTh: 'BABI BAB 6TH NATURE', nameEn: 'BABI BAB 6TH NATURE', categoryId: 3, modelSize: '5ขวด', defaultUnitId: 1 },
+    { sku: 'BNO01', serialCode: 'BNO01', nameTh: 'BABI NEO ONE', nameEn: 'BABI NEO ONE', categoryId: 3, modelSize: '5 ขวด', defaultUnitId: 1 },
+    { sku: 'TSN01', serialCode: 'TSN01', nameTh: 'TENSONEZ', nameEn: 'TENSONEZ', categoryId: 3, modelSize: '5 ขวด', defaultUnitId: 1 },
+    { sku: 'BSS01', serialCode: 'BSS01', nameTh: 'BELLADDICT SSDN', nameEn: 'BELLADDICT SSDN', categoryId: 3, modelSize: '5 ขวด', defaultUnitId: 1 },
   ]
 
   for (const pm of productMasters) {
@@ -198,7 +180,6 @@ async function main() {
   const year = new Date().getFullYear()
 
   const counters = [
-    { name: 'SERIAL', prefix: '', currentVal: BigInt(0) },
     { name: 'GRN', prefix: `GRN-${year}-`, currentVal: BigInt(0) },
     { name: 'OUTBOUND', prefix: `OUT-${year}-`, currentVal: BigInt(0) },
     { name: 'PRE_GEN', prefix: `PG-${year}-`, currentVal: BigInt(0) },

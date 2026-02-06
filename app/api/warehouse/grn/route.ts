@@ -12,6 +12,7 @@ type HandlerContext = { user: JWTPayload }
 interface GRNLineInput {
   productMasterId: number  // Required - must select from ProductMaster
   quantity: number
+  totalQty?: number  // NEW — planned total quantity (defaults to quantity if omitted)
   unitId: number
   lot?: string
   mfgDate?: string
@@ -42,6 +43,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
   const limit = parseInt(searchParams.get('limit') || '20')
   const search = searchParams.get('search') || ''
   const warehouseId = searchParams.get('warehouseId')
+  const receivingStatus = searchParams.get('receivingStatus')
 
   const skip = (page - 1) * limit
 
@@ -54,6 +56,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       ],
     }),
     ...(warehouseId && { warehouseId: parseInt(warehouseId) }),
+    ...(receivingStatus && { receivingStatus: receivingStatus as 'PARTIAL' | 'COMPLETE' }),
   }
 
   const [grns, total] = await Promise.all([
@@ -63,7 +66,9 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         warehouse: { select: { id: true, name: true } },
         receivedBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
+        rejectedBy: { select: { id: true, displayName: true } },
         _count: { select: { lines: true } },
+        planLines: { select: { totalQty: true, receivedQty: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -126,8 +131,30 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         },
       })
 
+      // Create receiving session #1
+      const receivingSession = await tx.gRNReceivingSession.create({
+        data: {
+          grnHeaderId: grnHeader.id,
+          sessionNo: 1,
+          receivedById: user.userId,
+          receivedAt: new Date(body.receivedAt),
+          itemCount: 0, // will update after creating lines
+        },
+      })
+
       // Create lines with product items and QR tokens
       const createdLines = []
+      const planLineData: Array<{
+        productMasterId: number
+        totalQty: number
+        receivedQty: number
+        unitId: number
+        lot?: string | null
+        mfgDate?: Date | null
+        expDate?: Date | null
+        inspectionStatus: InspectionStatus
+        remarks?: string | null
+      }> = []
 
       for (const line of body.lines) {
         // Fetch ProductMaster data
@@ -144,8 +171,13 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           throw new Error(`ProductMaster is inactive: ${productMaster.sku}`)
         }
 
+        const effectiveUnitId = line.unitId || productMaster.defaultUnitId || 1
+
         // Check if using pre-generated items
         if (line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0) {
+          const effectiveQty = line.preGeneratedItemIds.length
+          const totalQty = line.totalQty ?? effectiveQty
+
           // Use pre-generated items (link existing items)
           for (const preGenItemId of line.preGeneratedItemIds) {
             // Fetch and validate pre-generated item
@@ -166,6 +198,11 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
 
             if (preGenItem.status !== 'PENDING_LINK') {
               throw new Error(`Item ${preGenItem.serial12} is not available for linking (status: ${preGenItem.status})`)
+            }
+
+            // Validate pre-gen item's productMasterId matches line's productMasterId
+            if (preGenItem.productMasterId && preGenItem.productMasterId !== productMaster.id) {
+              throw new Error(`Pre-generated item ${preGenItem.serial12} belongs to a different product (ID: ${preGenItem.productMasterId}), expected product ID: ${productMaster.id}`)
             }
 
             // Update pre-generated item with actual product data
@@ -206,12 +243,13 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
                 itemName: productMaster.nameTh,
                 modelSize: productMaster.modelSize,
                 quantity: 1,
-                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                unitId: effectiveUnitId,
                 lot: line.lot,
                 mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
                 expDate: line.expDate ? new Date(line.expDate) : null,
                 inspectionStatus: line.inspectionStatus || 'OK',
                 remarks: line.remarks,
+                receivingSessionId: receivingSession.id,
               },
             })
 
@@ -239,12 +277,32 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               },
             })
           }
+
+          // Collect plan line data
+          planLineData.push({
+            productMasterId: productMaster.id,
+            totalQty,
+            receivedQty: effectiveQty,
+            unitId: effectiveUnitId,
+            lot: line.lot || null,
+            mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+            expDate: line.expDate ? new Date(line.expDate) : null,
+            inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
+            remarks: line.remarks || null,
+          })
         } else {
           // Normal flow: create new product items
+          const effectiveQty = line.quantity
+          const totalQty = line.totalQty ?? effectiveQty
+
           // Each quantity creates one product item (1 serial per item)
-          for (let i = 0; i < line.quantity; i++) {
-            // Generate serial number
-            const serialNumber = await generateSerialNumber()
+          for (let i = 0; i < effectiveQty; i++) {
+            // Generate serial number with product info
+            const serialNumber = await generateSerialNumber({
+              activationType: productMaster.activationType,
+              categoryId: productMaster.categoryId,
+              serialCode: productMaster.serialCode,
+            })
 
             // Create product item linked to ProductMaster
             const productItem = await tx.productItem.create({
@@ -290,12 +348,13 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
                 itemName: productMaster.nameTh,
                 modelSize: productMaster.modelSize,
                 quantity: 1, // Always 1 per line (1 serial)
-                unitId: line.unitId || productMaster.defaultUnitId || 1,
+                unitId: effectiveUnitId,
                 lot: line.lot,
                 mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
                 expDate: line.expDate ? new Date(line.expDate) : null,
                 inspectionStatus: line.inspectionStatus || 'OK',
                 remarks: line.remarks,
+                receivingSessionId: receivingSession.id,
               },
             })
 
@@ -321,11 +380,49 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               },
             })
           }
+
+          // Collect plan line data
+          planLineData.push({
+            productMasterId: productMaster.id,
+            totalQty,
+            receivedQty: effectiveQty,
+            unitId: effectiveUnitId,
+            lot: line.lot || null,
+            mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+            expDate: line.expDate ? new Date(line.expDate) : null,
+            inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
+            remarks: line.remarks || null,
+          })
         }
       }
 
+      // Create plan lines
+      for (const pl of planLineData) {
+        await tx.gRNPlanLine.create({
+          data: {
+            grnHeaderId: grnHeader.id,
+            ...pl,
+          },
+        })
+      }
+
+      // Update receiving session item count
+      await tx.gRNReceivingSession.update({
+        where: { id: receivingSession.id },
+        data: { itemCount: createdLines.length },
+      })
+
+      // Compute receiving status
+      const isPartial = planLineData.some(pl => pl.receivedQty < pl.totalQty)
+      if (isPartial) {
+        await tx.gRNHeader.update({
+          where: { id: grnHeader.id },
+          data: { receivingStatus: 'PARTIAL' },
+        })
+      }
+
       return {
-        grnHeader,
+        grnHeader: { ...grnHeader, receivingStatus: isPartial ? 'PARTIAL' as const : 'COMPLETE' as const },
         lines: createdLines,
       }
     })
@@ -333,6 +430,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     return successResponse({
       id: result.grnHeader.id,
       grnNo: result.grnHeader.grnNo,
+      receivingStatus: result.grnHeader.receivingStatus,
       linesCreated: result.lines.length,
       items: result.lines.map((l) => ({
         lineId: l.line.id,

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface Clinic {
   id: number
@@ -62,6 +63,8 @@ interface POLine {
 export default function PurchaseOrdersPage() {
   const params = useParams()
   const locale = params.locale as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -229,13 +232,13 @@ export default function PurchaseOrdersPage() {
     e.preventDefault()
 
     if (!formClinicId) {
-      alert(locale === 'th' ? 'กรุณาเลือกคลินิก' : 'Please select a clinic')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกคลินิก' : 'Please select a clinic', variant: 'warning', icon: 'warning' })
       return
     }
 
     const validLines = formLines.filter((l) => l.productMasterId > 0 && l.quantity > 0)
     if (validLines.length === 0) {
-      alert(locale === 'th' ? 'กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ' : 'Please add at least one product line')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ' : 'Please add at least one product line', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -274,11 +277,14 @@ export default function PurchaseOrdersPage() {
 
       const data = await res.json()
       if (data.success) {
-        alert(
-          isEditMode
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: isEditMode
             ? (locale === 'th' ? 'บันทึกการแก้ไขสำเร็จ!' : 'Changes saved successfully!')
-            : (locale === 'th' ? `สร้าง PO สำเร็จ: ${data.data.purchaseOrder.poNo}` : `PO created: ${data.data.purchaseOrder.poNo}`)
-        )
+            : (locale === 'th' ? `สร้าง PO สำเร็จ: ${data.data.purchaseOrder.poNo}` : `PO created: ${data.data.purchaseOrder.poNo}`),
+          variant: 'success',
+          icon: 'success'
+        })
         closeModal()
         fetchData()
         // Close detail modal if open
@@ -286,17 +292,27 @@ export default function PurchaseOrdersPage() {
           closeDetailModal()
         }
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch (error) {
-      alert(isEditMode ? 'Failed to update purchase order' : 'Failed to create purchase order')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: isEditMode ? 'Failed to update purchase order' : 'Failed to create purchase order', variant: 'error', icon: 'error' })
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleCancel = async (po: PurchaseOrder) => {
-    if (!confirm(locale === 'th' ? `ยืนยันการยกเลิก PO "${po.poNo}"?` : `Confirm cancel PO "${po.poNo}"?`)) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'ยกเลิกใบสั่งซื้อ' : 'Cancel Purchase Order',
+      message: locale === 'th'
+        ? `ยืนยันการยกเลิก PO "${po.poNo}"?`
+        : `Confirm cancel PO "${po.poNo}"?`,
+      confirmText: locale === 'th' ? 'ยกเลิก PO' : 'Cancel PO',
+      cancelText: locale === 'th' ? 'ไม่ใช่' : 'No',
+      variant: 'warning',
+      icon: 'warning',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/admin/purchase-orders/${po.id}`, {
@@ -304,13 +320,13 @@ export default function PurchaseOrdersPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'ยกเลิก PO สำเร็จ' : 'PO cancelled successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ยกเลิก PO สำเร็จ' : 'PO cancelled successfully', variant: 'success', icon: 'success' })
         fetchData()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch (error) {
-      alert('Failed to cancel purchase order')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to cancel purchase order', variant: 'error', icon: 'error' })
     }
   }
 

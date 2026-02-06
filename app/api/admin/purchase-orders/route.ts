@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin, withWarehouse } from '@/lib/api-middleware'
+import { withRoles, withWarehouse } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 
 // GET /api/admin/purchase-orders - List all purchase orders
@@ -107,7 +107,7 @@ export const GET = withWarehouse(async (request: NextRequest) => {
 })
 
 // POST /api/admin/purchase-orders - Create a new purchase order
-export const POST = withAdmin(async (request: NextRequest, context) => {
+export const POST = withRoles(['ADMIN', 'MANAGER'], async (request: NextRequest, context) => {
   try {
     const { user } = context
     const body = await request.json()

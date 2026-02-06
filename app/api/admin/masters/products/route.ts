@@ -93,8 +93,14 @@ export const POST = withAdmin(async (request: NextRequest) => {
   try {
     const body = await request.json()
 
-    if (!body.sku || !body.nameTh || !body.categoryId) {
-      return errorResponse('SKU, Thai name (nameTh), and categoryId are required', 400)
+    if (!body.sku || !body.nameTh || !body.categoryId || !body.serialCode) {
+      return errorResponse('SKU, Thai name (nameTh), categoryId, and serialCode are required', 400)
+    }
+
+    // Validate serialCode: exactly 5 chars, uppercase alphanumeric
+    const serialCode = (body.serialCode as string).toUpperCase()
+    if (!/^[A-Z0-9]{5}$/.test(serialCode)) {
+      return errorResponse('Serial Code must be exactly 5 uppercase alphanumeric characters', 400)
     }
 
     // Check if SKU already exists
@@ -105,9 +111,18 @@ export const POST = withAdmin(async (request: NextRequest) => {
       return errorResponse('SKU already exists', 400)
     }
 
+    // Check if serialCode already exists
+    const existingSerialCode = await prisma.productMaster.findUnique({
+      where: { serialCode },
+    })
+    if (existingSerialCode) {
+      return errorResponse('Serial Code already exists', 400)
+    }
+
     const productMaster = await prisma.productMaster.create({
       data: {
         sku: body.sku,
+        serialCode,
         nameTh: body.nameTh,
         nameEn: body.nameEn || null,
         imageUrl: body.imageUrl || null,
@@ -154,10 +169,29 @@ export const PATCH = withAdmin(async (request: NextRequest) => {
       }
     }
 
+    // Validate and check serialCode uniqueness if updating
+    let serialCodeUpdate: string | undefined
+    if (body.serialCode !== undefined) {
+      serialCodeUpdate = (body.serialCode as string).toUpperCase()
+      if (!/^[A-Z0-9]{5}$/.test(serialCodeUpdate)) {
+        return errorResponse('Serial Code must be exactly 5 uppercase alphanumeric characters', 400)
+      }
+      const existingSerialCode = await prisma.productMaster.findFirst({
+        where: {
+          serialCode: serialCodeUpdate,
+          NOT: { id: body.id },
+        },
+      })
+      if (existingSerialCode) {
+        return errorResponse('Serial Code already exists', 400)
+      }
+    }
+
     const productMaster = await prisma.productMaster.update({
       where: { id: body.id },
       data: {
         ...(body.sku && { sku: body.sku }),
+        ...(serialCodeUpdate && { serialCode: serialCodeUpdate }),
         ...(body.nameTh && { nameTh: body.nameTh }),
         ...(body.nameEn !== undefined && { nameEn: body.nameEn }),
         ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl }),

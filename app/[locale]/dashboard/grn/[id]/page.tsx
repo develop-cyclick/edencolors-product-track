@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
 interface GRNDetail {
   id: number
@@ -17,6 +18,7 @@ interface GRNDetail {
   deliveryDocDate: string | null
   approvedAt: string | null
   remarks: string | null
+  receivingStatus?: 'PARTIAL' | 'COMPLETE'
   warehouse: { id: number; name: string }
   receivedBy: { id: number; displayName: string; username: string }
   approvedBy: { id: number; displayName: string; username: string } | null
@@ -40,12 +42,35 @@ interface GRNDetail {
       qrTokens: Array<{ id: number; tokenVersion: number }>
     }
   }>
+  planLines?: Array<{
+    id: number
+    totalQty: number
+    receivedQty: number
+    productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
+    unit: { id: number; nameTh: string; nameEn: string | null }
+    lot: string | null
+    inspectionStatus: string
+  }>
+  receivingSessions?: Array<{
+    id: number
+    sessionNo: number
+    receivedAt: string
+    receivedBy: { id: number; displayName: string }
+    itemCount: number
+    remarks: string | null
+    lines: Array<{
+      id: number
+      productItem: { id: number; serial12: string; status: string }
+    }>
+  }>
 }
 
 export default function GRNDetailPage() {
   const params = useParams()
   const locale = params.locale as string
   const id = params.id as string
+  const confirm = useConfirm()
+  const alert = useAlert()
 
   const [grn, setGrn] = useState<GRNDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -54,6 +79,7 @@ export default function GRNDetailPage() {
   const [printingItemId, setPrintingItemId] = useState<number | null>(null)
   const [showPrintGuide, setShowPrintGuide] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set())
 
   // Check if user can approve (ADMIN or MANAGER only)
   const canApprove = userRole === 'ADMIN' || userRole === 'MANAGER'
@@ -90,7 +116,15 @@ export default function GRNDetailPage() {
   }
 
   const handleApprove = async () => {
-    if (!confirm(locale === 'th' ? 'ยืนยันอนุมัติใบรับสินค้านี้?' : 'Confirm approve this GRN?')) return
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติใบรับสินค้า' : 'Approve GRN',
+      message: locale === 'th' ? 'ยืนยันอนุมัติใบรับสินค้านี้?' : 'Confirm approve this GRN?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
 
     try {
       const res = await fetch(`/api/warehouse/grn/${id}`, {
@@ -100,13 +134,13 @@ export default function GRNDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully', variant: 'success', icon: 'success' })
         fetchGRN()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to approve')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
     }
   }
 
@@ -121,7 +155,7 @@ export default function GRNDetailPage() {
 
       if (!res.ok) {
         const data = await res.json()
-        alert(`Error: ${data.error || 'Failed to generate labels'}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate labels'}`, variant: 'error', icon: 'error' })
         return
       }
 
@@ -139,7 +173,7 @@ export default function GRNDetailPage() {
       // Show print guidance
       setShowPrintGuide(true)
     } catch {
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
     } finally {
       setPrinting(false)
     }
@@ -156,7 +190,7 @@ export default function GRNDetailPage() {
 
       if (!res.ok) {
         const data = await res.json()
-        alert(`Error: ${data.error || 'Failed to generate labels'}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate labels'}`, variant: 'error', icon: 'error' })
         return
       }
 
@@ -171,7 +205,7 @@ export default function GRNDetailPage() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch {
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
     } finally {
       setPrintingGrid(false)
     }
@@ -188,7 +222,7 @@ export default function GRNDetailPage() {
 
       if (!res.ok) {
         const data = await res.json()
-        alert(`Error: ${data.error || 'Failed to generate label'}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate label'}`, variant: 'error', icon: 'error' })
         return
       }
 
@@ -203,7 +237,7 @@ export default function GRNDetailPage() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch {
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
     } finally {
       setPrintingItemId(null)
     }
@@ -284,7 +318,7 @@ export default function GRNDetailPage() {
             {locale === 'th' ? 'กลับหน้ารายการ' : 'Back to list'}
           </Link>
           <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">{grn.grnNo}</h1>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             {grn.approvedAt ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
@@ -295,6 +329,19 @@ export default function GRNDetailPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                 {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
               </span>
+            )}
+            {grn.planLines && grn.planLines.length > 0 && (
+              grn.receivingStatus === 'PARTIAL' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                  {locale === 'th' ? 'รับบางส่วน' : 'Partial'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
+                  {locale === 'th' ? 'รับครบแล้ว' : 'Fully Received'}
+                </span>
+              )
             )}
           </div>
         </div>
@@ -309,6 +356,18 @@ export default function GRNDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               {locale === 'th' ? 'แก้ไข' : 'Edit'}
+            </Link>
+          )}
+          {/* Receive More Button - Only when approved + partial */}
+          {grn.approvedAt && grn.receivingStatus === 'PARTIAL' && (
+            <Link
+              href={`/${locale}/dashboard/grn/new?receiveMoreId=${id}`}
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(249,115,22,0.25)] hover:bg-orange-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(249,115,22,0.35)] transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {locale === 'th' ? 'รับสินค้าเพิ่ม' : 'Receive More'}
             </Link>
           )}
           {/* View Document Button */}
@@ -467,6 +526,165 @@ export default function GRNDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Plan Summary - only show if planLines exist */}
+      {grn.planLines && grn.planLines.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+          <div className="p-5 border-b border-[var(--color-beige)] bg-[var(--color-off-white)]">
+            <h2 className="text-lg font-semibold text-[var(--color-charcoal)]">
+              {locale === 'th' ? 'สรุปแผนการรับสินค้า' : 'Receiving Plan Summary'}
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'สินค้า (SKU)' : 'Product (SKU)'}
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">Lot</th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'แผน' : 'Planned'}
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'รับแล้ว' : 'Received'}
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'คงเหลือ' : 'Remaining'}
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]" style={{ minWidth: 120 }}>
+                    {locale === 'th' ? 'ความคืบหน้า' : 'Progress'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-beige)]">
+                {grn.planLines.map((pl) => {
+                  const pct = pl.totalQty > 0 ? Math.round((pl.receivedQty / pl.totalQty) * 100) : 0
+                  const remaining = pl.totalQty - pl.receivedQty
+                  return (
+                    <tr key={pl.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                      <td className="px-5 py-3 text-sm">
+                        <div className="font-medium text-[var(--color-charcoal)]">{locale === 'th' ? pl.productMaster.nameTh : (pl.productMaster.nameEn || pl.productMaster.nameTh)}</div>
+                        <div className="text-xs text-[var(--color-foreground-muted)]">{pl.productMaster.sku}{pl.productMaster.modelSize ? ` (${pl.productMaster.modelSize})` : ''}</div>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-[var(--color-foreground-muted)]">{pl.lot || '-'}</td>
+                      <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-charcoal)]">{pl.totalQty}</td>
+                      <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-mint-dark)]">{pl.receivedQty}</td>
+                      <td className="px-5 py-3 text-sm text-center font-medium">
+                        <span className={remaining > 0 ? 'text-orange-600' : 'text-[var(--color-mint-dark)]'}>
+                          {remaining}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-[var(--color-beige)] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-[var(--color-mint)]' : 'bg-orange-400'}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-[var(--color-foreground-muted)] w-10 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Receiving Timeline - only show if sessions exist */}
+      {grn.receivingSessions && grn.receivingSessions.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6">
+          <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-5">
+            {locale === 'th' ? 'ประวัติการรับสินค้า' : 'Receiving Timeline'}
+          </h2>
+          <div className="relative">
+            {/* Vertical line */}
+            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[var(--color-beige)]" />
+
+            <div className="space-y-6">
+              {grn.receivingSessions.map((session) => {
+                const isExpanded = expandedSessions.has(session.id)
+                return (
+                  <div key={session.id} className="relative pl-12">
+                    {/* Dot */}
+                    <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full bg-[var(--color-gold)] border-2 border-white shadow-sm" />
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedSessions(prev => {
+                            const next = new Set(prev)
+                            if (next.has(session.id)) next.delete(session.id)
+                            else next.add(session.id)
+                            return next
+                          })
+                        }}
+                        className="flex items-center gap-3 text-left w-full group"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-[var(--color-charcoal)]">
+                              {locale === 'th' ? `ครั้งที่ ${session.sessionNo}` : `Session ${session.sessionNo}`}
+                            </span>
+                            <span className="text-xs text-[var(--color-foreground-muted)]">
+                              {formatDate(session.receivedAt)}
+                            </span>
+                            <span className="text-xs text-[var(--color-foreground-muted)]">
+                              {session.receivedBy.displayName}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-gold)]/10 text-[var(--color-gold)]">
+                              {session.itemCount} {locale === 'th' ? 'รายการ' : 'items'}
+                            </span>
+                          </div>
+                          {session.remarks && (
+                            <p className="text-xs text-[var(--color-foreground-muted)] mt-1">{session.remarks}</p>
+                          )}
+                        </div>
+                        <svg className={`w-4 h-4 text-[var(--color-foreground-muted)] transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Expanded serial list */}
+                      {isExpanded && session.lines.length > 0 && (
+                        <div className="mt-3 border border-[var(--color-beige)] rounded-lg bg-[var(--color-off-white)] divide-y divide-[var(--color-beige)] max-h-48 overflow-y-auto">
+                          {session.lines.map((sl, idx) => (
+                            <div key={sl.id} className="flex items-center justify-between px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-[var(--color-foreground-muted)]">{idx + 1}.</span>
+                                <span className="font-mono text-xs text-[var(--color-charcoal)]">{sl.productItem.serial12}</span>
+                              </div>
+                              {getStatusBadge(sl.productItem.status)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Pending indicator for partial */}
+              {grn.receivingStatus === 'PARTIAL' && grn.planLines && (
+                <div className="relative pl-12">
+                  <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-orange-400 bg-white" />
+                  <div className="text-sm text-orange-600 font-medium">
+                    {locale === 'th'
+                      ? `รอรับเพิ่ม — คงเหลือ ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} รายการ`
+                      : `Pending — ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} remaining`
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lines Table */}
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">

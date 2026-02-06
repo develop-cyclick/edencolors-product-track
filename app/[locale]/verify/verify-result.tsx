@@ -74,6 +74,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
   const [customerName, setCustomerName] = useState('')
   const [age, setAge] = useState('')
   const [gender, setGender] = useState('')
+  const [submittingCustomerInfo, setSubmittingCustomerInfo] = useState(false)
+  const [customerInfoSubmitted, setCustomerInfoSubmitted] = useState(false)
 
   const handleScan = (scannedToken: string) => {
     // Navigate to verify page with scanned token
@@ -123,6 +125,34 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
       setActivationResult({ success: false, error: 'Network error' })
     } finally {
       setActivating(false)
+    }
+  }
+
+  const handleSubmitCustomerInfo = async () => {
+    if (!identifier || (!customerName && !age && !gender)) return
+
+    setSubmittingCustomerInfo(true)
+    try {
+      const res = await fetch('/api/public/update-customer-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(serial ? { serial } : { token }),
+          ...(customerName && { customerName }),
+          ...(age && { age: parseInt(age) }),
+          ...(gender && { gender }),
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setCustomerInfoSubmitted(true)
+        setShowCustomerForm(false)
+      }
+    } catch (error) {
+      console.error('Failed to submit customer info:', error)
+    } finally {
+      setSubmittingCustomerInfo(false)
     }
   }
 
@@ -695,12 +725,47 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                     </div>
                   </div>
 
-                  <p className="text-xs text-[var(--color-foreground-muted)] text-center">
+                  <p className="text-xs text-[var(--color-foreground-muted)] text-center mb-4">
                     {locale === 'th'
                       ? 'ข้อมูลนี้จะถูกบันทึกเพื่อการรับประกันเท่านั้น'
                       : 'This information will only be used for warranty purposes'
                     }
                   </p>
+
+                  {/* Submit Button */}
+                  <button
+                    onClick={handleSubmitCustomerInfo}
+                    disabled={submittingCustomerInfo || (!customerName && !age && !gender)}
+                    className="w-full py-3 px-4 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {submittingCustomerInfo ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        {locale === 'th' ? 'กำลังบันทึก...' : 'Saving...'}
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {locale === 'th' ? 'บันทึกข้อมูล' : 'Save Information'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Customer Info Submitted Confirmation */}
+              {customerInfoSubmitted && (
+                <div className="p-4 rounded-xl bg-[var(--color-mint)]/10 border border-[var(--color-mint)]">
+                  <div className="flex items-center gap-2 text-[var(--color-mint-dark)]">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="font-medium">
+                      {locale === 'th' ? 'บันทึกข้อมูลเรียบร้อยแล้ว' : 'Information saved successfully'}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

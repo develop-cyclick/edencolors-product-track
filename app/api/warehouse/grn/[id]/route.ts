@@ -39,6 +39,26 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
           },
           unit: { select: { id: true, nameTh: true, nameEn: true } },
         },
+        orderBy: { id: 'asc' },
+      },
+      planLines: {
+        include: {
+          productMaster: { select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true } },
+          unit: { select: { id: true, nameTh: true, nameEn: true } },
+        },
+        orderBy: { id: 'asc' },
+      },
+      receivingSessions: {
+        include: {
+          receivedBy: { select: { id: true, displayName: true } },
+          lines: {
+            include: {
+              productItem: { select: { id: true, serial12: true, status: true } },
+            },
+            orderBy: { id: 'asc' },
+          },
+        },
+        orderBy: { sessionNo: 'asc' },
       },
     },
   })
@@ -82,14 +102,12 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
   const grn = grnResult[0]
 
-  // Check if already approved or rejected
+  // Check if already approved (rejected GRNs CAN be edited)
   if (grn.approved_at) {
     return errorResponse('Cannot modify approved GRN', 400)
   }
 
-  if (grn.rejected_at) {
-    return errorResponse('Cannot modify rejected GRN', 400)
-  }
+  const wasRejected = !!grn.rejected_at
 
   // Handle approval
   if (body.action === 'approve') {
@@ -161,6 +179,18 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     }
   }
 
+  // If GRN was rejected, clear rejection status to reset to pending
+  if (wasRejected) {
+    await prisma.$executeRaw`
+      UPDATE grn_headers
+      SET rejected_by_id = NULL,
+          rejected_at = NULL,
+          reject_reason = NULL,
+          updated_at = ${new Date()}
+      WHERE id = ${grnId}
+    `
+  }
+
   const updated = await prisma.gRNHeader.update({
     where: { id: grnId },
     data: updateData,
@@ -170,7 +200,7 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     },
   })
 
-  return successResponse({ grn: updated })
+  return successResponse({ grn: updated, statusReset: wasRejected })
 }
 
 // DELETE /api/warehouse/grn/[id] - Delete GRN (only if not approved and no outbounds)
@@ -298,6 +328,12 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
     return errorResponse('Cannot edit approved GRN', 400)
   }
 
+  // Check rejection status using raw SQL
+  const grnStatusResult = await prisma.$queryRaw<Array<{ rejected_at: Date | null }>>`
+    SELECT rejected_at FROM grn_headers WHERE id = ${grnId}
+  `
+  const wasRejected = !!grnStatusResult[0]?.rejected_at
+
   // Check if any product has outbound
   const hasOutbound = existingGrn.lines.some(
     (line) => line.productItem.outboundLines.length > 0
@@ -363,6 +399,18 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         },
       })
 
+      // If GRN was rejected, clear rejection status to reset to pending
+      if (wasRejected) {
+        await tx.$executeRaw`
+          UPDATE grn_headers
+          SET rejected_by_id = NULL,
+              rejected_at = NULL,
+              reject_reason = NULL,
+              updated_at = ${new Date()}
+          WHERE id = ${grnId}
+        `
+      }
+
       // 3. Create new lines with product items and QR tokens (same as POST logic)
       const createdLines = []
 
@@ -402,6 +450,11 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
 
             if (preGenItem.status !== 'PENDING_LINK') {
               throw new Error(`Item ${preGenItem.serial12} is not available for linking`)
+            }
+
+            // Validate pre-gen item's productMasterId matches line's productMasterId
+            if (preGenItem.productMasterId && preGenItem.productMasterId !== productMaster.id) {
+              throw new Error(`Pre-generated item ${preGenItem.serial12} belongs to a different product`)
             }
 
             // Update pre-generated item with actual product data
@@ -469,7 +522,11 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         } else {
           // Normal flow: create new product items
           for (let i = 0; i < line.quantity; i++) {
-            const serialNumber = await generateSerialNumber()
+            const serialNumber = await generateSerialNumber({
+              activationType: productMaster.activationType,
+              categoryId: productMaster.categoryId,
+              serialCode: productMaster.serialCode,
+            })
 
             const productItem = await tx.productItem.create({
               data: {
@@ -547,6 +604,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
       id: grnId,
       grnNo: existingGrn.grnNo,
       linesCreated: result.linesCreated,
+      statusReset: wasRejected,
     })
   } catch (error) {
     console.error('Update GRN error:', error)

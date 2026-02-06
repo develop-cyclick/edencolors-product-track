@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { isValidSerialNumber } from '@/lib/serial-generator'
 
 interface ShortUrlPageProps {
   params: Promise<{ serial: string }>
@@ -6,16 +7,16 @@ interface ShortUrlPageProps {
 
 /**
  * Short URL redirect for QR codes
- * /v/{serial12} -> /th/verify?serial={serial12}
+ * /v/{serial} -> /th/verify?serial={serial}
  *
  * This creates much shorter QR codes that are easier to scan
- * Example: https://domain.com/v/123456789012
+ * Example: https://domain.com/v/PCBBN01000000000001
  */
 export default async function ShortUrlPage({ params }: ShortUrlPageProps) {
   const { serial } = await params
 
-  // Validate serial format (12 digits)
-  const isValidSerial = /^\d{12}$/.test(serial)
+  // Validate serial format (19-char new format)
+  const isValidSerial = isValidSerialNumber(serial)
 
   if (!isValidSerial) {
     // Redirect to home page if invalid serial

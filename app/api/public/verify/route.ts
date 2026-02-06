@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decryptQRToken, hashToken, VerifyResult, type VerifyResultType } from '@/lib/qr-token'
 import { checkRateLimit, rateLimitPresets } from '@/lib/rate-limit'
+import { isValidSerialNumber } from '@/lib/serial-generator'
 import { createHash } from 'crypto'
 
 // GET /api/public/verify?token=...
@@ -44,8 +45,8 @@ export async function GET(request: NextRequest) {
 
     // Method 1: Short URL with serial (NEW - faster and easier to scan)
     if (serial) {
-      // Validate serial format (12 digits)
-      if (!/^\d{12}$/.test(serial)) {
+      // Validate serial format
+      if (!isValidSerialNumber(serial)) {
         return NextResponse.json({
           success: false,
           result: VerifyResult.INVALID_TOKEN,

@@ -143,8 +143,8 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
     },
     
     {
-      label: 'เสียหาย/รับคืนสินค้า',
-      labelEn: 'Damaged/Return',
+      label: 'เสียหาย/รับคืน/ยืม/คืนสินค้า',
+      labelEn: 'Damaged/Return/Borrow/Return',
       href: `/${locale}/dashboard/damaged-products`,
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,7 +326,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className={`hidden lg:flex ${isCollapsed ? 'w-20' : 'w-64'} bg-[var(--color-charcoal)] text-white flex-col transition-all duration-300 relative`}>
+      <aside className={`hidden lg:flex ${isCollapsed ? 'w-20' : 'w-72'} bg-[var(--color-charcoal)] text-white flex-col transition-all duration-300 relative`}>
         {/* Collapse Button - Desktop only */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}

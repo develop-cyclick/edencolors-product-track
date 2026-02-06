@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useAlert } from '@/components/ui/confirm-modal'
 
 interface PreGenItem {
   id: number
@@ -18,12 +19,20 @@ interface CreateResultItem {
   qrToken: string
 }
 
+interface ProductMasterOption {
+  id: number
+  sku: string
+  nameTh: string
+  serialCode: string
+}
+
 interface PreGenBatch {
   id: number
   batchNo: string
   quantity: number
   linkedCount: number
   totalItems: number
+  productMaster?: { id: number; sku: string; nameTh: string; serialCode: string } | null
   createdBy: { id: number; displayName: string }
   remarks: string | null
   createdAt: string
@@ -39,10 +48,13 @@ interface CreateResult {
 export default function PreGeneratePage() {
   const params = useParams()
   const locale = params.locale as string
+  const alert = useAlert()
 
   const [batches, setBatches] = useState<PreGenBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [productMasters, setProductMasters] = useState<ProductMasterOption[]>([])
+  const [selectedProductMasterId, setSelectedProductMasterId] = useState<number | ''>('')
   const [quantity, setQuantity] = useState(10)
   const [remarks, setRemarks] = useState('')
   const [createResult, setCreateResult] = useState<CreateResult | null>(null)
@@ -52,7 +64,29 @@ export default function PreGeneratePage() {
 
   useEffect(() => {
     fetchBatches()
+    fetchProductMasters()
   }, [])
+
+  const fetchProductMasters = async () => {
+    try {
+      const res = await fetch('/api/admin/masters/products?limit=100')
+      const data = await res.json()
+      if (data.success) {
+        setProductMasters(
+          (data.data.productMasters || [])
+            .filter((p: ProductMasterOption & { isActive: boolean }) => p.isActive)
+            .map((p: ProductMasterOption & { isActive: boolean }) => ({
+              id: p.id,
+              sku: p.sku,
+              nameTh: p.nameTh,
+              serialCode: p.serialCode,
+            }))
+        )
+      }
+    } catch (error) {
+      console.error('Failed to fetch product masters:', error)
+    }
+  }
 
   const fetchBatches = async () => {
     setLoading(true)
@@ -71,8 +105,12 @@ export default function PreGeneratePage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (quantity < 1 || quantity > 100) {
-      alert(locale === 'th' ? 'จำนวนต้องอยู่ระหว่าง 1-100' : 'Quantity must be between 1-100')
+    if (!selectedProductMasterId) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้า' : 'Please select a product', variant: 'warning', icon: 'warning' })
+      return
+    }
+    if (quantity < 1) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'จำนวนต้องมากกว่า 0' : 'Quantity must be greater than 0', variant: 'warning', icon: 'warning' })
       return
     }
 
@@ -81,20 +119,21 @@ export default function PreGeneratePage() {
       const res = await fetch('/api/warehouse/pre-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity, remarks: remarks || undefined }),
+        body: JSON.stringify({ productMasterId: selectedProductMasterId, quantity, remarks: remarks || undefined }),
       })
 
       const data = await res.json()
       if (data.success) {
         setCreateResult(data.data)
+        setSelectedProductMasterId('')
         setQuantity(10)
         setRemarks('')
         fetchBatches()
       } else {
-        alert(`Error: ${data.error}`)
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to create batch')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Batch ได้' : 'Failed to create batch', variant: 'error', icon: 'error' })
     } finally {
       setCreating(false)
     }
@@ -135,10 +174,10 @@ export default function PreGeneratePage() {
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
       } else {
-        alert('Failed to generate labels')
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Labels ได้' : 'Failed to generate labels', variant: 'error', icon: 'error' })
       }
     } catch {
-      alert('Failed to download labels')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Labels ได้' : 'Failed to download labels', variant: 'error', icon: 'error' })
     } finally {
       setDownloading(false)
     }
@@ -175,7 +214,24 @@ export default function PreGeneratePage() {
           {locale === 'th' ? 'สร้าง Batch ใหม่' : 'Create New Batch'}
         </h2>
         <form onSubmit={handleCreate} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
+                {locale === 'th' ? 'สินค้า' : 'Product'} <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedProductMasterId}
+                onChange={(e) => setSelectedProductMasterId(e.target.value ? parseInt(e.target.value) : '')}
+                className="w-full px-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
+              >
+                <option value="">{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select Product --'}</option>
+                {productMasters.map((pm) => (
+                  <option key={pm.id} value={pm.id}>
+                    {pm.sku} - {pm.nameTh} ({pm.serialCode})
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
                 {locale === 'th' ? 'จำนวน QR' : 'Quantity'} <span className="text-red-500">*</span>
@@ -183,15 +239,11 @@ export default function PreGeneratePage() {
               <input
                 type="number"
                 min="1"
-                max="100"
                 value={quantity}
                 onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                 className="w-full px-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
-                placeholder="1-100"
+                placeholder={locale === 'th' ? 'ระบุจำนวน' : 'Enter quantity'}
               />
-              <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
-                {locale === 'th' ? 'สูงสุด 100 รายการต่อ batch' : 'Maximum 100 items per batch'}
-              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
@@ -312,6 +364,9 @@ export default function PreGeneratePage() {
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       Batch No
                     </th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                      {locale === 'th' ? 'สินค้า' : 'Product'}
+                    </th>
                     <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'จำนวน' : 'Quantity'}
                     </th>
@@ -334,6 +389,9 @@ export default function PreGeneratePage() {
                   {batches.map((batch) => (
                     <tr key={batch.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
                       <td className="px-5 py-4 font-mono text-[var(--color-gold)]">{batch.batchNo}</td>
+                      <td className="px-5 py-4 text-sm text-[var(--color-charcoal)]">
+                        {batch.productMaster ? `${batch.productMaster.sku} - ${batch.productMaster.nameTh}` : '-'}
+                      </td>
                       <td className="px-5 py-4 text-center text-sm">{batch.quantity}</td>
                       <td className="px-5 py-4 text-center">
                         <span className={`text-sm font-medium ${batch.linkedCount > 0 ? 'text-[var(--color-mint-dark)]' : 'text-[var(--color-foreground-muted)]'}`}>
@@ -519,12 +577,12 @@ export default function PreGeneratePage() {
                   {locale === 'th' ? 'ปิด' : 'Close'}
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const availableItems = selectedBatch.items.filter(i => !i.isLinked)
                     if (availableItems.length > 0) {
                       downloadLabels(availableItems.map(i => i.id), selectedBatch.batch.batchNo)
                     } else {
-                      alert(locale === 'th' ? 'ไม่มีรายการที่พร้อมใช้' : 'No available items')
+                      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่มีรายการที่พร้อมใช้' : 'No available items', variant: 'warning', icon: 'warning' })
                     }
                   }}
                   disabled={downloading || selectedBatch.items.filter(i => !i.isLinked).length === 0}

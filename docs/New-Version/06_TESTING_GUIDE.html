@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือการทดสอบระบบ - QR Authenticity & Activation System v2.0</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Sarabun', sans-serif;
+            line-height: 1.8;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: #fff;
+        }
+
+        @media print {
+            body {
+                padding: 15mm;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            .no-break {
+                page-break-inside: avoid;
+            }
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #1a365d;
+            border-bottom: 3px solid #3182ce;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: #2c5282;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #3182ce;
+            padding-left: 15px;
+        }
+
+        h3 {
+            font-size: 18px;
+            color: #2d3748;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        h4 {
+            font-size: 16px;
+            color: #4a5568;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+
+        p {
+            margin-bottom: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #edf2f7;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f7fafc;
+        }
+
+        pre {
+            background-color: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+
+        code {
+            background-color: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            color: #e53e3e;
+        }
+
+        .header-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header-box h1 {
+            color: white;
+            border: none;
+            margin-bottom: 10px;
+        }
+
+        .header-box p {
+            opacity: 0.9;
+            margin: 0;
+        }
+
+        .toc {
+            background-color: #f7fafc;
+            padding: 20px 30px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+        }
+
+        .toc ol {
+            columns: 2;
+            column-gap: 30px;
+        }
+
+        .toc li {
+            margin-bottom: 8px;
+        }
+
+        .flow-box {
+            background-color: #f0fff4;
+            border: 2px solid #68d391;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .warning-box {
+            background-color: #fffaf0;
+            border: 2px solid #ed8936;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .info-box {
+            background-color: #ebf8ff;
+            border: 2px solid #4299e1;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .success-box {
+            background-color: #f0fff4;
+            border-left: 4px solid #48bb78;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .test-case {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .test-case-header {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            color: white;
+            padding: 15px 20px;
+        }
+
+        .test-case-header h3 {
+            color: white;
+            margin: 0;
+        }
+
+        .test-case-body {
+            padding: 20px;
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .role-admin { background: #fed7d7; color: #c53030; }
+        .role-manager { background: #feebc8; color: #c05621; }
+        .role-warehouse { background: #c6f6d5; color: #276749; }
+        .role-public { background: #bee3f8; color: #2b6cb0; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-instock { background: #d1fae5; color: #065f46; }
+        .status-shipped { background: #dbeafe; color: #1e40af; }
+        .status-activated { background: #e9d5ff; color: #6b21a8; }
+        .status-returned { background: #fecaca; color: #991b1b; }
+        .status-damaged { background: #fee2e2; color: #991b1b; }
+
+        ul, ol {
+            margin: 10px 0 10px 25px;
+        }
+
+        li {
+            margin-bottom: 5px;
+        }
+
+        .checklist {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .checklist li {
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .checklist li:before {
+            content: "☐";
+            position: absolute;
+            left: 0;
+        }
+
+        .diagram {
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            background: #1a202c;
+            color: #68d391;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.4;
+        }
+
+        .data-flow {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .data-flow h4 {
+            color: #3182ce;
+            margin-top: 0;
+        }
+
+        footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-box">
+        <h1>คู่มือการทดสอบระบบ</h1>
+        <p><strong>QR Authenticity & Activation System v2.0</strong></p>
+        <p>เอกสารสำหรับ Demo ระบบให้ลูกค้า | อัพเดต: กุมภาพันธ์ 2026</p>
+    </div>
+
+    <div class="toc">
+        <h3>สารบัญ</h3>
+        <ol>
+            <li>ภาพรวม Flow การทดสอบ</li>
+            <li>เตรียมความพร้อมก่อนทดสอบ</li>
+            <li>TC1: สร้าง QR Code ล่วงหน้า</li>
+            <li>TC2: รับสินค้าเข้าคลัง (GRN)</li>
+            <li>TC3: สร้างใบสั่งซื้อ (PO)</li>
+            <li>TC4: สร้างใบส่งออก (Outbound)</li>
+            <li>TC5: Manager อนุมัติ/ปฏิเสธ</li>
+            <li>TC6: ตรวจสอบความแท้ (Verify)</li>
+            <li>TC7: ลงทะเบียนสินค้า (Activate)</li>
+            <li>TC8: พิมพ์ QR ใหม่ (Reprint)</li>
+            <li>TC9: รับคืนสินค้า (Return)</li>
+            <li>TC10: สินค้าเสียหาย (Damaged)</li>
+            <li>TC11: ยืมสินค้า/สั่งฝาก</li>
+            <li>สรุป Data Flow ทั้งระบบ</li>
+            <li>Checklist การทดสอบ</li>
+        </ol>
+    </div>
+
+    <!-- Section 1 -->
+    <h2>1. ภาพรวม Flow การทดสอบ</h2>
+
+    <h3>Main Flow Diagram</h3>
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    ADMIN SETUP                                          │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐              │
+│  │ Product      │   │   Clinic     │   │  Master      │   │   Users      │              │
+│  │ Masters      │   │ Management   │   │   Data       │   │ Management   │              │
+│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘              │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 WAREHOUSE OPERATIONS                                     │
+│                                                                                          │
+│  ┌──────────────┐        ┌──────────────┐        ┌──────────────┐                       │
+│  │ 1. Pre-Gen   │  ───▶  │ 2. GRN       │  ───▶  │ 4. Outbound  │                       │
+│  │    QR Codes  │        │   (รับเข้า)    │        │   (ส่งออก)    │                       │
+│  │              │        │              │        │              │                       │
+│  │ PENDING_LINK │        │  IN_STOCK    │        │ PENDING_OUT  │                       │
+│  └──────────────┘        └──────────────┘        └──────┬───────┘                       │
+└─────────────────────────────────────────────────────────┼───────────────────────────────┘
+                                                          │
+                                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                  MANAGER APPROVAL                                        │
+│                              ┌──────────────┐                                           │
+│                              │ 5. Approval  │                                           │
+│                              │    Board     │                                           │
+│                              └──────┬───────┘                                           │
+│                         ┌───────────┴───────────┐                                       │
+│                    [Approve]               [Reject]                                     │
+│                         │                       │                                       │
+│                         ▼                       ▼                                       │
+│                   ┌──────────┐            ┌──────────┐                                  │
+│                   │ SHIPPED  │            │ IN_STOCK │                                  │
+│                   └────┬─────┘            └──────────┘                                  │
+└────────────────────────┼────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   PUBLIC ACCESS                                          │
+│  ┌──────────────┐        ┌──────────────┐        ┌──────────────┐                       │
+│  │ 6. Verify    │  ───▶  │ 7. Activate  │  ───▶  │  ACTIVATED   │                       │
+│  │  (ตรวจสอบ)    │        │ (ลงทะเบียน)   │        │              │                       │
+│  └──────────────┘        └──────────────┘        └──────────────┘                       │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+    </div>
+
+    <h3>บทบาทและสิทธิ์การเข้าถึง</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>สามารถทำได้</th>
+                <th>ไม่สามารถทำได้</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="role-badge role-admin">ADMIN</span></td>
+                <td>ทุกอย่าง + จัดการ Users, Clinics, Masters, PO, Settings</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><span class="role-badge role-manager">MANAGER</span></td>
+                <td>ดู Dashboard + อนุมัติ/ปฏิเสธ Outbound</td>
+                <td>สร้าง GRN, Outbound</td>
+            </tr>
+            <tr>
+                <td><span class="role-badge role-warehouse">WAREHOUSE</span></td>
+                <td>Pre-gen, GRN, Outbound, Reprint, Return, Damaged</td>
+                <td>อนุมัติ Outbound, จัดการ Users</td>
+            </tr>
+            <tr>
+                <td><span class="role-badge role-public">PUBLIC</span></td>
+                <td>Verify, Activate</td>
+                <td>ต้องไม่ Login</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <!-- Section 2 -->
+    <h2>2. เตรียมความพร้อมก่อนทดสอบ</h2>
+
+    <h3>2.1 Start ระบบ</h3>
+    <pre>
+# 1. Start Database
+npm run db:up
+
+# 2. Generate Prisma Client
+npm run db:generate
+
+# 3. Push Schema
+npm run db:push
+
+# 4. Seed Test Data
+npm run db:seed
+
+# 5. Start Development Server
+npm run dev
+    </pre>
+
+    <h3>2.2 บัญชีทดสอบ</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Username</th>
+                <th>Password</th>
+                <th>URL Login</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="role-badge role-admin">Admin</span></td>
+                <td><code>admin</code></td>
+                <td><code>admin123</code></td>
+                <td>/th/login</td>
+            </tr>
+            <tr>
+                <td><span class="role-badge role-warehouse">Warehouse</span></td>
+                <td><code>warehouse1</code></td>
+                <td><code>warehouse123</code></td>
+                <td>/th/login</td>
+            </tr>
+            <tr>
+                <td><span class="role-badge role-manager">Manager</span></td>
+                <td><code>manager1</code></td>
+                <td><code>manager123</code></td>
+                <td>/th/login</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>2.3 ข้อมูล Master Data ที่ต้องมี</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ประเภท</th>
+                <th>ตัวอย่างข้อมูล</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>หมวดหมู่สินค้า</td><td>ฟิลเลอร์, โบท็อกซ์, สกินแคร์</td></tr>
+            <tr><td>หน่วยนับ</td><td>ชิ้น, กล่อง, ขวด</td></tr>
+            <tr><td>วิธีจัดส่ง</td><td>GRAB, ไปรษณีย์, Inter Express</td></tr>
+            <tr><td>คลังสินค้า</td><td>คลังกลาง</td></tr>
+            <tr><td>คลินิก</td><td>ABC Clinic (กรุงเทพ), XYZ Clinic (เชียงใหม่)</td></tr>
+            <tr><td>Product Master</td><td>FIL-001 Filler XYZ 1ml, BOT-001 Botox ABC</td></tr>
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <!-- Test Case 1 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 1: สร้าง QR Code ล่วงหน้า (Pre-Generate) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการสร้าง QR Code + Serial 12 หลักล่วงหน้า ก่อนรับสินค้าจริง</p>
+
+            <h4>ขั้นตอนการทดสอบ</h4>
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Login ด้วย <code>warehouse1</code> / <code>warehouse123</code></td><td>เข้า Dashboard สำเร็จ</td></tr>
+                    <tr><td>2</td><td>คลิกเมนู <strong>"สร้าง QR ล่วงหน้า"</strong></td><td>แสดงหน้า Pre-Generate</td></tr>
+                    <tr><td>3</td><td>กรอก จำนวน: <code>5</code></td><td>-</td></tr>
+                    <tr><td>4</td><td>กรอก หมายเหตุ: <code>Batch ทดสอบสำหรับ Filler</code></td><td>-</td></tr>
+                    <tr><td>5</td><td>กดปุ่ม <strong>"สร้าง QR"</strong></td><td>สร้าง Batch สำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์ที่คาดหวัง:</strong><br>
+                ✅ สร้าง Batch เลขที่: PG-2026-000001<br>
+                ✅ สร้าง Serial 5 รายการ สถานะ <span class="status-badge status-pending">PENDING_LINK</span>
+            </div>
+
+            <div class="data-flow">
+                <h4>Data Flow</h4>
+                <p><strong>Warehouse User</strong> → <strong>PreGeneratedBatch</strong> (batch_no, quantity, created_by) → <strong>ProductItem</strong> (serial12, status=PENDING_LINK) → <strong>QRToken</strong> (token_hash, version=1, status=ACTIVE)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case 2 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 2: รับสินค้าเข้าคลัง (GRN) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการรับสินค้าเข้าคลัง โดยเชื่อมโยง QR จาก Pre-Generate กับข้อมูลสินค้าจริง</p>
+
+            <h4>Part A: สร้าง GRN Header</h4>
+            <table>
+                <thead>
+                    <tr><th>ฟิลด์</th><th>ค่าทดสอบ</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>วันที่รับ</td><td>วันนี้</td></tr>
+                    <tr><td>คลัง</td><td>คลังกลาง</td></tr>
+                    <tr><td>เลข PO</td><td>PO-TEST-001</td></tr>
+                    <tr><td>ชื่อ Supplier</td><td>บริษัท ABC จำกัด</td></tr>
+                    <tr><td>เลขใบส่งของ</td><td>DN-001</td></tr>
+                </tbody>
+            </table>
+
+            <h4>Part B: เพิ่มรายการสินค้า (สแกน QR จาก Pre-Gen)</h4>
+            <table>
+                <thead>
+                    <tr><th>ฟิลด์</th><th>ค่าทดสอบ</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Serial</td><td>123456789001 (จาก Pre-Gen)</td></tr>
+                    <tr><td>SKU</td><td>FIL-001</td></tr>
+                    <tr><td>ชื่อ</td><td>Filler XYZ 1ml</td></tr>
+                    <tr><td>หมวดหมู่</td><td>ฟิลเลอร์</td></tr>
+                    <tr><td>Lot</td><td>LOT2026001</td></tr>
+                    <tr><td>วันหมดอายุ</td><td>2027-06-01</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์ที่คาดหวัง:</strong><br>
+                ✅ สร้าง GRN เลขที่: GRN-2026-000001<br>
+                ✅ สินค้าเปลี่ยนสถานะ: <span class="status-badge status-pending">PENDING_LINK</span> → <span class="status-badge status-instock">IN_STOCK</span><br>
+                ✅ PreGeneratedBatch.linked_count: 0 → 1
+            </div>
+
+            <div class="data-flow">
+                <h4>Data Flow</h4>
+                <p><strong>GRNHeader</strong> → <strong>GRNLine</strong> (product_item_id) → <strong>ProductItem</strong> (status=IN_STOCK, sku, name, lot, exp) → <strong>EventLog</strong> (INBOUND)</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- Test Case 3 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 3: สร้างใบสั่งซื้อ (Purchase Order) <span class="role-badge role-admin">ADMIN</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการสร้างใบสั่งซื้อจากคลินิก (ระบบสั่งฝากสินค้า)</p>
+
+            <h4>ขั้นตอนการทดสอบ</h4>
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Login ด้วย <code>admin</code> / <code>admin123</code></td><td>เข้า Dashboard</td></tr>
+                    <tr><td>2</td><td>คลิกเมนู <strong>"ใบสั่งซื้อ"</strong></td><td>แสดงรายการ PO</td></tr>
+                    <tr><td>3</td><td>กดปุ่ม <strong>"สร้างใหม่"</strong></td><td>แสดงฟอร์ม</td></tr>
+                    <tr><td>4</td><td>เลือกคลินิก: ABC Clinic</td><td>-</td></tr>
+                    <tr><td>5</td><td>เพิ่มรายการ: FIL-001 x 10 ชิ้น</td><td>-</td></tr>
+                    <tr><td>6</td><td>กดปุ่ม <strong>"ยืนยัน PO"</strong></td><td>สถานะ: CONFIRMED</td></tr>
+                </tbody>
+            </table>
+
+            <h4>สถานะ PO</h4>
+            <table>
+                <thead>
+                    <tr><th>สถานะ</th><th>ความหมาย</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>DRAFT</td><td>ร่าง</td></tr>
+                    <tr><td>CONFIRMED</td><td>ยืนยันแล้ว</td></tr>
+                    <tr><td>PARTIAL</td><td>ส่งบางส่วนแล้ว</td></tr>
+                    <tr><td>COMPLETED</td><td>ส่งครบแล้ว</td></tr>
+                    <tr><td>CANCELLED</td><td>ยกเลิก</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Test Case 4 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 4: สร้างใบส่งออก (Outbound) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการสร้างใบส่งออกสินค้าไปยังคลินิก</p>
+
+            <h4>ขั้นตอนการทดสอบ</h4>
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>คลิกเมนู <strong>"ใบส่งออก"</strong> → <strong>"สร้างใหม่"</strong></td><td>แสดงฟอร์ม</td></tr>
+                    <tr><td>2</td><td>เลือกคลังต้นทาง: คลังกลาง</td><td>-</td></tr>
+                    <tr><td>3</td><td>เลือกคลินิกปลายทาง: ABC Clinic</td><td>-</td></tr>
+                    <tr><td>4</td><td>เลือกวิธีจัดส่ง: GRAB</td><td>-</td></tr>
+                    <tr><td>5</td><td>เลือกสินค้า (เฉพาะ IN_STOCK)</td><td>แสดงรายการ</td></tr>
+                    <tr><td>6</td><td>กดปุ่ม <strong>"ส่งขออนุมัติ"</strong></td><td>สถานะ: PENDING</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์ที่คาดหวัง:</strong><br>
+                ✅ สร้าง Outbound เลขที่: OUT-2026-000001<br>
+                ✅ สถานะ: DRAFT → PENDING<br>
+                ✅ สินค้าเปลี่ยนสถานะ: <span class="status-badge status-instock">IN_STOCK</span> → <span class="status-badge status-pending">PENDING_OUT</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- Test Case 5 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 5: Manager อนุมัติ/ปฏิเสธ <span class="role-badge role-manager">MANAGER</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบ Approval Workflow ของ Manager</p>
+
+            <h4>5.1 Test Case: อนุมัติ (Approve)</h4>
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Login ด้วย <code>manager1</code> / <code>manager123</code></td><td>เข้า Dashboard</td></tr>
+                    <tr><td>2</td><td>คลิกเมนู <strong>"อนุมัติใบส่งออก"</strong></td><td>แสดง Approval Board</td></tr>
+                    <tr><td>3</td><td>ดู Tab <strong>"รออนุมัติ"</strong></td><td>แสดง OUT-2026-000001</td></tr>
+                    <tr><td>4</td><td>คลิกดูรายละเอียด</td><td>แสดงข้อมูลครบ</td></tr>
+                    <tr><td>5</td><td>กดปุ่ม <strong>"อนุมัติ"</strong></td><td>✅ อนุมัติสำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์ Approve:</strong><br>
+                ✅ Outbound สถานะ: PENDING → APPROVED<br>
+                ✅ สินค้าเปลี่ยนสถานะ: <span class="status-badge status-pending">PENDING_OUT</span> → <span class="status-badge status-shipped">SHIPPED</span><br>
+                ✅ บันทึก approved_by_id, approved_at
+            </div>
+
+            <h4>5.2 Test Case: ปฏิเสธ (Reject)</h4>
+            <div class="warning-box">
+                <strong>ผลลัพธ์ Reject:</strong><br>
+                ❌ Outbound สถานะ: PENDING → REJECTED<br>
+                ✅ สินค้ากลับสถานะ: <span class="status-badge status-pending">PENDING_OUT</span> → <span class="status-badge status-instock">IN_STOCK</span><br>
+                ✅ บันทึก reject_reason
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case 6 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 6: ตรวจสอบความแท้ (Verify) <span class="role-badge role-public">PUBLIC</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการตรวจสอบความแท้ของสินค้าโดยไม่ต้อง Login</p>
+
+            <h4>วิธีที่ 1: สแกน QR Code</h4>
+            <p>ใช้มือถือสแกน QR Code → เปิดหน้า Verify อัตโนมัติ → URL: <code>/v/123456789001</code></p>
+
+            <h4>วิธีที่ 2: พิมพ์ Serial</h4>
+            <p>เปิด <code>/th/verify</code> → กรอก Serial 12 หลัก → กดปุ่ม "ตรวจสอบ"</p>
+
+            <h4>ผลลัพธ์ตามสถานะสินค้า</h4>
+            <table>
+                <thead>
+                    <tr><th>สถานะสินค้า</th><th>สี</th><th>ข้อความ</th><th>ปุ่ม Activate</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>IN_STOCK</td><td style="color: #48bb78;">🟢 เขียว</td><td>ของแท้ - อยู่ในคลัง</td><td>❌ ไม่แสดง</td></tr>
+                    <tr><td>SHIPPED</td><td style="color: #48bb78;">🟢 เขียว</td><td>ของแท้ - ส่งออกแล้ว</td><td>✅ แสดง</td></tr>
+                    <tr><td>ACTIVATED</td><td style="color: #ecc94b;">🟡 เหลือง</td><td>ของแท้ - ลงทะเบียนแล้ว</td><td>❌ ไม่แสดง</td></tr>
+                    <tr><td>RETURNED</td><td style="color: #ecc94b;">🟡 เหลือง</td><td>ของแท้ - ถูกส่งคืน</td><td>❌ ไม่แสดง</td></tr>
+                    <tr><td>Token Revoked</td><td style="color: #f56565;">🔴 แดง</td><td>QR ถูกยกเลิก</td><td>❌ ไม่แสดง</td></tr>
+                    <tr><td>ไม่พบ</td><td style="color: #f56565;">🔴 แดง</td><td>ไม่พบในระบบ</td><td>❌ ไม่แสดง</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- Test Case 7 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 7: ลงทะเบียนสินค้า (Activate) <span class="role-badge role-public">PUBLIC</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการลงทะเบียนสินค้าโดยลูกค้า</p>
+            <p><strong>เงื่อนไข:</strong> สินค้าต้องอยู่สถานะ <span class="status-badge status-shipped">SHIPPED</span> + ต้องยินยอม PDPA</p>
+
+            <h4>7.1 Test Case: SINGLE Activation</h4>
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>Verify สินค้าที่ SHIPPED</td><td>แสดงปุ่ม "ลงทะเบียน"</td></tr>
+                    <tr><td>2</td><td>กดปุ่ม <strong>"ลงทะเบียน"</strong></td><td>แสดงฟอร์ม</td></tr>
+                    <tr><td>3</td><td>กรอกข้อมูล (ไม่บังคับ): ชื่อ, อายุ, เพศ, จังหวัด</td><td>-</td></tr>
+                    <tr><td>4</td><td>ติ๊ก <strong>"ยินยอม PDPA"</strong></td><td>✅</td></tr>
+                    <tr><td>5</td><td>กดปุ่ม <strong>"ลงทะเบียน"</strong></td><td>✅ สำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์ SINGLE:</strong><br>
+                ✅ สินค้าเปลี่ยนสถานะ: <span class="status-badge status-shipped">SHIPPED</span> → <span class="status-badge status-activated">ACTIVATED</span><br>
+                ✅ สร้าง Activation record พร้อม consent_at, policy_version<br>
+                ✅ ปุ่ม "ลงทะเบียน" หายไป
+            </div>
+
+            <h4>7.2 Test Case: PACK Activation (หลายครั้ง)</h4>
+            <div class="info-box">
+                <strong>เงื่อนไข:</strong> Product Master ต้องเป็น <code>activation_type: PACK</code>, <code>max_activations: 3</code><br><br>
+                <strong>Flow:</strong> ลงทะเบียนครั้งที่ 1 → activation_count: 0→1 → ยังกดได้ → ลงทะเบียนครั้งที่ 2,3 → ครบแล้วปุ่มหายไป
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case 8 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 8: พิมพ์ QR ใหม่ (Reprint) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการพิมพ์ QR ใหม่เมื่อ Label เสียหาย (Token เดิมถูก Revoke)</p>
+            <p><strong>เงื่อนไข:</strong> สินค้าต้อง <strong>ไม่ใช่</strong> ACTIVATED หรือ RETURNED</p>
+
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>คลิกเมนู <strong>"พิมพ์ QR ใหม่"</strong></td><td>แสดงหน้า Reprint</td></tr>
+                    <tr><td>2</td><td>ค้นหา Serial: <code>123456789001</code></td><td>แสดงข้อมูล + Token Version: 1</td></tr>
+                    <tr><td>3</td><td>กรอกเหตุผล: <code>Label เปื้อน</code></td><td>-</td></tr>
+                    <tr><td>4</td><td>กดปุ่ม <strong>"พิมพ์ใหม่"</strong></td><td>✅ สำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์:</strong><br>
+                ✅ Token เดิม (v1): ACTIVE → REVOKED<br>
+                ✅ Token ใหม่ (v2): status=ACTIVE, version=2<br>
+                ✅ Download PDF Label ใหม่<br><br>
+                <strong>ทดสอบสแกน QR เก่า:</strong> แสดง 🔴 TOKEN_REVOKED
+            </div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- Test Case 9 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 9: รับคืนสินค้า (Return) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการรับคืนสินค้าจากคลินิก/ลูกค้า</p>
+            <p><strong>เงื่อนไข:</strong> สามารถรับคืนได้เฉพาะ SHIPPED หรือ ACTIVATED</p>
+
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>คลิกเมนู <strong>"รับคืนสินค้า"</strong></td><td>แสดงหน้า Return</td></tr>
+                    <tr><td>2</td><td>ค้นหา Serial: <code>123456789001</code></td><td>แสดงข้อมูล</td></tr>
+                    <tr><td>3</td><td>เลือกเหตุผล: <code>สินค้าไม่ตรงตามสั่ง</code></td><td>-</td></tr>
+                    <tr><td>4</td><td>กดปุ่ม <strong>"บันทึกการคืน"</strong></td><td>✅ สำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์:</strong><br>
+                ✅ สินค้าเปลี่ยนสถานะ: SHIPPED/ACTIVATED → <span class="status-badge status-returned">RETURNED</span><br>
+                ✅ assigned_clinic_id: → NULL<br>
+                ✅ QR Token ยังคง ACTIVE (สแกนได้ แสดงสถานะ RETURNED)
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case 10 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 10: สินค้าเสียหาย (Damaged) <span class="role-badge role-warehouse">WAREHOUSE</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการบันทึกสินค้าเสียหาย</p>
+            <p><strong>เงื่อนไข:</strong> สามารถ mark เป็น DAMAGED ได้ทุกสถานะ ยกเว้น ACTIVATED</p>
+
+            <table>
+                <thead>
+                    <tr><th>Step</th><th>Action</th><th>Expected Result</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>1</td><td>คลิกเมนู <strong>"สินค้าเสียหาย"</strong></td><td>แสดงรายการ</td></tr>
+                    <tr><td>2</td><td>กดปุ่ม <strong>"บันทึกสินค้าเสียหาย"</strong></td><td>แสดงฟอร์ม</td></tr>
+                    <tr><td>3</td><td>ค้นหา Serial + เลือกเหตุผล: <code>สินค้าแตก</code></td><td>-</td></tr>
+                    <tr><td>4</td><td>กดปุ่ม <strong>"บันทึก"</strong></td><td>✅ สำเร็จ</td></tr>
+                </tbody>
+            </table>
+
+            <div class="success-box">
+                <strong>ผลลัพธ์:</strong><br>
+                ✅ สินค้าเปลี่ยนสถานะ: → <span class="status-badge status-damaged">DAMAGED</span><br>
+                ✅ บันทึก EventLog
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case 11 -->
+    <div class="test-case no-break">
+        <div class="test-case-header">
+            <h3>Test Case 11: ยืมสินค้า/สั่งฝาก (Loan/Reservation) <span class="role-badge role-admin">ADMIN</span></h3>
+        </div>
+        <div class="test-case-body">
+            <p><strong>วัตถุประสงค์:</strong> ทดสอบการสั่งฝากสินค้าผ่าน Purchase Order + ดู Reservation</p>
+
+            <h4>Flow การยืม/สั่งฝาก</h4>
+            <div class="diagram" style="font-size: 14px;">
+สร้าง PO (DRAFT) → ยืนยัน PO (CONFIRMED) → สร้าง Outbound → อนุมัติ (SHIPPED)
+                                                    ↓
+                                            PO.shipped_quantity เพิ่ม
+                                                    ↓
+                                    ส่งครบ → PO status: COMPLETED
+            </div>
+
+            <h4>ดู Clinic Reservations</h4>
+            <p>ไปที่ <strong>"จัดการคลินิก"</strong> → เลือกคลินิก → Tab <strong>"สินค้าสั่งฝาก"</strong> → แสดงรายการ PO + จำนวนที่สั่ง/ส่งแล้ว</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- Section 14: Summary -->
+    <h2>14. สรุป Data Flow ทั้งระบบ</h2>
+
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                   MASTER DATA                                        │
+│   ProductCategory ── ProductMaster ── Unit ── Warehouse ── ShippingMethod ── Clinic │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              OPERATIONAL FLOW                                        │
+│                                                                                      │
+│   PreGeneratedBatch → ProductItem → GRNLine/OutboundLine → QRToken → Activation    │
+│                          │                                                          │
+│   Status Flow:    PENDING_LINK → IN_STOCK → PENDING_OUT → SHIPPED → ACTIVATED      │
+│                                      │           │                       │          │
+│                                   DAMAGED    [Reject]                RETURNED       │
+│                                              → IN_STOCK                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                  AUDIT TRAIL                                         │
+│                                                                                      │
+│   ScanLog (product_id, result, ip_hash, user_agent, scanned_at)                     │
+│   EventLog (event_type, product_id, user_id, details, created_at)                   │
+│                                                                                      │
+│   Event Types: INBOUND, OUTBOUND, APPROVE, REJECT, ACTIVATE, REPRINT, RETURN,       │
+│                DAMAGED, PRE_GENERATE, LINK_PRODUCT                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+    </div>
+
+    <!-- Section 15: Checklist -->
+    <h2>15. Checklist การทดสอบ</h2>
+
+    <h3>Master Data Setup</h3>
+    <ul class="checklist">
+        <li>มี ProductCategory อย่างน้อย 1 รายการ</li>
+        <li>มี Unit อย่างน้อย 1 รายการ</li>
+        <li>มี ShippingMethod อย่างน้อย 1 รายการ</li>
+        <li>มี Warehouse อย่างน้อย 1 รายการ</li>
+        <li>มี Clinic อย่างน้อย 1 รายการ</li>
+        <li>มี ProductMaster อย่างน้อย 1 รายการ</li>
+        <li>มี User ครบทุก Role (ADMIN, MANAGER, WAREHOUSE)</li>
+    </ul>
+
+    <h3>Functional Test</h3>
+    <ul class="checklist">
+        <li><strong>TC1:</strong> Pre-Generate QR สำเร็จ</li>
+        <li><strong>TC2:</strong> สร้าง GRN + เชื่อมโยง Pre-Gen สำเร็จ</li>
+        <li><strong>TC3:</strong> สร้าง Purchase Order สำเร็จ</li>
+        <li><strong>TC4:</strong> สร้าง Outbound สำเร็จ</li>
+        <li><strong>TC5a:</strong> Manager Approve สำเร็จ</li>
+        <li><strong>TC5b:</strong> Manager Reject สำเร็จ</li>
+        <li><strong>TC6:</strong> Verify (Public) แสดงผลถูกต้อง</li>
+        <li><strong>TC7a:</strong> Activate (SINGLE) สำเร็จ</li>
+        <li><strong>TC7b:</strong> Activate (PACK) หลายครั้งสำเร็จ</li>
+        <li><strong>TC8:</strong> Reprint QR สำเร็จ + Token เดิม Revoked</li>
+        <li><strong>TC9:</strong> Return สินค้าสำเร็จ</li>
+        <li><strong>TC10:</strong> Mark Damaged สำเร็จ</li>
+        <li><strong>TC11:</strong> Reservation flow ครบ</li>
+    </ul>
+
+    <h3>Security Test</h3>
+    <ul class="checklist">
+        <li>Login ด้วย password ผิด → ถูก reject</li>
+        <li>เข้าหน้า Admin โดยไม่ login → redirect to login</li>
+        <li>WAREHOUSE เข้า Approval Board → 403 Forbidden</li>
+        <li>Rate Limit ทำงาน (60 req/min for public)</li>
+    </ul>
+
+    <h3>Edge Cases</h3>
+    <ul class="checklist">
+        <li>Verify ด้วย Serial ที่ไม่มี → แสดง INVALID</li>
+        <li>Activate สินค้าที่ไม่ใช่ SHIPPED → Error</li>
+        <li>Reprint สินค้า ACTIVATED → Error</li>
+        <li>Return สินค้า IN_STOCK → Error</li>
+        <li>สแกน QR ที่ถูก Revoke → แสดง TOKEN_REVOKED</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <!-- Demo Script -->
+    <h2>Demo Script สำหรับลูกค้า (30 นาที)</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>เวลา</th>
+                <th>หัวข้อ</th>
+                <th>ผู้ทำ</th>
+                <th>สิ่งที่แสดง</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>0-2 นาที</td><td>แนะนำระบบ</td><td>-</td><td>ภาพรวม, เป้าหมาย</td></tr>
+            <tr><td>2-5 นาที</td><td>Admin Setup</td><td><span class="role-badge role-admin">ADMIN</span></td><td>Master Data, Users</td></tr>
+            <tr><td>5-8 นาที</td><td>Pre-Gen QR</td><td><span class="role-badge role-warehouse">WAREHOUSE</span></td><td>สร้าง Batch 5 ชิ้น</td></tr>
+            <tr><td>8-13 นาที</td><td>GRN</td><td><span class="role-badge role-warehouse">WAREHOUSE</span></td><td>รับเข้า + เชื่อมโยง</td></tr>
+            <tr><td>13-15 นาที</td><td>Print Label</td><td><span class="role-badge role-warehouse">WAREHOUSE</span></td><td>พิมพ์ PDF</td></tr>
+            <tr><td>15-18 นาที</td><td>Create PO</td><td><span class="role-badge role-admin">ADMIN</span></td><td>สั่งฝากสินค้า</td></tr>
+            <tr><td>18-22 นาที</td><td>Outbound</td><td><span class="role-badge role-warehouse">WAREHOUSE</span></td><td>สร้างใบส่ง</td></tr>
+            <tr><td>22-24 นาที</td><td>Approval</td><td><span class="role-badge role-manager">MANAGER</span></td><td>อนุมัติ</td></tr>
+            <tr><td>24-26 นาที</td><td>Verify</td><td><span class="role-badge role-public">PUBLIC</span></td><td>สแกนตรวจสอบ (มือถือ)</td></tr>
+            <tr><td>26-28 นาที</td><td>Activate</td><td><span class="role-badge role-public">PUBLIC</span></td><td>ลงทะเบียน + PDPA</td></tr>
+            <tr><td>28-30 นาที</td><td>Q&A</td><td>-</td><td>ถามตอบ</td></tr>
+        </tbody>
+    </table>
+
+    <div class="info-box">
+        <h4>Tips สำหรับ Demo</h4>
+        <ol>
+            <li><strong>เตรียม QR ไว้ล่วงหน้า</strong> - พิมพ์ Label จริง 2-3 ใบ</li>
+            <li><strong>ใช้มือถือสแกนจริง</strong> - แสดง User Experience</li>
+            <li><strong>เปิด Database</strong> - แสดงข้อมูลเปลี่ยนแปลง real-time</li>
+            <li><strong>เตรียม 2 Browser</strong> - สำหรับสลับ Role</li>
+        </ol>
+    </div>
+
+    <footer>
+        <p><strong>QR Authenticity & Activation System v2.0</strong></p>
+        <p>คู่มือการทดสอบระบบ | เอกสารนี้สร้างสำหรับการ Demo ให้ลูกค้า</p>
+        <p>อัพเดตล่าสุด: กุมภาพันธ์ 2026</p>
+    </footer>
+</body>
+</html>

@@ -1,27 +1,48 @@
 import prisma from './prisma'
 
 /**
- * Generate next serial number (12 digits, auto-running)
- * Uses database sequence counter with row locking for atomicity
+ * Serial number format: 19 chars
+ * Pos 1: S or P (SINGLE or PACK from activationType)
+ * Pos 2: A-Z (category letter: categoryId 1=A, 2=B, 3=C...)
+ * Pos 3-7: 5-char serialCode (from ProductMaster)
+ * Pos 8-19: 12-digit running number (per-prefix counter)
+ *
+ * Example: PCBBN01000000000001
  */
-export async function generateSerialNumber(): Promise<string> {
-  // Use transaction with row lock to prevent duplicate serials
-  const result = await prisma.$transaction(async (tx) => {
-    // Get and increment the counter atomically
-    const counter = await tx.sequenceCounter.update({
-      where: { name: 'SERIAL' },
-      data: {
-        currentVal: {
-          increment: 1,
-        },
-      },
-    })
 
-    return counter.currentVal
-  })
+export interface SerialParams {
+  activationType: 'SINGLE' | 'PACK'
+  categoryId: number
+  serialCode: string // 5 chars from ProductMaster
+}
 
-  // Format as 12-digit string with leading zeros
-  return result.toString().padStart(12, '0')
+/**
+ * Convert categoryId to letter: 1=A, 2=B, 3=C...
+ */
+export function categoryIdToLetter(id: number): string {
+  return String.fromCharCode(64 + id)
+}
+
+/**
+ * Generate next serial number (19 chars) with per-prefix counter
+ * Uses raw SQL upsert for atomicity
+ */
+export async function generateSerialNumber(params: SerialParams): Promise<string> {
+  const typeChar = params.activationType === 'SINGLE' ? 'S' : 'P'
+  const categoryChar = categoryIdToLetter(params.categoryId)
+  const prefix = `${typeChar}${categoryChar}${params.serialCode}`
+  const counterName = `SER_${prefix}`
+
+  // Use raw SQL for atomic upsert + increment
+  const result = await prisma.$queryRaw<{ current_val: bigint }[]>`
+    INSERT INTO sequence_counters (name, prefix, current_val)
+    VALUES (${counterName}, ${prefix}, 1)
+    ON CONFLICT (name) DO UPDATE SET current_val = sequence_counters.current_val + 1
+    RETURNING current_val
+  `
+
+  const runningNumber = result[0].current_val.toString().padStart(12, '0')
+  return `${prefix}${runningNumber}`
 }
 
 /**
@@ -129,8 +150,8 @@ export async function generateBorrowNumber(): Promise<string> {
 }
 
 /**
- * Validate serial number format (12 digits)
+ * Validate serial number format (19 chars: [SP][A-Z][A-Z0-9]{5}\d{12})
  */
 export function isValidSerialNumber(serial: string): boolean {
-  return /^\d{12}$/.test(serial)
+  return /^[SP][A-Z][A-Z0-9]{5}\d{12}$/.test(serial)
 }

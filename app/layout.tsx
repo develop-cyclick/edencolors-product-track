@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans, Noto_Sans_Thai } from 'next/font/google'
 import './globals.css'
+import { ConfirmProvider } from '@/components/ui/confirm-modal'
 
 const playfair = Playfair_Display({
   variable: '--font-playfair',
@@ -39,7 +40,9 @@ export default function RootLayout({
   return (
     <html lang="th">
       <body className={`${playfair.variable} ${dmSans.variable} ${notoSansThai.variable} antialiased`}>
-        {children}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
       </body>
     </html>
   )

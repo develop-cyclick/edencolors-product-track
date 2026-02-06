@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { useAlert } from '@/components/ui/confirm-modal'
 
 interface ReturnedProduct {
   id: number
@@ -66,6 +67,7 @@ type ReturnMode = 'individual' | 'lot'
 export default function ReturnPage() {
   const params = useParams()
   const locale = params.locale as string
+  const alert = useAlert()
 
   // Return mode state
   const [returnMode, setReturnMode] = useState<ReturnMode>('individual')
@@ -233,7 +235,7 @@ export default function ReturnPage() {
         const message = locale === 'th'
           ? `รับคืนสินค้าสำเร็จ ${data.data.returnedCount} รายการ${data.data.skippedCount > 0 ? ` (ข้าม ${data.data.skippedCount} รายการ)` : ''}`
           : `${data.data.returnedCount} products returned successfully${data.data.skippedCount > 0 ? ` (${data.data.skippedCount} skipped)` : ''}`
-        alert(message)
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         setShowLotReturnModal(false)
         setLotProducts([])
         setSelectedLotProducts([])
@@ -242,11 +244,11 @@ export default function ReturnPage() {
         setReturnNotes('')
         loadReturnedProducts()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Lot return error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return products')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return products', variant: 'error', icon: 'error' })
     } finally {
       setIsProcessing(false)
     }
@@ -298,7 +300,7 @@ export default function ReturnPage() {
       const data = await res.json()
 
       if (data.success) {
-        alert(locale === 'th' ? 'รับคืนสินค้าสำเร็จ' : 'Product returned successfully')
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'รับคืนสินค้าสำเร็จ' : 'Product returned successfully', variant: 'success', icon: 'success' })
         setShowReturnModal(false)
         setSearchResult(null)
         setSearchSerial('')
@@ -306,11 +308,11 @@ export default function ReturnPage() {
         setReturnNotes('')
         loadReturnedProducts()
       } else {
-        alert(data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'))
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
     } catch (error) {
       console.error('Return error:', error)
-      alert(locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return product')
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการรับคืนสินค้า' : 'Failed to return product', variant: 'error', icon: 'error' })
     } finally {
       setIsProcessing(false)
     }

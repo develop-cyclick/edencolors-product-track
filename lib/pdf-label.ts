@@ -124,8 +124,8 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
     doc.addImage(qrDataUrl, 'PNG', qrX, yPos, QR_SIZE_MM, QR_SIZE_MM)
     yPos += QR_SIZE_MM + 8
 
-    // Serial Number (prominent)
-    doc.setFontSize(18)
+    // Serial Number (prominent) - reduced from 18pt for longer 19-char serial
+    doc.setFontSize(14)
     doc.setFont(fontFamily, 'bold')
     doc.text(formatSerial(label.serialNumber), centerX, yPos, { align: 'center' })
     yPos += 8
@@ -177,13 +177,18 @@ export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
 
 /**
  * Format serial number with dashes for readability
- * 123456789012 -> 1234-5678-9012
+ * New 19-char format: PCBBN01000000000001 -> PCBBN01-000000-000001
+ * (7-char prefix, 6-digit, 6-digit)
  */
 function formatSerial(serial: string): string {
-  const cleaned = serial.replace(/\D/g, '')
-  if (cleaned.length !== 12) return serial
+  // New 19-char format: prefix(7) + running(12)
+  if (serial.length === 19) {
+    const prefix = serial.slice(0, 7)
+    const running = serial.slice(7)
+    return `${prefix}-${running.slice(0, 6)}-${running.slice(6, 12)}`
+  }
 
-  return `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}-${cleaned.slice(8, 12)}`
+  return serial
 }
 
 /**
@@ -282,18 +287,13 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
     doc.addImage(qrDataUrls[i], 'PNG', qrX, currentY, qrSize, qrSize)
     currentY += qrSize
 
-    // Draw serial number below QR
-    doc.setFontSize(5)
+    // Draw serial number below QR - reduced from 5pt for longer serial
+    doc.setFontSize(4)
     doc.setFont(fontFamily, 'bold')
     doc.setTextColor(0, 0, 0)
 
-    // Format serial: full 12 digits
     const serial = labels[i].serialNumber
-    const formattedSerial = serial.length === 12
-      ? serial
-      : serial.padStart(12, '0')
-
-    doc.text(formattedSerial, x + cellWidth / 2, currentY + 4, { align: 'center' })
+    doc.text(serial, x + cellWidth / 2, currentY + 4, { align: 'center' })
   }
 
   // Add page info in footer

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin, withWarehouse } from '@/lib/api-middleware'
+import { withRoles, withWarehouse } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
 
@@ -303,6 +303,6 @@ async function handleDELETE(request: NextRequest, context: HandlerContext) {
 }
 
 export const GET = withWarehouse<RouteParams>(handleGET)
-export const PATCH = withAdmin<RouteParams>(handlePATCH)
-export const PUT = withAdmin<RouteParams>(handlePUT)
-export const DELETE = withAdmin<RouteParams>(handleDELETE)
+export const PATCH = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handlePATCH)
+export const PUT = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handlePUT)
+export const DELETE = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handleDELETE)
