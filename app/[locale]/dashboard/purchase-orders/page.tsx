@@ -684,7 +684,7 @@ export default function PurchaseOrdersPage() {
               {/* Product Lines */}
               <div>
                 <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
-                  {locale === 'th' ? 'รายการสินค้าฝาก' : 'Reserved Products'} <span className="text-red-500">*</span>
+                  {locale === 'th' ? 'รายการสินค้าทั้งหมด' : 'Reserved Products'} <span className="text-red-500">*</span>
                 </label>
                 <div className="space-y-3">
                   {formLines.map((line, index) => (
@@ -931,7 +931,7 @@ export default function PurchaseOrdersPage() {
             {/* Lines Table */}
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-[var(--color-charcoal)] mb-3">
-                {locale === 'th' ? 'รายการสินค้าฝาก' : 'Reserved Products'}
+                {locale === 'th' ? 'รายการสินค้าทั้งหมด' : 'Reserved Products'}
               </h4>
               <div className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
                 <table className="w-full">

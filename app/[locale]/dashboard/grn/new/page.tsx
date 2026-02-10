@@ -145,7 +145,7 @@ export default function NewGRNPage() {
       expDate: '',
       inspectionStatus: 'OK',
       remarks: '',
-      usePreGen: false,
+      usePreGen: true,
       preGeneratedItemIds: [],
       scannedItems: [],
     },
@@ -288,7 +288,7 @@ export default function NewGRNPage() {
                   expDate: '',
                   inspectionStatus: 'OK',
                   remarks: '',
-                  usePreGen: false,
+                  usePreGen: true,
                   preGeneratedItemIds: [],
                   scannedItems: [],
                 }])
@@ -372,7 +372,7 @@ export default function NewGRNPage() {
                     expDate: pl.expDate ? pl.expDate.split('T')[0] : '',
                     inspectionStatus: pl.inspectionStatus || 'OK',
                     remarks: pl.remarks || '',
-                    usePreGen: false,
+                    usePreGen: true,
                     preGeneratedItemIds: [],
                     scannedItems: [],
                     planLineId: pl.id,
@@ -410,7 +410,7 @@ export default function NewGRNPage() {
         expDate: '',
         inspectionStatus: 'OK',
         remarks: '',
-        usePreGen: false,
+        usePreGen: true,
         preGeneratedItemIds: [],
         scannedItems: [],
       },
@@ -702,11 +702,19 @@ export default function NewGRNPage() {
         newSelectedItemIds.delete(item.id)
       }
     } else {
-      // Select batch and all its items
+      // Select batch items, capped by remaining qty if applicable
+      const currentLine = batchModal ? lines.find(l => l.id === batchModal.lineId) : null
+      const alreadySelected = newSelectedItemIds.size
+      const existingCount = currentLine?.scannedItems.filter(item => item.isExisting).length || 0
+      const remaining = currentLine?.remaining
+      // How many more items can we add (across all batches)
+      const maxCanAdd = remaining != null ? Math.max(0, remaining - existingCount - alreadySelected) : batch.items.length
+      const toSelect = Math.min(batch.items.length, maxCanAdd)
+
       newSelectedBatchIds.add(batchId)
-      newBatchQuantities[batchId] = batch.items.length
-      for (const item of batch.items) {
-        newSelectedItemIds.add(item.id)
+      newBatchQuantities[batchId] = toSelect
+      for (let i = 0; i < toSelect; i++) {
+        newSelectedItemIds.add(batch.items[i].id)
       }
     }
 
@@ -721,8 +729,6 @@ export default function NewGRNPage() {
     const batch = batches.find(b => b.batchId === batchId)
     if (!batch) return
 
-    const clamped = Math.max(0, Math.min(qty, batch.items.length))
-    const newBatchQuantities = { ...batchQuantities, [batchId]: clamped }
     const newSelectedBatchIds = new Set(selectedBatchIds)
     const newSelectedItemIds = new Set(selectedItemIds)
 
@@ -730,6 +736,15 @@ export default function NewGRNPage() {
     for (const item of batch.items) {
       newSelectedItemIds.delete(item.id)
     }
+
+    // Cap by remaining qty if applicable
+    const currentLine = batchModal ? lines.find(l => l.id === batchModal.lineId) : null
+    const otherSelected = newSelectedItemIds.size  // items selected from other batches
+    const existingCount = currentLine?.scannedItems.filter(item => item.isExisting).length || 0
+    const remaining = currentLine?.remaining
+    const maxForThisBatch = remaining != null ? Math.max(0, remaining - existingCount - otherSelected) : batch.items.length
+    const clamped = Math.max(0, Math.min(qty, batch.items.length, maxForThisBatch))
+    const newBatchQuantities = { ...batchQuantities, [batchId]: clamped }
 
     if (clamped === 0) {
       // Deselect batch entirely
@@ -757,6 +772,13 @@ export default function NewGRNPage() {
       // If batch was fully selected, unmark it
       newSelectedBatchIds.delete(batchId)
     } else {
+      // Check if adding this item would exceed remaining
+      const currentLine = batchModal ? lines.find(l => l.id === batchModal.lineId) : null
+      const existingCount = currentLine?.scannedItems.filter(item => item.isExisting).length || 0
+      const remaining = currentLine?.remaining
+      if (remaining != null && (newSelectedItemIds.size + existingCount) >= remaining) {
+        return // Already at max
+      }
       newSelectedItemIds.add(itemId)
       // Check if all items in batch are now selected
       const batches = getGroupedBatches()
@@ -812,12 +834,11 @@ export default function NewGRNPage() {
 
     // Receive More mode - submit to receive-more endpoint
     if (isReceiveMoreMode && receiveMoreGrnId) {
-      // Validate lines have quantities
-      const emptyLines = lines.filter(l => {
-        if (l.usePreGen) return l.preGeneratedItemIds.length === 0
-        return l.quantity < 1
-      })
-      if (emptyLines.length > 0) {
+      // Validate at least one line has quantity >= 1
+      const hasAnyItems = lines.some(l =>
+        l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1
+      )
+      if (!hasAnyItems) {
         await alert({
           title: locale === 'th' ? 'ข้อมูลไม่ครบ' : 'Incomplete Data',
           message: locale === 'th' ? 'กรุณาระบุจำนวนที่จะรับอย่างน้อย 1 รายการ' : 'Please specify at least 1 item to receive',
@@ -854,7 +875,7 @@ export default function NewGRNPage() {
             receivedAt: receivedAt,
             remarks: remarks || null,
             lines: lines
-              .filter(l => l.planLineId)
+              .filter(l => l.planLineId && (l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1))
               .map(l => ({
                 planLineId: l.planLineId,
                 quantity: l.usePreGen ? l.preGeneratedItemIds.length : l.quantity,
@@ -1169,12 +1190,33 @@ export default function NewGRNPage() {
       return
     }
 
-    // Validate pre-gen lines have items selected
-    const emptyPreGenLines = lines.filter((l) => l.usePreGen && l.preGeneratedItemIds.length === 0)
-    if (emptyPreGenLines.length > 0) {
+    // Validate at least one line has quantity >= 1 across the entire GRN
+    const hasAnyItems = lines.some((l) =>
+      l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1
+    )
+    if (!hasAnyItems) {
       await alert({
         title: locale === 'th' ? 'ข้อมูลไม่ครบ' : 'Incomplete Data',
-        message: locale === 'th' ? 'กรุณาเลือก QR ล่วงหน้าอย่างน้อย 1 รายการ' : 'Please select at least 1 pre-generated QR',
+        message: locale === 'th' ? 'กรุณาระบุจำนวนที่จะรับอย่างน้อย 1 รายการ' : 'Please specify at least 1 item to receive',
+        variant: 'warning',
+        icon: 'warning',
+      })
+      return
+    }
+
+    // Validate totalQty must not be less than actual scanned/entered quantity
+    const invalidTotalLines = lines.filter((l) => {
+      const actualQty = l.usePreGen ? l.preGeneratedItemIds.length : l.quantity
+      return actualQty > 0 && l.totalQty < actualQty
+    })
+    if (invalidTotalLines.length > 0) {
+      const line = invalidTotalLines[0]
+      const actualQty = line.usePreGen ? line.preGeneratedItemIds.length : line.quantity
+      await alert({
+        title: locale === 'th' ? 'จำนวนรวมไม่ถูกต้อง' : 'Invalid Total Quantity',
+        message: locale === 'th'
+          ? `สินค้า "${line.productMaster?.nameTh || line.productMaster?.sku}" มีจำนวนรวม (${line.totalQty}) น้อยกว่าจำนวนที่สแกนแล้ว (${actualQty})`
+          : `Product "${line.productMaster?.nameTh || line.productMaster?.sku}" has total qty (${line.totalQty}) less than scanned qty (${actualQty})`,
         variant: 'warning',
         icon: 'warning',
       })
@@ -1198,18 +1240,20 @@ export default function NewGRNPage() {
           supplierContact: supplierContact || null,
           deliveryDocDate: deliveryDocDate || null,
           remarks: remarks || null,
-          lines: lines.map((l) => ({
-            productMasterId: l.productMasterId,
-            quantity: l.usePreGen ? l.preGeneratedItemIds.length : l.quantity,
-            totalQty: l.usePreGen ? l.totalQty : l.totalQty,
-            unitId: l.unitId,
-            lot: l.lot || null,
-            mfgDate: l.mfgDate || null,
-            expDate: l.expDate || null,
-            inspectionStatus: l.inspectionStatus,
-            remarks: l.remarks || null,
-            preGeneratedItemIds: l.usePreGen ? l.preGeneratedItemIds : undefined,
-          })),
+          lines: lines
+            .filter((l) => l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1)
+            .map((l) => ({
+              productMasterId: l.productMasterId,
+              quantity: l.usePreGen ? l.preGeneratedItemIds.length : l.quantity,
+              totalQty: l.usePreGen ? l.totalQty : l.totalQty,
+              unitId: l.unitId,
+              lot: l.lot || null,
+              mfgDate: l.mfgDate || null,
+              expDate: l.expDate || null,
+              inspectionStatus: l.inspectionStatus,
+              remarks: l.remarks || null,
+              preGeneratedItemIds: l.usePreGen ? l.preGeneratedItemIds : undefined,
+            })),
         }),
       })
 
@@ -1565,7 +1609,7 @@ export default function NewGRNPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                              {locale === 'th' ? 'จำนวนรวม' : 'Total Qty'} <span className="text-red-500">*</span>
+                              {locale === 'th' ? 'จำนวนรวมทั้งหมด' : 'Total Qty'} <span className="text-red-500">*</span>
                             </label>
                             <input
                               type="number"
@@ -1723,7 +1767,7 @@ export default function NewGRNPage() {
                             <div className="grid grid-cols-3 gap-3">
                               <div>
                                 <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                                  {locale === 'th' ? 'จำนวนรวม' : 'Total Qty'} <span className="text-red-500">*</span>
+                                  {locale === 'th' ? 'จำนวนรวมทั้งหมด' : 'Total Qty'} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                   type="number"
@@ -2045,7 +2089,7 @@ export default function NewGRNPage() {
                               {/* Quick select buttons */}
                               {batch.items.length > 10 && (
                                 <div className="flex gap-1 ml-auto">
-                                  {[10, 25, 50, batch.items.length].filter(n => n <= batch.items.length).map(n => (
+                                  {[...new Set([100, 250, 500, batch.items.length].filter(n => n <= batch.items.length))].map(n => (
                                     <button
                                       key={n}
                                       type="button"

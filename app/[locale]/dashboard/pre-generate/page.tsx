@@ -113,6 +113,10 @@ export default function PreGeneratePage() {
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'จำนวนต้องมากกว่า 0' : 'Quantity must be greater than 0', variant: 'warning', icon: 'warning' })
       return
     }
+    if (quantity > 2000) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'สร้างได้สูงสุด 2,000 ชิ้นต่อครั้ง' : 'Maximum 2,000 items per batch', variant: 'warning', icon: 'warning' })
+      return
+    }
 
     setCreating(true)
     try {
@@ -174,7 +178,12 @@ export default function PreGeneratePage() {
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
       } else {
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Labels ได้' : 'Failed to generate labels', variant: 'error', icon: 'error' })
+        let errMsg = locale === 'th' ? 'ไม่สามารถสร้าง Labels ได้' : 'Failed to generate labels'
+        try {
+          const errData = await res.json()
+          if (errData.error) errMsg += `: ${errData.error}`
+        } catch { /* ignore parse error */ }
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: errMsg, variant: 'error', icon: 'error' })
       }
     } catch {
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Labels ได้' : 'Failed to download labels', variant: 'error', icon: 'error' })
@@ -239,10 +248,11 @@ export default function PreGeneratePage() {
               <input
                 type="number"
                 min="1"
+                max="2000"
                 value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                onChange={(e) => setQuantity(Math.min(parseInt(e.target.value) || 1, 2000))}
                 className="w-full px-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
-                placeholder={locale === 'th' ? 'ระบุจำนวน' : 'Enter quantity'}
+                placeholder={locale === 'th' ? 'ระบุจำนวน (สูงสุด 2,000)' : 'Enter quantity (max 2,000)'}
               />
             </div>
             <div>

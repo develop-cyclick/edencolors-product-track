@@ -66,10 +66,9 @@ interface LotProduct {
   } | null
 }
 
-type MainTab = 'list' | 'borrow'
+type ActiveTab = 'damaged' | 'return' | 'borrow' | 'return_borrowed' | 'history'
 type ReturnMode = 'individual' | 'lot'
 type StatusFilter = 'all' | 'DAMAGED' | 'RETURNED'
-type BorrowMode = 'borrow' | 'return_borrowed' | 'return_to_stock' | 'history'
 type BorrowHistoryFilter = 'all' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'RETURNED'
 
 interface BorrowTransaction {
@@ -118,10 +117,10 @@ export default function DamagedProductsPage() {
   const locale = params.locale as string
   const alert = useAlert()
 
-  // Main tab state
-  const [mainTab, setMainTab] = useState<MainTab>('list')
+  // --- Tab & Navigation ---
+  const [activeTab, setActiveTab] = useState<ActiveTab>('damaged')
 
-  // List tab states
+  // --- Damaged Products List ---
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<DamagedProduct[]>([])
   const [search, setSearch] = useState('')
@@ -133,35 +132,34 @@ export default function DamagedProductsPage() {
     totalPages: 0,
   })
 
-  // Restore modal state
+  // --- Restore Modal ---
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const [selectedItem, setSelectedItem] = useState<DamagedProduct | null>(null)
   const [repairNote, setRepairNote] = useState('')
   const [restoring, setRestoring] = useState(false)
 
-  // Return tab states
+  // --- Return Individual ---
   const [returnMode, setReturnMode] = useState<ReturnMode>('individual')
   const [searchSerial, setSearchSerial] = useState('')
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
   const [searchError, setSearchError] = useState('')
   const [isSearching, setIsSearching] = useState(false)
 
-  // Lot return states
+  // --- Return Lot ---
   const [searchLot, setSearchLot] = useState('')
   const [lotProducts, setLotProducts] = useState<LotProduct[]>([])
   const [lotError, setLotError] = useState('')
   const [isSearchingLot, setIsSearchingLot] = useState(false)
   const [selectedLotProducts, setSelectedLotProducts] = useState<number[]>([])
 
-  // Return modal states
+  // --- Return Modal Shared ---
   const [showReturnModal, setShowReturnModal] = useState(false)
   const [showLotReturnModal, setShowLotReturnModal] = useState(false)
   const [returnReason, setReturnReason] = useState('')
   const [returnNotes, setReturnNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // Borrow tab states
-  const [borrowMode, setBorrowMode] = useState<BorrowMode>('borrow')
+  // --- Borrow / Return Borrowed Product Selection ---
   const [borrowProductsList, setBorrowProductsList] = useState<BorrowSearchResult[]>([])
   const [borrowProductsLoading, setBorrowProductsLoading] = useState(false)
   const [borrowProductsFilter, setBorrowProductsFilter] = useState('')
@@ -173,7 +171,7 @@ export default function DamagedProductsPage() {
     totalPages: 0,
   })
 
-  // Borrow form states
+  // --- Borrow Form ---
   const [borrowerName, setBorrowerName] = useState('')
   const [borrowClinicName, setBorrowClinicName] = useState('')
   const [borrowClinicAddress, setBorrowClinicAddress] = useState('')
@@ -182,7 +180,7 @@ export default function DamagedProductsPage() {
   const [borrowRemarks, setBorrowRemarks] = useState('')
   const [isBorrowSubmitting, setIsBorrowSubmitting] = useState(false)
 
-  // Borrow history states
+  // --- History ---
   const [borrowHistory, setBorrowHistory] = useState<BorrowTransaction[]>([])
   const [borrowHistoryFilter, setBorrowHistoryFilter] = useState<BorrowHistoryFilter>('all')
   const [borrowHistoryLoading, setBorrowHistoryLoading] = useState(false)
@@ -193,7 +191,7 @@ export default function DamagedProductsPage() {
     totalPages: 0,
   })
 
-  // Convert to outbound modal states
+  // --- Convert to Outbound Modal ---
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [convertClinics, setConvertClinics] = useState<{id:number,name:string,province:string,branchName:string|null}[]>([])
   const [convertWarehouses, setConvertWarehouses] = useState<{id:number,name:string}[]>([])
@@ -212,7 +210,7 @@ export default function DamagedProductsPage() {
   const [isConverting, setIsConverting] = useState(false)
   const [convertClinicSearch, setConvertClinicSearch] = useState('')
 
-  // Approve/Reject modal states
+  // --- Approve/Reject Modal ---
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<BorrowTransaction | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -502,7 +500,7 @@ export default function DamagedProductsPage() {
   const fetchBorrowProducts = async () => {
     setBorrowProductsLoading(true)
     try {
-      const statusParam = borrowMode === 'borrow' ? 'IN_STOCK' : 'BORROWED'
+      const statusParam = activeTab === 'borrow' ? 'IN_STOCK' : 'BORROWED'
       const params = new URLSearchParams({
         page: borrowProductsPagination.page.toString(),
         limit: borrowProductsPagination.limit.toString(),
@@ -529,16 +527,16 @@ export default function DamagedProductsPage() {
   }
 
   useEffect(() => {
-    if (mainTab === 'borrow' && borrowMode === 'history') {
+    if (activeTab === 'history') {
       fetchBorrowHistory()
     }
-  }, [mainTab, borrowMode, borrowHistoryPagination.page, borrowHistoryFilter])
+  }, [activeTab, borrowHistoryPagination.page, borrowHistoryFilter])
 
   useEffect(() => {
-    if (mainTab === 'borrow' && (borrowMode === 'borrow' || borrowMode === 'return_borrowed')) {
+    if (activeTab === 'borrow' || activeTab === 'return_borrowed') {
       fetchBorrowProducts()
     }
-  }, [mainTab, borrowMode, borrowProductsPagination.page, borrowProductsFilter])
+  }, [activeTab, borrowProductsPagination.page, borrowProductsFilter])
 
   const toggleBorrowProductSelection = (productId: number) => {
     setSelectedBorrowProducts((prev) =>
@@ -585,7 +583,7 @@ export default function DamagedProductsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: borrowMode === 'borrow' ? 'BORROW' : 'RETURN',
+          type: activeTab === 'borrow' ? 'BORROW' : 'RETURN',
           borrowerName: borrowerName.trim(),
           clinicName: borrowClinicName.trim() || undefined,
           clinicAddress: borrowClinicAddress.trim() || undefined,
@@ -600,7 +598,7 @@ export default function DamagedProductsPage() {
 
       if (data.success) {
         const message =
-          borrowMode === 'borrow'
+          activeTab === 'borrow'
             ? locale === 'th'
               ? `สร้างคำขอยืมสินค้าสำเร็จ (${data.data.transactionNo}) รออนุมัติ`
               : `Borrow request created (${data.data.transactionNo}) - pending approval`
@@ -809,59 +807,53 @@ export default function DamagedProductsPage() {
     )
   }
 
+  // --- Tab definitions ---
+  const tabs: { key: ActiveTab; labelTh: string; labelEn: string }[] = [
+    { key: 'damaged', labelTh: 'สินค้าเสียหาย', labelEn: 'Damaged Products' },
+    { key: 'return', labelTh: 'รับคืนสินค้าเสียหาย', labelEn: 'Return Products' },
+    { key: 'borrow', labelTh: 'ยืมสินค้า', labelEn: 'Borrow' },
+    { key: 'return_borrowed', labelTh: 'คืนสินค้ายืม', labelEn: 'Return Borrowed' },
+    { key: 'history', labelTh: 'ประวัติ', labelEn: 'History' },
+  ]
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--color-charcoal)]">
-            {locale === 'th' ? 'สินค้าเสียหาย / รับคืนสินค้า' : 'Damaged / Returned Products'}
-          </h1>
-          <p className="text-[var(--color-gray-500)] mt-1">
-            {locale === 'th'
-              ? 'จัดการสินค้าที่เสียหายหรือถูกคืน รอซ่อมแซมหรือตรวจสอบ'
-              : 'Manage damaged or returned products awaiting repair or inspection'}
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-[var(--color-charcoal)]">
+          {locale === 'th' ? 'สินค้าเสียหาย / รับคืนสินค้า' : 'Damaged / Returned Products'}
+        </h1>
+        <p className="text-[var(--color-foreground-muted)] mt-1">
+          {locale === 'th'
+            ? 'จัดการสินค้าที่เสียหายหรือถูกคืน รอซ่อมแซมหรือตรวจสอบ'
+            : 'Manage damaged or returned products awaiting repair or inspection'}
+        </p>
       </div>
 
-      {/* Main Tabs */}
-      <div className="bg-white rounded-xl border border-[var(--color-gray-200)] overflow-hidden">
-        <div className="flex border-b border-[var(--color-gray-200)]">
+      {/* 5 Top-Level Tabs */}
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((tab) => (
           <button
-            onClick={() => setMainTab('list')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-all ${
-              mainTab === 'list'
-                ? 'text-[var(--color-gold)] border-b-2 border-[var(--color-gold)] bg-[var(--color-gold)]/5'
-                : 'text-[var(--color-gray-500)] hover:text-[var(--color-charcoal)]'
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+              activeTab === tab.key
+                ? 'bg-[var(--color-gold)] text-white shadow-sm'
+                : 'bg-[var(--color-off-white)] text-[var(--color-foreground-muted)] hover:bg-[var(--color-beige)] hover:text-[var(--color-charcoal)]'
             }`}
           >
-            {locale === 'th' ? 'รายการสินค้า' : 'Product List'}
-            {pagination.total > 0 && (
-              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-[var(--color-gray-200)]">
-                {pagination.total}
-              </span>
-            )}
+            {locale === 'th' ? tab.labelTh : tab.labelEn}
           </button>
-          <button
-            onClick={() => setMainTab('borrow')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-all ${
-              mainTab === 'borrow'
-                ? 'text-[var(--color-gold)] border-b-2 border-[var(--color-gold)] bg-[var(--color-gold)]/5'
-                : 'text-[var(--color-gray-500)] hover:text-[var(--color-charcoal)]'
-            }`}
-          >
-            {locale === 'th' ? 'รับคืน/ยืม/คืนสินค้า' : 'Return/Borrow'}
-          </button>
-        </div>
+        ))}
+      </div>
 
-        {/* List Tab Content */}
-        {mainTab === 'list' && (
-          <div>
-            {/* Search and Filter */}
-            <div className="p-4 border-b border-[var(--color-gray-200)]">
-              <div className="flex flex-col md:flex-row gap-3">
-                {/* Status Filter Buttons */}
+      {/* ==================== DAMAGED TAB ==================== */}
+      {activeTab === 'damaged' && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+          {/* Search and Filter */}
+          <div className="p-4 sm:p-5 border-b border-[var(--color-beige)]">
+            <div className="flex flex-col md:flex-row gap-3">
+              {/* Status Filter Buttons */}
                 <div className="flex flex-wrap gap-2 flex-shrink-0">
                   <button
                     onClick={() => {
@@ -871,7 +863,7 @@ export default function DamagedProductsPage() {
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       statusFilter === 'all'
                         ? 'bg-[var(--color-charcoal)] text-white'
-                        : 'bg-[var(--color-gray-100)] text-[var(--color-gray-600)] hover:bg-[var(--color-gray-200)]'
+                        : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
                     }`}
                   >
                     {locale === 'th' ? 'ทั้งหมด' : 'All'}
@@ -907,69 +899,83 @@ export default function DamagedProductsPage() {
                 </div>
 
                 {/* Search Input */}
-                <input
-                  type="text"
-                  placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อสินค้า...' : 'Search Serial, SKU, Product name...'}
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    setPagination((p) => ({ ...p, page: 1 }))
-                  }}
-                  className="flex-1 px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
-                />
+                <div className="flex-1 relative">
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อสินค้า...' : 'Search Serial, SKU, Product name...'}
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value)
+                      setPagination((p) => ({ ...p, page: 1 }))
+                    }}
+                    className="w-full pl-12 pr-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 placeholder:text-[var(--color-foreground-muted)] focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-[var(--color-gray-100)]">
+                <thead className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">Serial</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'สินค้า' : 'Product'}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'วันที่' : 'Date'}</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สินค้า' : 'Product'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'วันที่' : 'Date'}</th>
+                    <th className="px-5 py-4 text-right text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--color-gray-200)]">
+                <tbody className="divide-y divide-[var(--color-beige)]">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
-                        {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
+                      <td colSpan={6} className="p-12 text-center">
+                        <div className="relative w-10 h-10 mx-auto mb-3">
+                          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
+                          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
+                        </div>
+                        <p className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}</p>
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
-                        {locale === 'th' ? 'ไม่พบสินค้า' : 'No products found'}
+                      <td colSpan={6} className="p-12 text-center">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-beige)]/50 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                          </svg>
+                        </div>
+                        <p className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ไม่พบสินค้า' : 'No products found'}</p>
                       </td>
                     </tr>
                   ) : (
                     items.map((item) => (
-                      <tr key={item.id} className="hover:bg-[var(--color-gray-100)]">
-                        <td className="px-4 py-3">
+                      <tr key={item.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                        <td className="px-5 py-4">
                           <span className="font-mono text-sm">{item.serial12}</span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-4">
                           <div>
                             <p className="font-medium">{item.productMaster?.sku || item.sku || '-'}</p>
-                            <p className="text-sm text-[var(--color-gray-500)]">
+                            <p className="text-sm text-[var(--color-foreground-muted)]">
                               {item.productMaster
                                 ? (locale === 'th' ? item.productMaster.nameTh : item.productMaster.nameEn || item.productMaster.nameTh)
                                 : item.name || '-'}
                             </p>
                           </div>
                         </td>
-                        <td className="px-4 py-3">{getStatusBadge(item.status)}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-4">{getStatusBadge(item.status)}</td>
+                        <td className="px-5 py-4">
                           <p className="text-sm text-red-600">{item.damageNote?.reason || '-'}</p>
                         </td>
-                        <td className="px-4 py-3 text-sm text-[var(--color-gray-500)]">
+                        <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
                           {formatDate(item.damagedAt)}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-5 py-4 text-right">
                           <button
                             onClick={() => openRestoreModal(item)}
                             className="px-3 py-1.5 text-sm bg-[var(--color-mint)] text-white rounded-lg hover:bg-[var(--color-mint-dark)] transition-colors"
@@ -986,8 +992,8 @@ export default function DamagedProductsPage() {
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
-              <div className="px-4 py-3 border-t border-[var(--color-gray-200)] flex items-center justify-between">
-                <p className="text-sm text-[var(--color-gray-500)]">
+              <div className="px-4 sm:px-5 py-4 border-t border-[var(--color-beige)] flex flex-col sm:flex-row items-center justify-between gap-3 bg-[var(--color-off-white)]">
+                <p className="text-sm text-[var(--color-foreground-muted)]">
                   {locale === 'th'
                     ? `แสดง ${items.length} จาก ${pagination.total} รายการ`
                     : `Showing ${items.length} of ${pagination.total} items`}
@@ -996,14 +1002,14 @@ export default function DamagedProductsPage() {
                   <button
                     onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
                     disabled={pagination.page === 1}
-                    className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-50 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-all"
                   >
                     {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
                   </button>
                   <button
                     onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
                     disabled={pagination.page >= pagination.totalPages}
-                    className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-50 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-all"
                   >
                     {locale === 'th' ? 'ถัดไป' : 'Next'}
                   </button>
@@ -1013,147 +1019,9 @@ export default function DamagedProductsPage() {
           </div>
         )}
 
-        {/* Borrow Tab Content */}
-        {mainTab === 'borrow' && (
-          <div className="p-4 md:p-6">
-            {/* Borrow Mode Selection Cards */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {/* Return to Stock Card */}
-              <button
-                onClick={() => {
-                  setBorrowMode('return_to_stock')
-                  setLotProducts([])
-                  setSelectedLotProducts([])
-                  setSearchLot('')
-                  setLotError('')
-                  setSearchResult(null)
-                  setSearchSerial('')
-                  setSearchError('')
-                }}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  borrowMode === 'return_to_stock'
-                    ? 'border-orange-500 bg-orange-50 shadow-md'
-                    : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300 hover:bg-orange-50/50'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    borrowMode === 'return_to_stock' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-500'
-                  }`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${borrowMode === 'return_to_stock' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'รับคืนสินค้า' : 'Return to Stock'}
-                    </h3>
-                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th' ? 'รับคืนสินค้าที่ส่งออกแล้ว' : 'Return shipped/activated products'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              {/* Borrow Card */}
-              <button
-                onClick={() => {
-                  setBorrowMode('borrow')
-                  clearBorrowForm()
-                }}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  borrowMode === 'borrow'
-                    ? 'border-purple-500 bg-purple-50 shadow-md'
-                    : 'border-[var(--color-gray-200)] bg-white hover:border-purple-300 hover:bg-purple-50/50'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    borrowMode === 'borrow' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-500'
-                  }`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${borrowMode === 'borrow' ? 'text-purple-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'ยืมสินค้า' : 'Borrow'}
-                    </h3>
-                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th' ? 'ยืมสินค้าจากคลัง (รออนุมัติ)' : 'Borrow from stock (pending approval)'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              {/* Return Borrowed Card */}
-              <button
-                onClick={() => {
-                  setBorrowMode('return_borrowed')
-                  clearBorrowForm()
-                }}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  borrowMode === 'return_borrowed'
-                    ? 'border-green-500 bg-green-50 shadow-md'
-                    : 'border-[var(--color-gray-200)] bg-white hover:border-green-300 hover:bg-green-50/50'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    borrowMode === 'return_borrowed' ? 'bg-green-500 text-white' : 'bg-green-100 text-green-500'
-                  }`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${borrowMode === 'return_borrowed' ? 'text-green-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'คืนสินค้ายืม' : 'Return Borrowed'}
-                    </h3>
-                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th' ? 'คืนสินค้าที่ยืมเข้าคลัง' : 'Return borrowed products to stock'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-
-              {/* History Card */}
-              <button
-                onClick={() => {
-                  setBorrowMode('history')
-                  clearBorrowForm()
-                }}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  borrowMode === 'history'
-                    ? 'border-blue-500 bg-blue-50 shadow-md'
-                    : 'border-[var(--color-gray-200)] bg-white hover:border-blue-300 hover:bg-blue-50/50'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    borrowMode === 'history' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-500'
-                  }`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className={`font-semibold text-lg ${borrowMode === 'history' ? 'text-blue-700' : 'text-[var(--color-charcoal)]'}`}>
-                      {locale === 'th' ? 'ประวัติ' : 'History'}
-                    </h3>
-                    <p className="text-sm text-[var(--color-gray-500)] mt-1">
-                      {locale === 'th' ? 'ดูประวัติการยืม/คืน' : 'View borrow/return history'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-[var(--color-gray-200)] my-6" />
-
-            {/* Return to Stock Mode */}
-            {borrowMode === 'return_to_stock' && (
+      {/* ==================== RETURN TAB ==================== */}
+      {activeTab === 'return' && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-4 sm:p-6">
               <div className="space-y-6">
                 {/* Return Mode Selection */}
                 <div className="grid md:grid-cols-2 gap-4">
@@ -1169,7 +1037,7 @@ export default function DamagedProductsPage() {
                     className={`p-4 rounded-xl border-2 text-left transition-all ${
                       returnMode === 'individual'
                         ? 'border-orange-500 bg-orange-50'
-                        : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300'
+                        : 'border-[var(--color-beige)] bg-white hover:border-orange-300'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1184,7 +1052,7 @@ export default function DamagedProductsPage() {
                         <h4 className={`font-medium ${returnMode === 'individual' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
                           {locale === 'th' ? 'รับคืนรายชิ้น' : 'Individual Return'}
                         </h4>
-                        <p className="text-xs text-[var(--color-gray-500)]">
+                        <p className="text-xs text-[var(--color-foreground-muted)]">
                           {locale === 'th' ? 'ค้นหาด้วย Serial' : 'Search by Serial'}
                         </p>
                       </div>
@@ -1202,7 +1070,7 @@ export default function DamagedProductsPage() {
                     className={`p-4 rounded-xl border-2 text-left transition-all ${
                       returnMode === 'lot'
                         ? 'border-orange-500 bg-orange-50'
-                        : 'border-[var(--color-gray-200)] bg-white hover:border-orange-300'
+                        : 'border-[var(--color-beige)] bg-white hover:border-orange-300'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1217,7 +1085,7 @@ export default function DamagedProductsPage() {
                         <h4 className={`font-medium ${returnMode === 'lot' ? 'text-orange-700' : 'text-[var(--color-charcoal)]'}`}>
                           {locale === 'th' ? 'รับคืนทั้ง Lot' : 'Lot Return'}
                         </h4>
-                        <p className="text-xs text-[var(--color-gray-500)]">
+                        <p className="text-xs text-[var(--color-foreground-muted)]">
                           {locale === 'th' ? 'ค้นหาด้วยหมายเลข Lot' : 'Search by Lot number'}
                         </p>
                       </div>
@@ -1227,7 +1095,7 @@ export default function DamagedProductsPage() {
 
                 {/* Individual Return Mode Content */}
                 {returnMode === 'individual' && (
-                  <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
+                  <div className="bg-[var(--color-off-white)] rounded-2xl p-5">
                     <h3 className="font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
                       <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1243,7 +1111,7 @@ export default function DamagedProductsPage() {
                           onChange={(e) => setSearchSerial(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                           placeholder={locale === 'th' ? 'กรอก Serial 12 หลัก' : 'Enter 12-digit Serial'}
-                          className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                          className="w-full px-4 py-3 bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                         />
                       </div>
                       <button
@@ -1280,7 +1148,7 @@ export default function DamagedProductsPage() {
                     )}
 
                     {searchResult && (
-                      <div className="mt-5 p-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm">
+                      <div className="mt-5 p-5 bg-white border border-[var(--color-beige)] rounded-xl shadow-sm">
                         <div className="flex items-center gap-2 mb-4">
                           <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1288,21 +1156,21 @@ export default function DamagedProductsPage() {
                           <h3 className="font-semibold text-green-700">{locale === 'th' ? 'พบสินค้า' : 'Product Found'}</h3>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                          <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
-                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">Serial</span>
+                          <div className="bg-[var(--color-off-white)] p-3 rounded-lg">
+                            <span className="text-[var(--color-foreground-muted)] text-xs uppercase tracking-wide">Serial</span>
                             <p className="font-mono font-semibold text-[var(--color-gold)] mt-1">{searchResult.serial12}</p>
                           </div>
-                          <div className="bg-[var(--color-gray-100)] p-3 rounded-lg">
-                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'สถานะ' : 'Status'}</span>
+                          <div className="bg-[var(--color-off-white)] p-3 rounded-lg">
+                            <span className="text-[var(--color-foreground-muted)] text-xs uppercase tracking-wide">{locale === 'th' ? 'สถานะ' : 'Status'}</span>
                             <div className="mt-1">{getStatusBadge(searchResult.status)}</div>
                           </div>
-                          <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
-                            <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}</span>
+                          <div className="col-span-full bg-[var(--color-off-white)] p-3 rounded-lg">
+                            <span className="text-[var(--color-foreground-muted)] text-xs uppercase tracking-wide">{locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}</span>
                             <p className="font-medium mt-1">{searchResult.name}</p>
                           </div>
                           {searchResult.assignedClinic && (
-                            <div className="col-span-full bg-[var(--color-gray-100)] p-3 rounded-lg">
-                              <span className="text-[var(--color-gray-500)] text-xs uppercase tracking-wide">{locale === 'th' ? 'คลินิก' : 'Clinic'}</span>
+                            <div className="col-span-full bg-[var(--color-off-white)] p-3 rounded-lg">
+                              <span className="text-[var(--color-foreground-muted)] text-xs uppercase tracking-wide">{locale === 'th' ? 'คลินิก' : 'Clinic'}</span>
                               <p className="font-medium mt-1">{searchResult.assignedClinic.name}</p>
                             </div>
                           )}
@@ -1323,14 +1191,14 @@ export default function DamagedProductsPage() {
 
                 {/* Lot Return Mode Content */}
                 {returnMode === 'lot' && (
-                  <div className="bg-[var(--color-gray-100)] rounded-xl p-5">
+                  <div className="bg-[var(--color-off-white)] rounded-2xl p-5">
                     <h3 className="font-semibold text-[var(--color-charcoal)] mb-2 flex items-center gap-2">
                       <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
                       {locale === 'th' ? 'ค้นหาสินค้าด้วยหมายเลข Lot' : 'Search Products by Lot Number'}
                     </h3>
-                    <p className="text-sm text-[var(--color-gray-500)] mb-4">
+                    <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
                       {locale === 'th'
                         ? 'เฉพาะสินค้าที่มีสถานะ SHIPPED หรือ ACTIVATED เท่านั้น'
                         : 'Only products with SHIPPED or ACTIVATED status'}
@@ -1344,7 +1212,7 @@ export default function DamagedProductsPage() {
                           onChange={(e) => setSearchLot(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleLotSearch()}
                           placeholder={locale === 'th' ? 'กรอกหมายเลข Lot' : 'Enter Lot number'}
-                          className="w-full px-4 py-3 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                          className="w-full px-4 py-3 bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                         />
                       </div>
                       <button
@@ -1381,9 +1249,9 @@ export default function DamagedProductsPage() {
                     )}
 
                     {lotProducts.length > 0 && (
-                      <div className="mt-5 bg-white border border-[var(--color-gray-200)] rounded-xl shadow-sm overflow-hidden">
+                      <div className="mt-5 bg-white border border-[var(--color-beige)] rounded-xl shadow-sm overflow-hidden">
                         {/* Header */}
-                        <div className="p-4 border-b border-[var(--color-gray-200)] bg-gradient-to-r from-orange-50 to-white">
+                        <div className="p-4 border-b border-[var(--color-beige)] bg-gradient-to-r from-orange-50 to-white">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1400,43 +1268,43 @@ export default function DamagedProductsPage() {
                         </div>
 
                         {/* Select All */}
-                        <div className="p-3 border-b border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
+                        <div className="p-3 border-b border-[var(--color-beige)] bg-[var(--color-off-white)]">
                           <label className="flex items-center gap-3 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={selectedLotProducts.length === lotProducts.length && lotProducts.length > 0}
                               onChange={toggleAllLotProducts}
-                              className="w-5 h-5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
+                              className="w-5 h-5 rounded border-[var(--color-beige)] text-orange-500 focus:ring-orange-200"
                             />
                             <span className="text-sm font-medium">{locale === 'th' ? 'เลือกทั้งหมด' : 'Select All'}</span>
                           </label>
                         </div>
 
                         {/* Product List */}
-                        <div className="max-h-72 overflow-y-auto divide-y divide-[var(--color-gray-100)]">
+                        <div className="max-h-72 overflow-y-auto divide-y divide-[var(--color-beige)]">
                           {lotProducts.map((product) => (
                             <label
                               key={product.id}
                               className={`flex items-start gap-3 p-4 cursor-pointer transition-colors ${
                                 selectedLotProducts.includes(product.id)
                                   ? 'bg-orange-50 hover:bg-orange-100'
-                                  : 'hover:bg-[var(--color-gray-100)]'
+                                  : 'hover:bg-[var(--color-off-white)]'
                               }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={selectedLotProducts.includes(product.id)}
                                 onChange={() => toggleLotProductSelection(product.id)}
-                                className="w-5 h-5 mt-0.5 rounded border-[var(--color-gray-300)] text-orange-500 focus:ring-orange-200"
+                                className="w-5 h-5 mt-0.5 rounded border-[var(--color-beige)] text-orange-500 focus:ring-orange-200"
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{product.serial12}</span>
                                   {getStatusBadge(product.status)}
                                 </div>
-                                <p className="text-sm text-[var(--color-gray-600)] mt-1 truncate">{product.name}</p>
+                                <p className="text-sm text-[var(--color-charcoal)] mt-1 truncate">{product.name}</p>
                                 {product.assignedClinic && (
-                                  <p className="text-xs text-[var(--color-gray-400)] mt-0.5">{product.assignedClinic.name}</p>
+                                  <p className="text-xs text-[var(--color-foreground-muted)] mt-0.5">{product.assignedClinic.name}</p>
                                 )}
                               </div>
                             </label>
@@ -1444,7 +1312,7 @@ export default function DamagedProductsPage() {
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 border-t border-[var(--color-gray-200)] bg-[var(--color-gray-100)]">
+                        <div className="p-4 border-t border-[var(--color-beige)] bg-[var(--color-off-white)]">
                           <button
                             onClick={() => setShowLotReturnModal(true)}
                             disabled={selectedLotProducts.length === 0}
@@ -1463,35 +1331,37 @@ export default function DamagedProductsPage() {
                   </div>
                 )}
               </div>
-            )}
+        </div>
+      )}
 
-            {/* Borrow/Return Form Mode */}
-            {(borrowMode === 'borrow' || borrowMode === 'return_borrowed') && (
+      {/* ==================== BORROW TAB ==================== */}
+      {/* ==================== RETURN BORROWED TAB ==================== */}
+      {(activeTab === 'borrow' || activeTab === 'return_borrowed') && (
               <div className="space-y-6">
                 {/* Products Selection Section */}
-                <div className="bg-white border border-[var(--color-gray-200)] rounded-xl overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
                   {/* Header with search and selection info */}
-                  <div className={`p-4 border-b border-[var(--color-gray-200)] ${borrowMode === 'borrow' ? 'bg-purple-50' : 'bg-green-50'}`}>
+                  <div className={`p-4 border-b border-[var(--color-beige)] ${activeTab === 'borrow' ? 'bg-purple-50' : 'bg-green-50'}`}>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="font-semibold text-[var(--color-charcoal)] flex items-center gap-2">
-                          <svg className={`w-5 h-5 ${borrowMode === 'borrow' ? 'text-purple-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className={`w-5 h-5 ${activeTab === 'borrow' ? 'text-purple-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                           </svg>
                           {locale === 'th'
-                            ? borrowMode === 'borrow'
+                            ? activeTab === 'borrow'
                               ? 'เลือกสินค้าในคลัง (IN_STOCK)'
                               : 'เลือกสินค้าที่ยืม (BORROWED)'
-                            : borrowMode === 'borrow'
+                            : activeTab === 'borrow'
                               ? 'Select products in stock (IN_STOCK)'
                               : 'Select borrowed products (BORROWED)'}
                         </h3>
-                        <p className="text-sm text-[var(--color-gray-500)] mt-1">
+                        <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
                           {locale === 'th' ? `ทั้งหมด ${borrowProductsPagination.total} รายการ` : `Total ${borrowProductsPagination.total} items`}
                         </p>
                       </div>
                       <div className={`px-4 py-2 rounded-lg font-medium ${
-                        borrowMode === 'borrow' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                        activeTab === 'borrow' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
                       }`}>
                         {locale === 'th' ? `เลือกแล้ว ${selectedBorrowProducts.length} รายการ` : `${selectedBorrowProducts.length} selected`}
                       </div>
@@ -1500,7 +1370,7 @@ export default function DamagedProductsPage() {
                     {/* Search Filter */}
                     <div className="mt-4 flex gap-2">
                       <div className="flex-1 relative">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-gray-400)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                         <input
@@ -1511,12 +1381,12 @@ export default function DamagedProductsPage() {
                             setBorrowProductsPagination((prev) => ({ ...prev, page: 1 }))
                           }}
                           placeholder={locale === 'th' ? 'ค้นหา Serial, SKU, ชื่อสินค้า...' : 'Search Serial, SKU, Product name...'}
-                          className="w-full pl-10 pr-4 py-2 bg-white border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                          className="w-full pl-10 pr-4 py-2 bg-white bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         />
                       </div>
                       <button
                         onClick={selectAllBorrowProducts}
-                        className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg hover:bg-[var(--color-gray-100)] transition-colors text-sm whitespace-nowrap"
+                        className="px-4 py-2 border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)] transition-colors text-sm whitespace-nowrap"
                       >
                         {borrowProductsList.every((p) => selectedBorrowProducts.includes(p.id))
                           ? locale === 'th' ? 'ยกเลิกทั้งหมด' : 'Deselect All'
@@ -1528,7 +1398,7 @@ export default function DamagedProductsPage() {
                   {/* Products List */}
                   <div className="max-h-80 overflow-y-auto">
                     {borrowProductsLoading ? (
-                      <div className="p-8 text-center text-[var(--color-gray-500)]">
+                      <div className="p-8 text-center text-[var(--color-foreground-muted)]">
                         <svg className="animate-spin w-8 h-8 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1536,20 +1406,20 @@ export default function DamagedProductsPage() {
                         {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
                       </div>
                     ) : borrowProductsList.length === 0 ? (
-                      <div className="p-8 text-center text-[var(--color-gray-500)]">
-                        <svg className="w-12 h-12 mx-auto mb-2 text-[var(--color-gray-300)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="p-8 text-center text-[var(--color-foreground-muted)]">
+                        <svg className="w-12 h-12 mx-auto mb-2 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                         </svg>
                         {locale === 'th' ? 'ไม่พบสินค้า' : 'No products found'}
                       </div>
                     ) : (
-                      <div className="divide-y divide-[var(--color-gray-100)]">
+                      <div className="divide-y divide-[var(--color-beige)]">
                         {borrowProductsList.map((product) => (
                           <label
                             key={product.id}
-                            className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-[var(--color-gray-50)] transition-colors ${
+                            className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-[var(--color-off-white)] transition-colors ${
                               selectedBorrowProducts.includes(product.id)
-                                ? borrowMode === 'borrow' ? 'bg-purple-50' : 'bg-green-50'
+                                ? activeTab === 'borrow' ? 'bg-purple-50' : 'bg-green-50'
                                 : ''
                             }`}
                           >
@@ -1558,16 +1428,16 @@ export default function DamagedProductsPage() {
                               checked={selectedBorrowProducts.includes(product.id)}
                               onChange={() => toggleBorrowProductSelection(product.id)}
                               className={`w-5 h-5 rounded ${
-                                borrowMode === 'borrow' ? 'text-purple-500 focus:ring-purple-200' : 'text-green-500 focus:ring-green-200'
+                                activeTab === 'borrow' ? 'text-purple-500 focus:ring-purple-200' : 'text-green-500 focus:ring-green-200'
                               }`}
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{product.serial12}</span>
-                                <span className="text-xs text-[var(--color-gray-400)]">{product.sku}</span>
+                                <span className="text-xs text-[var(--color-foreground-muted)]">{product.sku}</span>
                               </div>
-                              <p className="text-sm text-[var(--color-gray-600)] truncate">{product.name}</p>
-                              <div className="flex items-center gap-3 text-xs text-[var(--color-gray-400)] mt-1">
+                              <p className="text-sm text-[var(--color-charcoal)] truncate">{product.name}</p>
+                              <div className="flex items-center gap-3 text-xs text-[var(--color-foreground-muted)] mt-1">
                                 {product.lot && <span>Lot: {product.lot}</span>}
                                 {product.modelSize && <span>Size: {product.modelSize}</span>}
                               </div>
@@ -1580,8 +1450,8 @@ export default function DamagedProductsPage() {
 
                   {/* Pagination */}
                   {borrowProductsPagination.totalPages > 1 && (
-                    <div className="p-3 border-t border-[var(--color-gray-200)] bg-[var(--color-gray-50)] flex items-center justify-between">
-                      <p className="text-sm text-[var(--color-gray-500)]">
+                    <div className="p-3 border-t border-[var(--color-beige)] bg-[var(--color-off-white)] flex items-center justify-between">
+                      <p className="text-sm text-[var(--color-foreground-muted)]">
                         {locale === 'th'
                           ? `หน้า ${borrowProductsPagination.page} / ${borrowProductsPagination.totalPages}`
                           : `Page ${borrowProductsPagination.page} / ${borrowProductsPagination.totalPages}`}
@@ -1590,14 +1460,14 @@ export default function DamagedProductsPage() {
                         <button
                           onClick={() => setBorrowProductsPagination((p) => ({ ...p, page: p.page - 1 }))}
                           disabled={borrowProductsPagination.page === 1}
-                          className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50 hover:bg-white"
+                          className="px-3 py-1.5 text-sm border border-[var(--color-beige)] rounded-lg disabled:opacity-50 hover:bg-white"
                         >
                           {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
                         </button>
                         <button
                           onClick={() => setBorrowProductsPagination((p) => ({ ...p, page: p.page + 1 }))}
                           disabled={borrowProductsPagination.page >= borrowProductsPagination.totalPages}
-                          className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50 hover:bg-white"
+                          className="px-3 py-1.5 text-sm border border-[var(--color-beige)] rounded-lg disabled:opacity-50 hover:bg-white"
                         >
                           {locale === 'th' ? 'ถัดไป' : 'Next'}
                         </button>
@@ -1607,7 +1477,7 @@ export default function DamagedProductsPage() {
                 </div>
 
                 {/* Form Fields */}
-                <div className="bg-[var(--color-gray-100)] rounded-xl p-5 space-y-4">
+                <div className="bg-[var(--color-off-white)] rounded-2xl p-5 space-y-4">
                   <h3 className="font-semibold text-[var(--color-charcoal)]">
                     {locale === 'th' ? 'ข้อมูลการยืม/คืน' : 'Borrow/Return Information'}
                   </h3>
@@ -1621,7 +1491,7 @@ export default function DamagedProductsPage() {
                         type="text"
                         value={borrowerName}
                         onChange={(e) => setBorrowerName(e.target.value)}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกชื่อ' : 'Enter name'}
                       />
                     </div>
@@ -1633,7 +1503,7 @@ export default function DamagedProductsPage() {
                         type="text"
                         value={borrowClinicName}
                         onChange={(e) => setBorrowClinicName(e.target.value)}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกชื่อคลินิก/ชื่อคนซื้อ' : 'Enter clinic or buyer name'}
                       />
                     </div>
@@ -1645,7 +1515,7 @@ export default function DamagedProductsPage() {
                         type="text"
                         value={borrowClinicAddress}
                         onChange={(e) => setBorrowClinicAddress(e.target.value)}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกที่อยู่' : 'Enter address'}
                       />
                     </div>
@@ -1657,7 +1527,7 @@ export default function DamagedProductsPage() {
                         type="text"
                         value={borrowTaxInvoice}
                         onChange={(e) => setBorrowTaxInvoice(e.target.value)}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกเลขที่' : 'Enter reference'}
                       />
                     </div>
@@ -1669,7 +1539,7 @@ export default function DamagedProductsPage() {
                         type="text"
                         value={borrowReason}
                         onChange={(e) => setBorrowReason(e.target.value)}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกสาเหตุ' : 'Enter reason'}
                       />
                     </div>
@@ -1681,7 +1551,7 @@ export default function DamagedProductsPage() {
                         value={borrowRemarks}
                         onChange={(e) => setBorrowRemarks(e.target.value)}
                         rows={2}
-                        className="w-full px-4 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'หมายเหตุเพิ่มเติม' : 'Additional remarks'}
                       />
                     </div>
@@ -1692,11 +1562,11 @@ export default function DamagedProductsPage() {
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={clearBorrowForm}
-                    className="px-6 py-3 border border-[var(--color-gray-200)] rounded-lg font-medium hover:bg-[var(--color-gray-100)] transition-colors"
+                    className="px-6 py-3 border border-[var(--color-beige)] rounded-lg font-medium hover:bg-[var(--color-off-white)] transition-colors"
                   >
                     {locale === 'th' ? 'ล้างข้อมูล' : 'Clear'}
                   </button>
-                  {borrowMode === 'return_borrowed' && (
+                  {activeTab === 'return_borrowed' && (
                     <button
                       onClick={openConvertModal}
                       disabled={selectedBorrowProducts.length === 0}
@@ -1712,7 +1582,7 @@ export default function DamagedProductsPage() {
                     onClick={handleBorrowSubmit}
                     disabled={selectedBorrowProducts.length === 0 || !borrowerName.trim() || isBorrowSubmitting}
                     className={`px-6 py-3 text-white rounded-lg font-medium disabled:opacity-50 transition-colors flex items-center gap-2 ${
-                      borrowMode === 'borrow' ? 'bg-purple-500 hover:bg-purple-600' : 'bg-green-500 hover:bg-green-600'
+                      activeTab === 'borrow' ? 'bg-purple-500 hover:bg-purple-600' : 'bg-green-500 hover:bg-green-600'
                     }`}
                   >
                     {isBorrowSubmitting ? (
@@ -1725,7 +1595,7 @@ export default function DamagedProductsPage() {
                       </>
                     ) : (
                       <>
-                        {borrowMode === 'borrow'
+                        {activeTab === 'borrow'
                           ? locale === 'th' ? 'ส่งคำขอยืมสินค้า' : 'Submit Borrow Request'
                           : locale === 'th' ? 'คืนสินค้าเข้าคลัง' : 'Return to Stock'}
                       </>
@@ -1733,13 +1603,13 @@ export default function DamagedProductsPage() {
                   </button>
                 </div>
               </div>
-            )}
+      )}
 
-            {/* History Mode */}
-            {borrowMode === 'history' && (
-              <div>
-                {/* Filter Buttons */}
-                <div className="flex flex-wrap gap-2 mb-4">
+      {/* ==================== HISTORY TAB ==================== */}
+      {activeTab === 'history' && (
+        <div className="space-y-4">
+          {/* Filter Buttons */}
+          <div className="flex flex-wrap gap-2">
                   {(['all', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((filter) => (
                     <button
                       key={filter}
@@ -1756,7 +1626,7 @@ export default function DamagedProductsPage() {
                               : filter === 'APPROVED'
                                 ? 'bg-green-500 text-white'
                                 : 'bg-red-500 text-white'
-                          : 'bg-[var(--color-gray-100)] text-[var(--color-gray-600)] hover:bg-[var(--color-gray-200)]'
+                          : 'bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-beige)]'
                       }`}
                     >
                       {filter === 'all'
@@ -1770,38 +1640,48 @@ export default function DamagedProductsPage() {
                   ))}
                 </div>
 
-                {/* History Table */}
-                <div className="overflow-x-auto bg-white rounded-xl border border-[var(--color-gray-200)]">
-                  <table className="w-full">
-                    <thead className="bg-[var(--color-gray-100)]">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'เลขที่' : 'No.'}</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'ประเภท' : 'Type'}</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'ผู้ยืม/คืน' : 'Borrower'}</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'จำนวน' : 'Items'}</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'วันที่' : 'Date'}</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-gray-500)] uppercase">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--color-gray-200)]">
-                      {borrowHistoryLoading ? (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
-                            {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
-                          </td>
-                        </tr>
-                      ) : borrowHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center text-[var(--color-gray-500)]">
-                            {locale === 'th' ? 'ไม่พบรายการ' : 'No records found'}
-                          </td>
-                        </tr>
-                      ) : (
-                        borrowHistory.map((txn) => (
-                          <tr key={txn.id} className="hover:bg-[var(--color-gray-100)]">
-                            <td className="px-4 py-3">
-                              <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{txn.transactionNo}</span>
+          {/* History Table */}
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                  <tr>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'เลขที่' : 'No.'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ประเภท' : 'Type'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ผู้ยืม/คืน' : 'Borrower'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'จำนวน' : 'Items'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'วันที่' : 'Date'}</th>
+                    <th className="px-5 py-4 text-right text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-beige)]">
+                  {borrowHistoryLoading ? (
+                    <tr>
+                      <td colSpan={7} className="p-12 text-center">
+                        <div className="relative w-10 h-10 mx-auto mb-3">
+                          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
+                          <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
+                        </div>
+                        <p className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}</p>
+                      </td>
+                    </tr>
+                  ) : borrowHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-12 text-center">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-beige)]/50 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <p className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ไม่พบรายการ' : 'No records found'}</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    borrowHistory.map((txn) => (
+                      <tr key={txn.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                        <td className="px-5 py-4">
+                          <span className="font-mono text-sm font-semibold text-[var(--color-gold)]">{txn.transactionNo}</span>
                             </td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -1810,87 +1690,85 @@ export default function DamagedProductsPage() {
                                 {txn.type === 'BORROW' ? (locale === 'th' ? 'ยืม' : 'Borrow') : (locale === 'th' ? 'คืน' : 'Return')}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
-                              <p className="font-medium">{txn.borrowerName}</p>
-                              {txn.clinicName && <p className="text-xs text-[var(--color-gray-500)]">{txn.clinicName}</p>}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className="px-2 py-1 bg-[var(--color-gray-100)] rounded text-sm">{txn.lines.length}</span>
-                            </td>
-                            <td className="px-4 py-3">{getBorrowStatusBadge(txn.status)}</td>
-                            <td className="px-4 py-3 text-sm text-[var(--color-gray-500)]">{formatDate(txn.createdAt)}</td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {txn.status === 'PENDING' && txn.type === 'BORROW' && (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedTransaction(txn)
-                                      setShowApproveModal(true)
-                                    }}
-                                    className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-                                  >
-                                    {locale === 'th' ? 'อนุมัติ' : 'Review'}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => openBorrowDocument(txn.id)}
-                                  className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg hover:bg-[var(--color-gray-100)] transition-colors"
+                        <td className="px-5 py-4">
+                          <p className="font-medium">{txn.borrowerName}</p>
+                          {txn.clinicName && <p className="text-xs text-[var(--color-foreground-muted)]">{txn.clinicName}</p>}
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[3rem] px-2 h-8 rounded-lg bg-[var(--color-beige)]/50 font-medium text-xs">{txn.lines.length}</span>
+                        </td>
+                        <td className="px-5 py-4">{getBorrowStatusBadge(txn.status)}</td>
+                        <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{formatDate(txn.createdAt)}</td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {txn.status === 'PENDING' && txn.type === 'BORROW' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedTransaction(txn)
+                                  setShowApproveModal(true)
+                                }}
+                                className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+                              >
+                                {locale === 'th' ? 'อนุมัติ' : 'Review'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openBorrowDocument(txn.id)}
+                              className="px-3 py-1.5 text-sm border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] transition-all"
                                 >
-                                  {locale === 'th' ? 'พิมพ์' : 'Print'}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                              {locale === 'th' ? 'พิมพ์' : 'Print'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                {/* Pagination */}
-                {borrowHistoryPagination.totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-sm text-[var(--color-gray-500)]">
-                      {locale === 'th'
-                        ? `แสดง ${borrowHistory.length} จาก ${borrowHistoryPagination.total} รายการ`
-                        : `Showing ${borrowHistory.length} of ${borrowHistoryPagination.total} items`}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page - 1 }))}
-                        disabled={borrowHistoryPagination.page === 1}
-                        className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
-                      >
-                        {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
-                      </button>
-                      <button
-                        onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page + 1 }))}
-                        disabled={borrowHistoryPagination.page >= borrowHistoryPagination.totalPages}
-                        className="px-3 py-1.5 text-sm border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
-                      >
-                        {locale === 'th' ? 'ถัดไป' : 'Next'}
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {/* Pagination */}
+            {borrowHistoryPagination.totalPages > 1 && (
+              <div className="px-4 sm:px-5 py-4 border-t border-[var(--color-beige)] flex flex-col sm:flex-row items-center justify-between gap-3 bg-[var(--color-off-white)]">
+                <p className="text-sm text-[var(--color-foreground-muted)]">
+                  {locale === 'th'
+                    ? `แสดง ${borrowHistory.length} จาก ${borrowHistoryPagination.total} รายการ`
+                    : `Showing ${borrowHistory.length} of ${borrowHistoryPagination.total} items`}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page - 1 }))}
+                    disabled={borrowHistoryPagination.page === 1}
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-50 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-all"
+                  >
+                    {locale === 'th' ? 'ก่อนหน้า' : 'Previous'}
+                  </button>
+                  <button
+                    onClick={() => setBorrowHistoryPagination((p) => ({ ...p, page: p.page + 1 }))}
+                    disabled={borrowHistoryPagination.page >= borrowHistoryPagination.totalPages}
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-50 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-all"
+                  >
+                    {locale === 'th' ? 'ถัดไป' : 'Next'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Restore Modal */}
       {showRestoreModal && selectedItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold mb-4">
               {locale === 'th' ? 'จัดการสินค้า' : 'Manage Product'}
             </h3>
 
-            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+            <div className="bg-[var(--color-off-white)] rounded-lg p-4 mb-4">
               <p className="font-mono text-sm">{selectedItem.serial12}</p>
               <p className="font-medium">{selectedItem.productMaster?.sku || selectedItem.sku}</p>
-              <p className="text-sm text-[var(--color-gray-500)]">
+              <p className="text-sm text-[var(--color-foreground-muted)]">
                 {selectedItem.productMaster
                   ? (locale === 'th' ? selectedItem.productMaster.nameTh : selectedItem.productMaster.nameEn || selectedItem.productMaster.nameTh)
                   : selectedItem.name}
@@ -1906,7 +1784,7 @@ export default function DamagedProductsPage() {
                 value={repairNote}
                 onChange={(e) => setRepairNote(e.target.value)}
                 rows={3}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
               />
             </div>
 
@@ -1931,7 +1809,7 @@ export default function DamagedProductsPage() {
                   setSelectedItem(null)
                 }}
                 disabled={restoring}
-                className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg"
+                className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
               >
                 {locale === 'th' ? 'ปิด' : 'Close'}
               </button>
@@ -1943,12 +1821,12 @@ export default function DamagedProductsPage() {
       {/* Return Modal */}
       {showReturnModal && searchResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold mb-4">
               {locale === 'th' ? 'ยืนยันการรับคืนสินค้า' : 'Confirm Product Return'}
             </h3>
 
-            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+            <div className="bg-[var(--color-off-white)] rounded-lg p-4 mb-4">
               <p className="font-mono text-sm">{searchResult.serial12}</p>
               <p className="text-sm">{searchResult.name}</p>
             </div>
@@ -1960,7 +1838,7 @@ export default function DamagedProductsPage() {
               <select
                 value={returnReason}
                 onChange={(e) => setReturnReason(e.target.value)}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
               >
                 <option value="">{locale === 'th' ? '-- เลือกเหตุผล --' : '-- Select reason --'}</option>
                 <option value="สินค้าชำรุด">{locale === 'th' ? 'สินค้าชำรุด' : 'Damaged product'}</option>
@@ -1981,7 +1859,7 @@ export default function DamagedProductsPage() {
                 value={returnNotes}
                 onChange={(e) => setReturnNotes(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
               />
             </div>
 
@@ -1999,7 +1877,7 @@ export default function DamagedProductsPage() {
                   setReturnReason('')
                   setReturnNotes('')
                 }}
-                className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg"
+                className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>
@@ -2011,12 +1889,12 @@ export default function DamagedProductsPage() {
       {/* Lot Return Modal */}
       {showLotReturnModal && selectedLotProducts.length > 0 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6">
             <h3 className="text-lg font-semibold mb-4">
               {locale === 'th' ? 'ยืนยันการรับคืนสินค้าทั้ง Lot' : 'Confirm Lot Return'}
             </h3>
 
-            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+            <div className="bg-[var(--color-off-white)] rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium">Lot: {searchLot}</span>
                 <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-sm">
@@ -2029,7 +1907,7 @@ export default function DamagedProductsPage() {
                   .map((p) => (
                     <div key={p.id} className="flex justify-between">
                       <span className="font-mono text-[var(--color-gold)]">{p.serial12}</span>
-                      <span className="text-[var(--color-gray-500)] truncate ml-2">{p.name}</span>
+                      <span className="text-[var(--color-foreground-muted)] truncate ml-2">{p.name}</span>
                     </div>
                   ))}
               </div>
@@ -2042,7 +1920,7 @@ export default function DamagedProductsPage() {
               <select
                 value={returnReason}
                 onChange={(e) => setReturnReason(e.target.value)}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
               >
                 <option value="">{locale === 'th' ? '-- เลือกเหตุผล --' : '-- Select reason --'}</option>
                 <option value="สินค้าชำรุด">{locale === 'th' ? 'สินค้าชำรุด' : 'Damaged product'}</option>
@@ -2062,7 +1940,7 @@ export default function DamagedProductsPage() {
                 value={returnNotes}
                 onChange={(e) => setReturnNotes(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
               />
             </div>
 
@@ -2080,7 +1958,7 @@ export default function DamagedProductsPage() {
                   setReturnReason('')
                   setReturnNotes('')
                 }}
-                className="px-4 py-2 border border-[var(--color-gray-200)] rounded-lg"
+                className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>
@@ -2092,33 +1970,33 @@ export default function DamagedProductsPage() {
       {/* Borrow Approve/Reject Modal */}
       {showApproveModal && selectedTransaction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6">
             <h3 className="text-lg font-semibold mb-4">
               {locale === 'th' ? 'อนุมัติ/ปฏิเสธคำขอยืมสินค้า' : 'Approve/Reject Borrow Request'}
             </h3>
 
-            <div className="bg-[var(--color-gray-100)] rounded-lg p-4 mb-4">
+            <div className="bg-[var(--color-off-white)] rounded-lg p-4 mb-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'เลขที่' : 'No.'}</span>
+                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่' : 'No.'}</span>
                   <p className="font-mono font-semibold text-[var(--color-gold)]">{selectedTransaction.transactionNo}</p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'ผู้ยืม' : 'Borrower'}</span>
+                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ผู้ยืม' : 'Borrower'}</span>
                   <p className="font-medium">{selectedTransaction.borrowerName}</p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</span>
+                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</span>
                   <p className="font-medium">{selectedTransaction.lines.length} {locale === 'th' ? 'รายการ' : 'items'}</p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-gray-500)]">{locale === 'th' ? 'สร้างโดย' : 'Created by'}</span>
+                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'สร้างโดย' : 'Created by'}</span>
                   <p className="font-medium">{selectedTransaction.createdBy?.displayName || '-'}</p>
                 </div>
               </div>
               {selectedTransaction.reason && (
-                <div className="mt-3 pt-3 border-t border-[var(--color-gray-200)]">
-                  <span className="text-[var(--color-gray-500)] text-sm">{locale === 'th' ? 'เหตุผล' : 'Reason'}</span>
+                <div className="mt-3 pt-3 border-t border-[var(--color-beige)]">
+                  <span className="text-[var(--color-foreground-muted)] text-sm">{locale === 'th' ? 'เหตุผล' : 'Reason'}</span>
                   <p className="text-sm">{selectedTransaction.reason}</p>
                 </div>
               )}
@@ -2127,11 +2005,11 @@ export default function DamagedProductsPage() {
             {/* Products List */}
             <div className="mb-4">
               <h4 className="text-sm font-medium mb-2">{locale === 'th' ? 'รายการสินค้า' : 'Products'}</h4>
-              <div className="max-h-32 overflow-y-auto bg-[var(--color-gray-100)] rounded-lg p-3 space-y-1 text-sm">
+              <div className="max-h-32 overflow-y-auto bg-[var(--color-off-white)] rounded-lg p-3 space-y-1 text-sm">
                 {selectedTransaction.lines.map((line) => (
                   <div key={line.id} className="flex justify-between">
                     <span className="font-mono text-[var(--color-gold)]">{line.productItem.serial12}</span>
-                    <span className="text-[var(--color-gray-600)] truncate ml-2">{line.itemName}</span>
+                    <span className="text-[var(--color-charcoal)] truncate ml-2">{line.itemName}</span>
                   </div>
                 ))}
               </div>
@@ -2146,7 +2024,7 @@ export default function DamagedProductsPage() {
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                 placeholder={locale === 'th' ? 'กรอกเหตุผลในการปฏิเสธ' : 'Enter rejection reason'}
               />
             </div>
@@ -2173,7 +2051,7 @@ export default function DamagedProductsPage() {
                   setRejectReason('')
                 }}
                 disabled={isApproving}
-                className="px-4 py-2.5 border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+                className="px-4 py-2.5 border border-[var(--color-beige)] rounded-lg disabled:opacity-50"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>
@@ -2184,7 +2062,7 @@ export default function DamagedProductsPage() {
       {/* Convert to PO & Outbound Modal */}
       {showConvertModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2221,7 +2099,7 @@ export default function DamagedProductsPage() {
                     <div key={i} className="flex justify-between items-center">
                       <span className="truncate flex-1">
                         <span className="font-mono text-indigo-600">{g.sku}</span>
-                        <span className="text-[var(--color-gray-600)] ml-2">{g.name}</span>
+                        <span className="text-[var(--color-charcoal)] ml-2">{g.name}</span>
                       </span>
                       <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
                         x{g.count}
@@ -2250,7 +2128,7 @@ export default function DamagedProductsPage() {
                     if (convertClinicId) setConvertClinicId(0)
                   }}
                   placeholder={locale === 'th' ? 'กรอกชื่อคลินิก/ชื่อคนซื้อ' : 'Enter clinic or buyer name'}
-                  className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                  className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                 />
                 {convertClinicId > 0 && (
                   <span className="absolute right-3 top-[34px] text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">
@@ -2266,7 +2144,7 @@ export default function DamagedProductsPage() {
                       c.branchName?.toLowerCase().includes(convertClinicSearch.toLowerCase())
                     ).slice(0, 5)
                     return matches.length > 0 ? (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-[var(--color-gray-200)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-[var(--color-beige)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
                         {matches.map((c) => (
                           <button
                             key={c.id}
@@ -2275,11 +2153,11 @@ export default function DamagedProductsPage() {
                               setConvertClinicId(c.id)
                               setConvertClinicSearch(c.name)
                             }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors border-b border-[var(--color-gray-100)] last:border-b-0"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors border-b border-[var(--color-beige)] last:border-b-0"
                           >
                             <span className="font-medium">{c.name}</span>
-                            {c.branchName && <span className="text-[var(--color-gray-400)]"> ({c.branchName})</span>}
-                            <span className="text-[var(--color-gray-400)]"> - {c.province}</span>
+                            {c.branchName && <span className="text-[var(--color-foreground-muted)]"> ({c.branchName})</span>}
+                            <span className="text-[var(--color-foreground-muted)]"> - {c.province}</span>
                           </button>
                         ))}
                       </div>
@@ -2296,7 +2174,7 @@ export default function DamagedProductsPage() {
                   <select
                     value={convertWarehouseId}
                     onChange={(e) => setConvertWarehouseId(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   >
                     <option value={0}>{locale === 'th' ? '-- เลือกคลัง --' : '-- Select warehouse --'}</option>
                     {convertWarehouses.map((w) => (
@@ -2311,7 +2189,7 @@ export default function DamagedProductsPage() {
                   <select
                     value={convertShippingMethodId}
                     onChange={(e) => setConvertShippingMethodId(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   >
                     <option value={0}>{locale === 'th' ? '-- เลือกวิธีจัดส่ง --' : '-- Select shipping --'}</option>
                     {convertShippingMethods.map((s) => (
@@ -2324,103 +2202,103 @@ export default function DamagedProductsPage() {
 
             {/* Optional Delivery Info */}
             <details className="mb-4">
-              <summary className="text-sm font-medium text-[var(--color-gray-600)] cursor-pointer hover:text-[var(--color-charcoal)]">
+              <summary className="text-sm font-medium text-[var(--color-charcoal)] cursor-pointer hover:text-[var(--color-charcoal)]">
                 {locale === 'th' ? 'ข้อมูลเพิ่มเติม (ไม่บังคับ)' : 'Additional Info (Optional)'}
               </summary>
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'เลขที่สัญญา' : 'Contract No.'}
                   </label>
                   <input
                     type="text"
                     value={convertContractNo}
                     onChange={(e) => setConvertContractNo(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'ชื่อพนักงานขาย' : 'Sales Person'}
                   </label>
                   <input
                     type="text"
                     value={convertSalesPersonName}
                     onChange={(e) => setConvertSalesPersonName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'ผู้ติดต่อบริษัท' : 'Company Contact'}
                   </label>
                   <input
                     type="text"
                     value={convertCompanyContact}
                     onChange={(e) => setConvertCompanyContact(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'ชื่อผู้ติดต่อคลินิก' : 'Clinic Contact Name'}
                   </label>
                   <input
                     type="text"
                     value={convertClinicContactName}
                     onChange={(e) => setConvertClinicContactName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'ที่อยู่คลินิก' : 'Clinic Address'}
                   </label>
                   <input
                     type="text"
                     value={convertClinicAddress}
                     onChange={(e) => setConvertClinicAddress(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'เบอร์โทร' : 'Phone'}
                   </label>
                   <input
                     type="text"
                     value={convertClinicPhone}
                     onChange={(e) => setConvertClinicPhone(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'อีเมล' : 'Email'}
                   </label>
                   <input
                     type="text"
                     value={convertClinicEmail}
                     onChange={(e) => setConvertClinicEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-[var(--color-gray-500)] mb-1">
+                  <label className="block text-xs font-medium text-[var(--color-foreground-muted)] mb-1">
                     {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
                   </label>
                   <textarea
                     value={convertRemarks}
                     onChange={(e) => setConvertRemarks(e.target.value)}
                     rows={2}
-                    className="w-full px-3 py-2 text-sm border border-[var(--color-gray-200)] rounded-lg focus:outline-none focus:border-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-indigo-400"
                   />
                 </div>
               </div>
             </details>
 
             {/* Buttons */}
-            <div className="flex gap-3 pt-2 border-t border-[var(--color-gray-200)]">
+            <div className="flex gap-3 pt-2 border-t border-[var(--color-beige)]">
               <button
                 onClick={handleConvertSubmit}
                 disabled={isConverting || !convertClinicSearch.trim() || !convertWarehouseId || !convertShippingMethodId}
@@ -2441,7 +2319,7 @@ export default function DamagedProductsPage() {
               <button
                 onClick={() => setShowConvertModal(false)}
                 disabled={isConverting}
-                className="px-6 py-2.5 border border-[var(--color-gray-200)] rounded-lg disabled:opacity-50"
+                className="px-6 py-2.5 border border-[var(--color-beige)] rounded-lg disabled:opacity-50"
               >
                 {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>

@@ -26,15 +26,22 @@ export function categoryIdToLetter(id: number): string {
 /**
  * Generate next serial number (19 chars) with per-prefix counter
  * Uses raw SQL upsert for atomicity
+ * @param params - serial params (activationType, categoryId, serialCode)
+ * @param tx - optional Prisma transaction client to use instead of default client
  */
-export async function generateSerialNumber(params: SerialParams): Promise<string> {
+export async function generateSerialNumber(
+  params: SerialParams,
+  tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+): Promise<string> {
   const typeChar = params.activationType === 'SINGLE' ? 'S' : 'P'
   const categoryChar = categoryIdToLetter(params.categoryId)
   const prefix = `${typeChar}${categoryChar}${params.serialCode}`
   const counterName = `SER_${prefix}`
 
+  const client = tx ?? prisma
+
   // Use raw SQL for atomic upsert + increment
-  const result = await prisma.$queryRaw<{ current_val: bigint }[]>`
+  const result = await client.$queryRaw<{ current_val: bigint }[]>`
     INSERT INTO sequence_counters (name, prefix, current_val)
     VALUES (${counterName}, ${prefix}, 1)
     ON CONFLICT (name) DO UPDATE SET current_val = sequence_counters.current_val + 1

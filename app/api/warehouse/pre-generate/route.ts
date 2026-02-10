@@ -81,6 +81,9 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
   if (!body.quantity || body.quantity < 1) {
     return errorResponse('Quantity must be greater than 0')
   }
+  if (body.quantity > 2000) {
+    return errorResponse('Maximum 2,000 items per batch')
+  }
 
   // Validate productMasterId
   if (!body.productMasterId) {
@@ -102,10 +105,13 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      // Generate batch number
-      const batchNo = await generatePreGenBatchNumber()
+    // Generate batch number before transaction to avoid nested transactions
+    const batchNo = await generatePreGenBatchNumber()
 
+    // Use longer timeout for large batches (30s base + 100ms per item)
+    const timeoutMs = Math.min(30000 + body.quantity * 100, 120000)
+
+    const result = await prisma.$transaction(async (tx) => {
       // Create batch with productMasterId
       const batch = await tx.preGeneratedBatch.create({
         data: {
@@ -118,74 +124,84 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         },
       })
 
-      // Create product items with QR tokens
-      const createdItems = []
-
+      // Pre-generate all serial numbers using the transaction client
+      const serialNumbers: string[] = []
       for (let i = 0; i < body.quantity; i++) {
-        // Generate serial number with product info
         const serialNumber = await generateSerialNumber({
           activationType: productMaster.activationType,
           categoryId: productMaster.categoryId,
           serialCode: productMaster.serialCode,
-        })
+        }, tx)
+        serialNumbers.push(serialNumber)
+      }
 
-        // Create product item with real product data
-        const productItem = await tx.productItem.create({
-          data: {
-            serial12: serialNumber,
-            sku: productMaster.sku,
-            name: productMaster.nameTh,
-            categoryId: productMaster.categoryId,
-            productMasterId: productMaster.id,
-            modelSize: productMaster.modelSize,
-            status: 'PENDING_LINK',
-            preGeneratedBatchId: batch.id,
-          },
-        })
+      // Batch create product items
+      await tx.productItem.createMany({
+        data: serialNumbers.map((serialNumber) => ({
+          serial12: serialNumber,
+          sku: productMaster.sku,
+          name: productMaster.nameTh,
+          categoryId: productMaster.categoryId,
+          productMasterId: productMaster.id,
+          modelSize: productMaster.modelSize,
+          status: 'PENDING_LINK' as const,
+          preGeneratedBatchId: batch.id,
+        })),
+      })
 
-        // Create QR token
+      // Fetch created items to get their IDs
+      const productItems = await tx.productItem.findMany({
+        where: { preGeneratedBatchId: batch.id },
+        select: { id: true, serial12: true },
+        orderBy: { id: 'asc' },
+      })
+
+      // Generate QR tokens for all items
+      const qrTokenData: { productItemId: number; serialNumber: string; qrToken: string }[] = []
+      for (const item of productItems) {
         const qrToken = await createQRToken({
-          serialNumber,
-          productItemId: productItem.id,
+          serialNumber: item.serial12,
+          productItemId: item.id,
           tokenVersion: 1,
           issuedAt: Math.floor(Date.now() / 1000),
         })
-
-        // Store token
-        await tx.qRToken.create({
-          data: {
-            productItemId: productItem.id,
-            tokenVersion: 1,
-            token: qrToken,
-            tokenHash: hashToken(qrToken),
-            status: 'ACTIVE',
-          },
-        })
-
-        createdItems.push({
-          productItemId: productItem.id,
-          serialNumber,
-          qrToken,
-        })
-
-        // Log event
-        await tx.eventLog.create({
-          data: {
-            eventType: 'PRE_GENERATE',
-            productItemId: productItem.id,
-            userId: user.userId,
-            details: {
-              batchNo,
-              serialNumber,
-            },
-          },
-        })
+        qrTokenData.push({ productItemId: item.id, serialNumber: item.serial12, qrToken })
       }
+
+      // Batch create QR tokens
+      await tx.qRToken.createMany({
+        data: qrTokenData.map((d) => ({
+          productItemId: d.productItemId,
+          tokenVersion: 1,
+          token: d.qrToken,
+          tokenHash: hashToken(d.qrToken),
+          status: 'ACTIVE' as const,
+        })),
+      })
+
+      // Batch create event logs
+      await tx.eventLog.createMany({
+        data: qrTokenData.map((d) => ({
+          eventType: 'PRE_GENERATE',
+          productItemId: d.productItemId,
+          userId: user.userId,
+          details: {
+            batchNo,
+            serialNumber: d.serialNumber,
+          },
+        })),
+      })
 
       return {
         batch,
-        items: createdItems,
+        items: qrTokenData.map((d) => ({
+          productItemId: d.productItemId,
+          serialNumber: d.serialNumber,
+          qrToken: d.qrToken,
+        })),
       }
+    }, {
+      timeout: timeoutMs,
     })
 
     return successResponse({

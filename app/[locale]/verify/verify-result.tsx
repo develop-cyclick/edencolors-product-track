@@ -51,6 +51,7 @@ interface ActivationResponse {
     category: string
     activatedAt: string
     activationNumber: number
+    quantity?: number
     maxActivations: number
     remainingActivations: number
   }
@@ -69,6 +70,9 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
   const [activating, setActivating] = useState(false)
   const [activationResult, setActivationResult] = useState<ActivationResponse | null>(null)
   const [showCustomerForm, setShowCustomerForm] = useState(false)
+
+  // Multi-activation quantity
+  const [activateQty, setActivateQty] = useState(1)
 
   // Optional customer info
   const [customerName, setCustomerName] = useState('')
@@ -94,6 +98,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
           // Support both token and serial
           ...(serial ? { serial } : { token }),
           consent: true,
+          quantity: activateQty,
           // Include customer info only if provided
           ...(customerName && { customerName }),
           ...(age && { age: parseInt(age) }),
@@ -107,6 +112,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
       if (data.success) {
         // Show optional form to add more customer info
         setShowCustomerForm(true)
+        setActivateQty(1) // Reset quantity for next activation
         // Update the response to reflect activation
         if (response?.data) {
           setResponse({
@@ -236,7 +242,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
     if (isGenuine && !isActivated) {
       return {
         title: locale === 'th' ? 'ของแท้' : 'Genuine Product',
-        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จากบริษัทบริษัทอีเด็นคัลเลอร์(ประเทศไทย)' : 'This product is authentic from Eden Colors (Thailand)',
+        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จาก\nบริษัทอีเด็นคัลเลอร์(ประเทศไทย)' : 'This product is authentic from\nEden Colors (Thailand)',
       }
     }
     // PACK product with activations remaining
@@ -372,74 +378,100 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
         <h2 className={`text-display text-2xl font-bold mb-2 ${statusConfig.textColor}`}>
           {response.data?.productName}
         </h2>
-        <p className="text-[var(--color-foreground-muted)]">{statusText.subtitle}</p>
+        <p className="text-[var(--color-foreground-muted)]">
+          {statusText.subtitle.split('\n').map((line, i, arr) => (
+            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
+          ))}
+        </p>
 
         {/* PACK Product - Activation Progress Visual */}
         {isPack && response.data?.maxActivations && response.data.maxActivations > 1 && (
           <div className="mt-5">
-            {/* Activation Dots */}
-            <div className="flex items-center justify-center gap-2 mb-3">
-              {Array.from({ length: response.data.maxActivations }).map((_, i) => {
-                const isUsed = i < (response.data?.activationCount || 0)
-                const isNext = i === (response.data?.activationCount || 0) && canActivate
-                return (
-                  <div
-                    key={i}
-                    className={`relative transition-all duration-300 ${
-                      isUsed
-                        ? 'w-8 h-8'
-                        : isNext
-                        ? 'w-8 h-8 animate-pulse'
-                        : 'w-6 h-6'
-                    }`}
-                  >
-                    <div
-                      className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                        isUsed
-                          ? 'bg-[var(--color-gold)] border-[var(--color-gold)] shadow-[0_0_10px_rgba(201,163,90,0.4)]'
-                          : isNext
-                          ? 'border-[var(--color-gold)] border-dashed bg-[var(--color-gold)]/10'
-                          : 'border-[var(--color-beige)] bg-white'
-                      }`}
-                    >
-                      {isUsed && (
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                      {isNext && (
-                        <span className="text-[var(--color-gold)] text-xs font-bold">+</span>
-                      )}
-                    </div>
-                    {/* Slot number */}
-                    <span className={`absolute -bottom-4 left-1/2 -translate-x-1/2 text-[10px] ${
-                      isUsed ? 'text-[var(--color-gold)] font-medium' : 'text-[var(--color-foreground-muted)]'
-                    }`}>
-                      {i + 1}
+            {response.data.maxActivations <= 10 ? (
+              /* Dots for small counts (<=10) */
+              <>
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  {Array.from({ length: response.data.maxActivations }).map((_, i) => {
+                    const isUsed = i < (response.data?.activationCount || 0)
+                    const isNext = i === (response.data?.activationCount || 0) && canActivate
+                    return (
+                      <div
+                        key={i}
+                        className={`relative transition-all duration-300 ${
+                          isUsed
+                            ? 'w-8 h-8'
+                            : isNext
+                            ? 'w-8 h-8 animate-pulse'
+                            : 'w-6 h-6'
+                        }`}
+                      >
+                        <div
+                          className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                            isUsed
+                              ? 'bg-[var(--color-gold)] border-[var(--color-gold)] shadow-[0_0_10px_rgba(201,163,90,0.4)]'
+                              : isNext
+                              ? 'border-[var(--color-gold)] border-dashed bg-[var(--color-gold)]/10'
+                              : 'border-[var(--color-beige)] bg-white'
+                          }`}
+                        >
+                          {isUsed && (
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {isNext && (
+                            <span className="text-[var(--color-gold)] text-xs font-bold">+</span>
+                          )}
+                        </div>
+                        <span className={`absolute -bottom-4 left-1/2 -translate-x-1/2 text-[10px] ${
+                          isUsed ? 'text-[var(--color-gold)] font-medium' : 'text-[var(--color-foreground-muted)]'
+                        }`}>
+                          {i + 1}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-6 text-center">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 border border-[var(--color-beige)] text-sm">
+                    <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="font-medium text-[var(--color-charcoal)]">
+                      {response.data.activationCount || 0}
                     </span>
+                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}</span>
+                  </span>
+                </div>
+              </>
+            ) : (
+              /* Progress bar for large counts (>10) */
+              <>
+                <div className="px-2">
+                  <div className="w-full h-3 bg-[var(--color-beige)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[var(--color-gold)] to-[var(--color-gold-dark)] rounded-full transition-all duration-700 ease-out"
+                      style={{ width: `${((response.data.activationCount || 0) / response.data.maxActivations) * 100}%` }}
+                    />
                   </div>
-                )
-              })}
-            </div>
-
-            {/* Progress Text */}
-            <div className="mt-6 text-center">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 border border-[var(--color-beige)] text-sm">
-                <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-                <span className="font-medium text-[var(--color-charcoal)]">
-                  {response.data.activationCount || 0}
-                </span>
-                <span className="text-[var(--color-foreground-muted)]">/</span>
-                <span className="text-[var(--color-foreground-muted)]">
-                  {response.data.maxActivations}
-                </span>
-                <span className="text-[var(--color-foreground-muted)]">
-                  {locale === 'th' ? 'ครั้ง' : 'uses'}
-                </span>
-              </span>
-            </div>
+                  <div className="mt-2 flex justify-between text-xs text-[var(--color-foreground-muted)]">
+                    <span>{locale === 'th' ? 'ใช้แล้ว' : 'Used'} {response.data.activationCount || 0}</span>
+                    <span>{locale === 'th' ? 'เหลือ' : 'Left'} {response.data.maxActivations - (response.data.activationCount || 0)}</span>
+                  </div>
+                </div>
+                <div className="mt-3 text-center">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 border border-[var(--color-beige)] text-sm">
+                    <svg className="w-4 h-4 text-[var(--color-gold)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="font-bold text-[var(--color-charcoal)]">
+                      {response.data.activationCount || 0}
+                    </span>
+                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}</span>
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -539,32 +571,98 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
           {/* Activate Section - Show for genuine not activated OR PACK products with remaining activations */}
           {((isGenuine && !isActivated) || (isPack && canActivate)) && !activationResult?.success && (
             <div className="p-6 bg-[var(--color-off-white)] border-t border-[var(--color-beige)]">
-              {/* PACK Product - Highlight next activation */}
-              {isPack && response.data?.maxActivations && response.data.maxActivations > 1 && (
-                <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-[var(--color-gold)]/5 to-[var(--color-gold)]/10 border border-[var(--color-gold)]/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[var(--color-gold)]/20 flex items-center justify-center">
-                      <span className="text-[var(--color-gold)] font-bold text-lg">
-                        {(response.data.activationCount || 0) + 1}
-                      </span>
+              {/* PACK Product - Quantity selector or next activation info */}
+              {isPack && response.data?.maxActivations && response.data.maxActivations > 1 && (() => {
+                const remainingCount = (response.data?.maxActivations || 1) - (response.data?.activationCount || 0)
+                const showQtySelector = response.data!.maxActivations > 10
+
+                return showQtySelector ? (
+                  /* Quantity selector for large packs (>10) */
+                  <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-[var(--color-gold)]/5 to-[var(--color-gold)]/10 border border-[var(--color-gold)]/20">
+                    <p className="text-sm font-medium text-[var(--color-charcoal)] mb-3">
+                      {locale === 'th' ? 'เลือกจำนวนครั้งที่จะลงทะเบียน' : 'Choose number of activations'}
+                    </p>
+                    {/* Stepper */}
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setActivateQty(Math.max(1, activateQty - 1))}
+                        disabled={activateQty <= 1}
+                        className="w-10 h-10 rounded-full border-2 border-[var(--color-beige)] bg-white flex items-center justify-center text-lg font-bold text-[var(--color-charcoal)] hover:border-[var(--color-gold)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={remainingCount}
+                        value={activateQty}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value) || 1
+                          setActivateQty(Math.max(1, Math.min(v, remainingCount)))
+                        }}
+                        className="w-16 h-10 text-center text-lg font-bold text-[var(--color-charcoal)] border-2 border-[var(--color-beige)] rounded-lg focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setActivateQty(Math.min(remainingCount, activateQty + 1))}
+                        disabled={activateQty >= remainingCount}
+                        className="w-10 h-10 rounded-full border-2 border-[var(--color-beige)] bg-white flex items-center justify-center text-lg font-bold text-[var(--color-charcoal)] hover:border-[var(--color-gold)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        +
+                      </button>
                     </div>
-                    <div>
-                      <p className="font-medium text-[var(--color-charcoal)]">
-                        {locale === 'th'
-                          ? `ลงทะเบียนครั้งที่ ${(response.data.activationCount || 0) + 1}`
-                          : `Activation #${(response.data.activationCount || 0) + 1}`
-                        }
-                      </p>
-                      <p className="text-xs text-[var(--color-foreground-muted)]">
-                        {locale === 'th'
-                          ? `เหลืออีก ${(response.data.maxActivations || 1) - (response.data.activationCount || 0)} ครั้ง`
-                          : `${(response.data.maxActivations || 1) - (response.data.activationCount || 0)} activations remaining`
-                        }
-                      </p>
+                    {/* Quick select buttons */}
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                      {[1, 5, 10, remainingCount].filter((v, i, arr) => arr.indexOf(v) === i && v <= remainingCount).map(n => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setActivateQty(n)}
+                          className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                            activateQty === n
+                              ? 'bg-[var(--color-gold)] text-white border-[var(--color-gold)]'
+                              : 'bg-white text-[var(--color-charcoal)] border-[var(--color-beige)] hover:border-[var(--color-gold)]'
+                          }`}
+                        >
+                          {n === remainingCount ? (locale === 'th' ? `ทั้งหมด (${n})` : `All (${n})`) : n}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-[var(--color-foreground-muted)] text-center mt-2">
+                      {locale === 'th'
+                        ? `เหลืออีก ${remainingCount} ครั้ง`
+                        : `${remainingCount} activations remaining`
+                      }
+                    </p>
+                  </div>
+                ) : (
+                  /* Simple next activation info for small packs (<=10) */
+                  <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-[var(--color-gold)]/5 to-[var(--color-gold)]/10 border border-[var(--color-gold)]/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[var(--color-gold)]/20 flex items-center justify-center">
+                        <span className="text-[var(--color-gold)] font-bold text-lg">
+                          {(response.data?.activationCount || 0) + 1}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-[var(--color-charcoal)]">
+                          {locale === 'th'
+                            ? `ลงทะเบียนครั้งที่ ${(response.data?.activationCount || 0) + 1}`
+                            : `Activation #${(response.data?.activationCount || 0) + 1}`
+                          }
+                        </p>
+                        <p className="text-xs text-[var(--color-foreground-muted)]">
+                          {locale === 'th'
+                            ? `เหลืออีก ${remainingCount} ครั้ง`
+                            : `${remainingCount} activations remaining`
+                          }
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Consent Checkbox */}
               <label className="flex items-start gap-3 mb-4 cursor-pointer">
@@ -613,7 +711,9 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {isPack
-                      ? (locale === 'th' ? `ลงทะเบียนครั้งที่ ${(response.data?.activationCount || 0) + 1}` : `Register Use #${(response.data?.activationCount || 0) + 1}`)
+                      ? (activateQty > 1
+                        ? (locale === 'th' ? `ลงทะเบียน ${activateQty} ครั้ง` : `Register ${activateQty} Uses`)
+                        : (locale === 'th' ? `ลงทะเบียนครั้งที่ ${(response.data?.activationCount || 0) + 1}` : `Register Use #${(response.data?.activationCount || 0) + 1}`))
                       : dict.activate.activateButton
                     }
                   </>
@@ -655,27 +755,41 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                 {/* PACK - Show updated progress after activation */}
                 {isPack && activationResult.data?.maxActivations && activationResult.data.maxActivations > 1 && (
                   <div className="mt-4 pt-4 border-t border-[var(--color-mint)]/20">
-                    <div className="flex items-center justify-center gap-2">
-                      {Array.from({ length: activationResult.data.maxActivations }).map((_, i) => {
-                        const isUsed = i < (activationResult.data?.activationNumber || 0)
-                        return (
+                    {activationResult.data.maxActivations <= 10 ? (
+                      <div className="flex items-center justify-center gap-2">
+                        {Array.from({ length: activationResult.data.maxActivations }).map((_, i) => {
+                          const isUsed = i < (activationResult.data?.activationNumber || 0)
+                          return (
+                            <div
+                              key={i}
+                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+                                isUsed
+                                  ? 'bg-[var(--color-mint)] border-[var(--color-mint)]'
+                                  : 'border-[var(--color-mint)]/30 bg-white'
+                              } ${i === (activationResult.data?.activationNumber || 1) - 1 ? 'animate-bounce' : ''}`}
+                            >
+                              {isUsed && (
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="px-2">
+                        <div className="w-full h-3 bg-[var(--color-mint)]/20 rounded-full overflow-hidden">
                           <div
-                            key={i}
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
-                              isUsed
-                                ? 'bg-[var(--color-mint)] border-[var(--color-mint)]'
-                                : 'border-[var(--color-mint)]/30 bg-white'
-                            } ${i === (activationResult.data?.activationNumber || 1) - 1 ? 'animate-bounce' : ''}`}
-                          >
-                            {isUsed && (
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
+                            className="h-full bg-[var(--color-mint)] rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${((activationResult.data.activationNumber || 0) / activationResult.data.maxActivations) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-center mt-2 text-[var(--color-mint-dark)]">
+                          {activationResult.data.activationNumber} / {activationResult.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

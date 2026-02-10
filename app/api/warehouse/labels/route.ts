@@ -43,9 +43,9 @@ export const POST = withWarehouse(async (request: NextRequest) => {
     }
 
     // Limit to prevent memory issues
-    if (itemIds.length > 100) {
+    if (itemIds.length > 2000) {
       return NextResponse.json(
-        { success: false, error: 'Maximum 100 labels per request' },
+        { success: false, error: 'Maximum 2,000 labels per request' },
         { status: 400 }
       )
     }

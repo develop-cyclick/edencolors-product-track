@@ -44,7 +44,8 @@
       "Bash(npm run lint:*)",
       "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma db push:*)",
       "Bash(npx next build:*)",
-      "Bash(npx next lint:*)"
+      "Bash(npx next lint:*)",
+      "Bash(dir:*)"
     ]
   }
 }

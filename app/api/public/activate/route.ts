@@ -10,6 +10,7 @@ interface ActivationRequest {
   token?: string
   serial?: string
   consent: boolean
+  quantity?: number  // Number of activations to perform at once (default 1)
   // Optional customer info
   customerName?: string
   age?: number
@@ -45,7 +46,8 @@ export async function POST(request: NextRequest) {
     const body: ActivationRequest = await request.json()
 
     // Validate required fields
-    const { token, serial, customerName, age, gender, province, phone, consent } = body
+    const { token, serial, customerName, age, gender, province, phone, consent, quantity: rawQty } = body
+    const quantity = Math.max(1, Math.floor(rawQty || 1))
 
     // Either token or serial must be provided
     if (!token && !serial) {
@@ -211,6 +213,16 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Validate quantity doesn't exceed remaining
+    const remaining = maxActivations - currentActivationCount
+    if (quantity > remaining) {
+      return NextResponse.json({
+        success: false,
+        error: `Cannot activate ${quantity} times. Only ${remaining} activations remaining.`,
+        code: 'EXCEEDS_REMAINING',
+      }, { status: 400 })
+    }
+
     // Check product status - must be SHIPPED or ACTIVATED (for PACK) to activate
     const allowedStatuses = activationType === 'PACK' ? ['SHIPPED', 'ACTIVATED'] : ['SHIPPED']
     if (!allowedStatuses.includes(productItem.status)) {
@@ -234,26 +246,27 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create activation record and update product status in a transaction
+    // Create activation records and update product status in a transaction
     const now = new Date()
-    const newActivationNumber = currentActivationCount + 1
+    const newActivationNumber = currentActivationCount + quantity
     const isLastActivation = newActivationNumber >= maxActivations
 
-    const [activation] = await prisma.$transaction([
-      // Create activation
-      prisma.activation.create({
-        data: {
-          productItem: { connect: { id: productItem.id } },
-          activationNumber: newActivationNumber,
-          customerName: customerName?.trim() || null,
-          age: age || null,
-          gender: gender || null,
-          province: province?.trim() || null,
-          phone: phone?.trim() || null,
-          consentAt: now,
-          policyVersion: CURRENT_POLICY_VERSION,
-        },
-      }),
+    // Build activation records for each unit
+    const activationRecords = Array.from({ length: quantity }, (_, i) => ({
+      productItemId: productItem.id,
+      activationNumber: currentActivationCount + i + 1,
+      customerName: customerName?.trim() || null,
+      age: age || null,
+      gender: gender || null,
+      province: province?.trim() || null,
+      phone: phone?.trim() || null,
+      consentAt: now,
+      policyVersion: CURRENT_POLICY_VERSION,
+    }))
+
+    await prisma.$transaction([
+      // Create activation record(s)
+      prisma.activation.createMany({ data: activationRecords }),
       // Update product: increment activationCount, set status to ACTIVATED if last activation
       prisma.productItem.update({
         where: { id: productItem.id },
@@ -273,7 +286,9 @@ export async function POST(request: NextRequest) {
             gender: gender || null,
             province: province?.trim() || null,
             activatedAt: now.toISOString(),
-            activationNumber: newActivationNumber,
+            quantity,
+            activationNumberFrom: currentActivationCount + 1,
+            activationNumberTo: newActivationNumber,
             maxActivations,
             activationType,
           },
@@ -284,14 +299,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: activationType === 'PACK'
-        ? `Product activated successfully (${newActivationNumber}/${maxActivations})`
+        ? (quantity > 1
+          ? `Activated ${quantity} times successfully (${newActivationNumber}/${maxActivations})`
+          : `Product activated successfully (${newActivationNumber}/${maxActivations})`)
         : 'Product activated successfully',
       data: {
         serialNumber: productItem.serial12,
         productName: productItem.name,
         category: productItem.category.nameTh,
-        activatedAt: activation.createdAt,
+        activatedAt: now,
         activationNumber: newActivationNumber,
+        quantity,
         maxActivations,
         remainingActivations: maxActivations - newActivationNumber,
       },

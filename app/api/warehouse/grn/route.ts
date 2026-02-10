@@ -108,6 +108,11 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
   }
 
   try {
+    // Calculate timeout based on total items (default 5s is too short for large batches)
+    const totalItems = body.lines.reduce((sum, l) =>
+      sum + (l.preGeneratedItemIds?.length || l.quantity), 0)
+    const txTimeout = Math.max(30000, totalItems * 20)
+
     // Create GRN with lines in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Generate GRN number
@@ -178,103 +183,108 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           const effectiveQty = line.preGeneratedItemIds.length
           const totalQty = line.totalQty ?? effectiveQty
 
-          // Use pre-generated items (link existing items)
-          for (const preGenItemId of line.preGeneratedItemIds) {
-            // Fetch and validate pre-generated item
-            const preGenItem = await tx.productItem.findUnique({
-              where: { id: preGenItemId },
-              include: {
-                qrTokens: {
-                  where: { status: 'ACTIVE' },
-                  orderBy: { tokenVersion: 'desc' },
-                  take: 1,
-                },
+          // Bulk fetch all pre-generated items at once (1 query instead of N)
+          const preGenItems = await tx.productItem.findMany({
+            where: { id: { in: line.preGeneratedItemIds } },
+            include: {
+              qrTokens: {
+                where: { status: 'ACTIVE' },
+                orderBy: { tokenVersion: 'desc' },
+                take: 1,
               },
-            })
+            },
+          })
 
-            if (!preGenItem) {
-              throw new Error(`Pre-generated item not found: ${preGenItemId}`)
-            }
+          // Validate all items exist
+          if (preGenItems.length !== line.preGeneratedItemIds.length) {
+            const foundIds = new Set(preGenItems.map(i => i.id))
+            const missing = line.preGeneratedItemIds.find(id => !foundIds.has(id))
+            throw new Error(`Pre-generated item not found: ${missing}`)
+          }
 
+          // Validate all items are linkable
+          for (const preGenItem of preGenItems) {
             if (preGenItem.status !== 'PENDING_LINK') {
               throw new Error(`Item ${preGenItem.serial12} is not available for linking (status: ${preGenItem.status})`)
             }
-
-            // Validate pre-gen item's productMasterId matches line's productMasterId
             if (preGenItem.productMasterId && preGenItem.productMasterId !== productMaster.id) {
               throw new Error(`Pre-generated item ${preGenItem.serial12} belongs to a different product (ID: ${preGenItem.productMasterId}), expected product ID: ${productMaster.id}`)
             }
+          }
 
-            // Update pre-generated item with actual product data
-            const productItem = await tx.productItem.update({
-              where: { id: preGenItemId },
-              data: {
-                sku: productMaster.sku,
-                name: productMaster.nameTh,
-                categoryId: productMaster.categoryId,
-                modelSize: productMaster.modelSize,
-                productMasterId: productMaster.id,
-                lot: line.lot,
-                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
-                expDate: line.expDate ? new Date(line.expDate) : null,
-                status: 'IN_STOCK',
-              },
-            })
+          // Bulk update all product items at once (1 query instead of N)
+          await tx.productItem.updateMany({
+            where: { id: { in: line.preGeneratedItemIds } },
+            data: {
+              sku: productMaster.sku,
+              name: productMaster.nameTh,
+              categoryId: productMaster.categoryId,
+              modelSize: productMaster.modelSize,
+              productMasterId: productMaster.id,
+              lot: line.lot || null,
+              mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+              expDate: line.expDate ? new Date(line.expDate) : null,
+              status: 'IN_STOCK',
+            },
+          })
 
-            // Update linked count on batch
-            if (productItem.preGeneratedBatchId) {
-              await tx.preGeneratedBatch.update({
-                where: { id: productItem.preGeneratedBatchId },
-                data: {
-                  linkedCount: { increment: 1 },
-                },
-              })
+          // Batch increment linkedCount per batch (1 query per batch instead of per item)
+          const batchCounts = new Map<number, number>()
+          for (const item of preGenItems) {
+            if (item.preGeneratedBatchId) {
+              batchCounts.set(item.preGeneratedBatchId, (batchCounts.get(item.preGeneratedBatchId) || 0) + 1)
             }
+          }
+          for (const [batchId, count] of batchCounts) {
+            await tx.preGeneratedBatch.update({
+              where: { id: batchId },
+              data: { linkedCount: { increment: count } },
+            })
+          }
 
-            // Get existing QR token
-            const qrToken = preGenItem.qrTokens[0]?.token || ''
+          // Bulk create all GRN lines at once (1 query instead of N)
+          await tx.gRNLine.createMany({
+            data: preGenItems.map(item => ({
+              grnHeaderId: grnHeader.id,
+              productItemId: item.id,
+              sku: productMaster.sku,
+              itemName: productMaster.nameTh,
+              modelSize: productMaster.modelSize,
+              quantity: 1,
+              unitId: effectiveUnitId,
+              lot: line.lot || null,
+              mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+              expDate: line.expDate ? new Date(line.expDate) : null,
+              inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
+              remarks: line.remarks || null,
+              receivingSessionId: receivingSession.id,
+            })),
+          })
 
-            // Create GRN line
-            const grnLine = await tx.gRNLine.create({
-              data: {
-                grnHeaderId: grnHeader.id,
-                productItemId: productItem.id,
+          // Bulk create all event logs at once (1 query instead of N)
+          await tx.eventLog.createMany({
+            data: preGenItems.map(item => ({
+              eventType: 'INBOUND' as const,
+              productItemId: item.id,
+              userId: user.userId,
+              details: {
+                grnNo: grnHeader.grnNo,
+                serialNumber: item.serial12,
                 sku: productMaster.sku,
-                itemName: productMaster.nameTh,
-                modelSize: productMaster.modelSize,
-                quantity: 1,
-                unitId: effectiveUnitId,
-                lot: line.lot,
-                mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
-                expDate: line.expDate ? new Date(line.expDate) : null,
-                inspectionStatus: line.inspectionStatus || 'OK',
-                remarks: line.remarks,
-                receivingSessionId: receivingSession.id,
+                productMasterId: productMaster.id,
+                isPreGenerated: true,
+                preGeneratedBatchId: item.preGeneratedBatchId,
               },
-            })
+            })),
+          })
 
+          // Build response data from pre-fetched items
+          for (const item of preGenItems) {
             createdLines.push({
-              line: grnLine,
-              productItem,
-              qrToken,
+              line: { id: item.id } as any,
+              productItem: item,
+              qrToken: item.qrTokens[0]?.token || '',
               isPreGenerated: true,
-            })
-
-            // Log event
-            await tx.eventLog.create({
-              data: {
-                eventType: 'INBOUND',
-                productItemId: productItem.id,
-                userId: user.userId,
-                details: {
-                  grnNo: grnHeader.grnNo,
-                  serialNumber: productItem.serial12,
-                  sku: productMaster.sku,
-                  productMasterId: productMaster.id,
-                  isPreGenerated: true,
-                  preGeneratedBatchId: productItem.preGeneratedBatchId,
-                },
-              },
             })
           }
 
@@ -425,7 +435,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         grnHeader: { ...grnHeader, receivingStatus: isPartial ? 'PARTIAL' as const : 'COMPLETE' as const },
         lines: createdLines,
       }
-    })
+    }, { timeout: txTimeout })
 
     return successResponse({
       id: result.grnHeader.id,
