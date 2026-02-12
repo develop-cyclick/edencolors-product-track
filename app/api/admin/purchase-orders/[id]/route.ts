@@ -110,6 +110,7 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     const { id } = await context.params
     const purchaseOrderId = parseInt(id)
     const body = await request.json()
+    const { user } = context
 
     const existing = await prisma.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
@@ -117,6 +118,11 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
     if (!existing) {
       return errors.notFound('Purchase order not found')
+    }
+
+    // WAREHOUSE can only edit POs they created
+    if (user.role === 'WAREHOUSE' && existing.createdById !== user.userId) {
+      return errors.forbidden()
     }
 
     // Don't allow editing if completed or cancelled
@@ -176,6 +182,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
     const { id } = await context.params
     const purchaseOrderId = parseInt(id)
     const body = await request.json()
+    const { user } = context
 
     const existing = await prisma.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
@@ -186,6 +193,11 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
 
     if (!existing) {
       return errors.notFound('Purchase order not found')
+    }
+
+    // WAREHOUSE can only edit POs they created
+    if (user.role === 'WAREHOUSE' && existing.createdById !== user.userId) {
+      return errors.forbidden()
     }
 
     // Only allow editing CONFIRMED status
@@ -303,6 +315,6 @@ async function handleDELETE(request: NextRequest, context: HandlerContext) {
 }
 
 export const GET = withWarehouse<RouteParams>(handleGET)
-export const PATCH = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handlePATCH)
-export const PUT = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handlePUT)
+export const PATCH = withRoles<RouteParams>(['ADMIN', 'MANAGER', 'WAREHOUSE'], handlePATCH)
+export const PUT = withRoles<RouteParams>(['ADMIN', 'MANAGER', 'WAREHOUSE'], handlePUT)
 export const DELETE = withRoles<RouteParams>(['ADMIN', 'MANAGER'], handleDELETE)

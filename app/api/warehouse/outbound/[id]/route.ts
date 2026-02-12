@@ -382,13 +382,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         where: { outboundId: outboundId },
       })
 
-      // 3. Get default unit
-      const defaultUnit = await tx.unit.findFirst({ where: { nameTh: 'ชิ้น' } })
-      if (!defaultUnit) {
-        throw new Error('Default unit not found')
-      }
-
-      // 4. Create new lines with FIFO selection
+      // 3. Create new lines with FIFO selection
       const newLines = []
       for (const lineReq of body.linesByProductMaster) {
         const { productMasterId, quantity } = lineReq
@@ -401,6 +395,10 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
 
         if (!productMaster) {
           throw new Error(`Product master ${productMasterId} not found`)
+        }
+
+        if (!productMaster.defaultUnitId) {
+          throw new Error(`Product ${productMaster.sku} has no unit defined`)
         }
 
         // FIFO selection - get IN_STOCK items ordered by expDate (nearest first), then createdAt
@@ -422,8 +420,6 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
 
         // Create outbound lines and update product item status
         for (const item of availableItems) {
-          const lineUnit = productMaster.defaultUnit || defaultUnit
-
           const newLine = await tx.outboundLine.create({
             data: {
               outboundId: outboundId,
@@ -431,7 +427,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
               sku: productMaster.sku,
               itemName: productMaster.nameTh || productMaster.nameEn || productMaster.sku,
               quantity: 1,
-              unitId: lineUnit.id,
+              unitId: productMaster.defaultUnitId!,
             },
           })
 
@@ -448,7 +444,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         }
       }
 
-      // 5. Update header fields
+      // 4. Update header fields
       const updated = await tx.outboundHeader.update({
         where: { id: outboundId },
         data: {

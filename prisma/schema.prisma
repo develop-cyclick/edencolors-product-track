@@ -29,6 +29,7 @@ enum ProductStatus {
   RETURNED      // คืนสินค้า
   DAMAGED       // เสียหาย รอซ่อม
   BORROWED      // ยืมสินค้า
+  SCRAPPED      // ทิ้ง/ทำลายแล้ว
 }
 
 enum BorrowStatus {
@@ -66,6 +67,17 @@ enum ActivationType {
 enum GRNReceivingStatus {
   PARTIAL       // รับบางส่วน
   COMPLETE      // รับครบแล้ว
+}
+
+enum DamagedActionType {
+  RESTORE       // คืนเข้าคลัง
+  SCRAP         // ทิ้งสินค้า
+}
+
+enum DamagedActionStatus {
+  PENDING       // รออนุมัติ
+  APPROVED      // อนุมัติแล้ว
+  REJECTED      // ปฏิเสธ
 }
 
 // ============================================
@@ -185,6 +197,8 @@ model User {
   borrowsApproved         BorrowTransaction[]   @relation("BorrowApprovedBy")
   borrowsRejected         BorrowTransaction[]   @relation("BorrowRejectedBy")
   grnReceivingSessions    GRNReceivingSession[] @relation("GRNSessionReceivedBy")
+  damagedActionsCreated   DamagedActionRequest[] @relation("DamagedActionCreatedBy")
+  damagedActionsApproved  DamagedActionRequest[] @relation("DamagedActionApprovedBy")
 
   @@map("users")
 }
@@ -238,6 +252,7 @@ model ProductItem {
   scanLogs            ScanLog[]
   eventLogs           EventLog[]
   borrowLines         BorrowTransactionLine[]
+  damagedActionRequests DamagedActionRequest[]
 
   @@index([serial12])
   @@index([status])
@@ -645,4 +660,30 @@ model BorrowTransactionLine {
   unit                  Unit              @relation(fields: [unitId], references: [id])
 
   @@map("borrow_transaction_lines")
+}
+
+// ============================================
+// DAMAGED ACTION REQUEST - คำขออนุมัติทิ้ง/คืนคลัง
+// ============================================
+
+model DamagedActionRequest {
+  id              Int                  @id @default(autoincrement())
+  productItemId   Int                  @map("product_item_id")
+  actionType      DamagedActionType    @map("action_type")
+  status          DamagedActionStatus  @default(PENDING)
+  repairNote      String?              @map("repair_note")
+  createdById     Int                  @map("created_by_id")
+  approvedById    Int?                 @map("approved_by_id")
+  approvedAt      DateTime?            @map("approved_at")
+  rejectReason    String?              @map("reject_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  productItem     ProductItem          @relation(fields: [productItemId], references: [id])
+  createdBy       User                 @relation("DamagedActionCreatedBy", fields: [createdById], references: [id])
+  approvedBy      User?                @relation("DamagedActionApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([status])
+  @@index([productItemId])
+  @@map("damaged_action_requests")
 }

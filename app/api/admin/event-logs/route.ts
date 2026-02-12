@@ -167,4 +167,4 @@ async function handleGETStats(_request: NextRequest, _context: HandlerContext) {
   }
 }
 
-export const GET = withRoles(['ADMIN', 'MANAGER', 'WAREHOUSE'], handleGET)
+export const GET = withRoles(['ADMIN', 'MANAGER'], handleGET)

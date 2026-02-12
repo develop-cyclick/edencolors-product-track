@@ -72,9 +72,70 @@ interface Outbound {
   _count: { lines: number }
 }
 
+interface DamagedAction {
+  id: number
+  actionType: 'RESTORE' | 'SCRAP'
+  status: string
+  repairNote: string | null
+  createdAt: string
+  approvedAt: string | null
+  productItem: {
+    id: number
+    serial12: string
+    sku: string
+    name: string
+    status: string
+    lot: string | null
+    expDate: string | null
+    productMaster: {
+      id: number
+      sku: string
+      nameTh: string
+      nameEn: string | null
+      modelSize: string | null
+      category: { nameTh: string; nameEn: string | null }
+    } | null
+  }
+  createdBy: { id: number; displayName: string }
+  approvedBy: { id: number; displayName: string } | null
+}
+
+interface BorrowTransaction {
+  id: number
+  transactionNo: string
+  type: string
+  status: string
+  borrowerName: string
+  clinicName: string | null
+  clinicAddress: string | null
+  reason: string | null
+  remarks: string | null
+  createdAt: string
+  approvedAt: string | null
+  createdBy: { id: number; displayName: string }
+  approvedBy: { id: number; displayName: string } | null
+  rejectedBy: { id: number; displayName: string } | null
+  lines: Array<{
+    id: number
+    sku: string
+    itemName: string
+    productItem: {
+      id: number
+      serial12: string
+      sku: string
+      name: string
+      status: string
+    }
+    unit: { nameTh: string }
+  }>
+  _count: { lines: number }
+}
+
 interface Stats {
   grn: { pending: number; approved: number }
   outbound: { DRAFT: number; PENDING: number; APPROVED: number; REJECTED: number }
+  damaged: { PENDING: number; APPROVED: number; REJECTED: number }
+  borrow: { PENDING: number; APPROVED: number; REJECTED: number }
   totalPending: number
 }
 
@@ -86,13 +147,17 @@ export default function ApprovalBoardPage() {
 
   const [grnItems, setGrnItems] = useState<GRN[]>([])
   const [outboundItems, setOutboundItems] = useState<Outbound[]>([])
+  const [damagedItems, setDamagedItems] = useState<DamagedAction[]>([])
+  const [borrowItems, setBorrowItems] = useState<BorrowTransaction[]>([])
   const [stats, setStats] = useState<Stats>({
     grn: { pending: 0, approved: 0 },
     outbound: { DRAFT: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 },
+    damaged: { PENDING: 0, APPROVED: 0, REJECTED: 0 },
+    borrow: { PENDING: 0, APPROVED: 0, REJECTED: 0 },
     totalPending: 0,
   })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'approved'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'approved'>('all')
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [expandedGrn, setExpandedGrn] = useState<number | null>(null)
   const [expandedOutbound, setExpandedOutbound] = useState<number | null>(null)
@@ -111,6 +176,8 @@ export default function ApprovalBoardPage() {
       if (data.success && data.data) {
         setGrnItems(data.data.grn || [])
         setOutboundItems(data.data.outbound || [])
+        setDamagedItems(data.data.damaged || [])
+        setBorrowItems(data.data.borrow || [])
         setStats(data.data.stats)
       }
     } catch (error) {
@@ -234,6 +301,120 @@ export default function ApprovalBoardPage() {
     }
   }
 
+  const handleApproveDamaged = async (id: number) => {
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติคำขอ' : 'Approve Request',
+      message: locale === 'th' ? 'ยืนยันอนุมัติคำขอนี้?' : 'Confirm approve this request?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
+
+    setProcessingId(`dmg-${id}`)
+    try {
+      const res = await fetch(`/api/manager/damaged-action/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติสำเร็จ' : 'Approved successfully', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleRejectDamaged = async (id: number) => {
+    const reason = prompt(locale === 'th' ? 'ระบุเหตุผลที่ปฏิเสธ:' : 'Enter reject reason:')
+    if (!reason) return
+
+    setProcessingId(`dmg-${id}`)
+    try {
+      const res = await fetch(`/api/manager/damaged-action/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', rejectReason: reason }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธสำเร็จ' : 'Rejected successfully', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to reject', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleApproveBorrow = async (id: number) => {
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติคำขอยืมสินค้า' : 'Approve Borrow Request',
+      message: locale === 'th' ? 'ยืนยันอนุมัติคำขอยืมสินค้านี้?' : 'Confirm approve this borrow request?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
+
+    setProcessingId(`borrow-${id}`)
+    try {
+      const res = await fetch(`/api/warehouse/borrow/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติคำขอยืมสำเร็จ' : 'Borrow request approved', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleRejectBorrow = async (id: number) => {
+    const reason = prompt(locale === 'th' ? 'ระบุเหตุผลที่ปฏิเสธ:' : 'Enter reject reason:')
+    if (!reason) return
+
+    setProcessingId(`borrow-${id}`)
+    try {
+      const res = await fetch(`/api/warehouse/borrow/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', rejectedReason: reason }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธคำขอยืมสำเร็จ' : 'Borrow request rejected', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to reject', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
       year: 'numeric',
@@ -274,7 +455,7 @@ export default function ApprovalBoardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <button
           onClick={() => setActiveTab('all')}
           className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
@@ -327,6 +508,40 @@ export default function ApprovalBoardPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('damaged')}
+          className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
+            activeTab === 'damaged'
+              ? 'border-[var(--color-gold)] bg-orange-50 shadow-[0_4px_14px_rgba(201,163,90,0.15)]'
+              : 'border-[var(--color-beige)] bg-white hover:border-[var(--color-gold)]/50'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <span className="w-3 h-3 rounded-full bg-orange-500" />
+            <span className="text-3xl font-bold text-[var(--color-charcoal)]">{stats.damaged?.PENDING || 0}</span>
+          </div>
+          <p className="text-sm text-[var(--color-foreground-muted)]">
+            {locale === 'th' ? 'เสียหาย/คืน รออนุมัติ' : 'Damaged Pending'}
+          </p>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('borrow')}
+          className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
+            activeTab === 'borrow'
+              ? 'border-[var(--color-gold)] bg-violet-50 shadow-[0_4px_14px_rgba(201,163,90,0.15)]'
+              : 'border-[var(--color-beige)] bg-white hover:border-[var(--color-gold)]/50'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <span className="w-3 h-3 rounded-full bg-violet-500" />
+            <span className="text-3xl font-bold text-[var(--color-charcoal)]">{stats.borrow?.PENDING || 0}</span>
+          </div>
+          <p className="text-sm text-[var(--color-foreground-muted)]">
+            {locale === 'th' ? 'ยืมสินค้า รออนุมัติ' : 'Borrow Pending'}
+          </p>
+        </button>
+
+        <button
           onClick={() => setActiveTab('approved')}
           className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
             activeTab === 'approved'
@@ -359,7 +574,7 @@ export default function ApprovalBoardPage() {
             </p>
           </div>
         </div>
-      ) : grnItems.length === 0 && outboundItems.length === 0 ? (
+      ) : grnItems.length === 0 && outboundItems.length === 0 && damagedItems.length === 0 && borrowItems.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-mint)]/20 flex items-center justify-center">
             <svg className="w-8 h-8 text-[var(--color-mint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -918,6 +1133,218 @@ export default function ApprovalBoardPage() {
                               </div>
                             </div>
                           )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Borrow Section */}
+          {(activeTab === 'all' || activeTab === 'borrow') && borrowItems.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-violet-500" />
+                {locale === 'th' ? 'ยืมสินค้า รออนุมัติ' : 'Borrow Pending Approval'}
+                <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({borrowItems.length})</span>
+              </h2>
+              <div className="space-y-4">
+                {borrowItems.map((txn) => (
+                  <div key={txn.id} className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden hover:shadow-[var(--shadow-lg)] transition-shadow">
+                    <div className="p-5 border-b border-[var(--color-beige)] bg-violet-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-semibold text-violet-600 font-mono">
+                            {txn.transactionNo}
+                          </span>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                            {locale === 'th' ? 'ยืมสินค้า' : 'Borrow'}
+                          </span>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                            {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
+                          {locale === 'th' ? 'สร้างเมื่อ' : 'Created'}: {formatDate(txn.createdAt)} {locale === 'th' ? 'โดย' : 'by'} {txn.createdBy.displayName}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveBorrow(txn.id)}
+                          disabled={processingId === `borrow-${txn.id}`}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-[var(--color-mint)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          {locale === 'th' ? 'อนุมัติ' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => handleRejectBorrow(txn.id)}
+                          disabled={processingId === `borrow-${txn.id}`}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(239,68,68,0.3)] hover:bg-red-600 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          {locale === 'th' ? 'ปฏิเสธ' : 'Reject'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'ผู้ยืม' : 'Borrower'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{txn.borrowerName}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'คลินิก' : 'Clinic'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{txn.clinicName || '-'}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{txn._count.lines} {locale === 'th' ? 'รายการ' : 'items'}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{txn.reason || '-'}</p>
+                        </div>
+                      </div>
+
+                      {/* Product list */}
+                      {txn.lines.length > 0 && (
+                        <div className="mt-4 border border-[var(--color-beige)] rounded-xl overflow-hidden">
+                          <div className="bg-[var(--color-off-white)] px-4 py-2 border-b border-[var(--color-beige)]">
+                            <h4 className="text-sm font-semibold text-[var(--color-charcoal)]">
+                              {locale === 'th' ? `รายการสินค้า (${txn.lines.length} รายการ)` : `Products (${txn.lines.length} items)`}
+                            </h4>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-[var(--color-off-white)]">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">#</th>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">Serial</th>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">SKU</th>
+                                  <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Item'}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--color-beige)]">
+                                {txn.lines.map((line, idx) => (
+                                  <tr key={line.id} className="hover:bg-[var(--color-off-white)]/50">
+                                    <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{idx + 1}</td>
+                                    <td className="px-4 py-2 font-mono text-xs text-violet-600">{line.productItem.serial12}</td>
+                                    <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.sku}</td>
+                                    <td className="px-4 py-2 text-[var(--color-charcoal)]">{line.itemName}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {txn.remarks && (
+                        <div className="mt-4 p-3 bg-violet-50 rounded-xl border border-violet-100">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</p>
+                          <p className="text-sm text-[var(--color-charcoal)]">{txn.remarks}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Damaged Action Section */}
+          {(activeTab === 'all' || activeTab === 'damaged') && damagedItems.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500" />
+                {locale === 'th' ? 'เสียหาย/คืน รออนุมัติ' : 'Damaged/Return Pending Approval'}
+                <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({damagedItems.length})</span>
+              </h2>
+              <div className="space-y-4">
+                {damagedItems.map((item) => (
+                  <div key={item.id} className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden hover:shadow-[var(--shadow-lg)] transition-shadow">
+                    <div className="p-5 border-b border-[var(--color-beige)] bg-orange-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-semibold text-orange-600">
+                            {item.productItem.serial12}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            item.actionType === 'SCRAP'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.actionType === 'SCRAP'
+                              ? (locale === 'th' ? 'ขอทิ้งสินค้า' : 'Request Scrap')
+                              : (locale === 'th' ? 'ขอคืนเข้าคลัง' : 'Request Restore')}
+                          </span>
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                            {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
+                          {locale === 'th' ? 'สร้างเมื่อ' : 'Created'}: {formatDate(item.createdAt)} {locale === 'th' ? 'โดย' : 'by'} {item.createdBy.displayName}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveDamaged(item.id)}
+                          disabled={processingId === `dmg-${item.id}`}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-[var(--color-mint)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          {locale === 'th' ? 'อนุมัติ' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => handleRejectDamaged(item.id)}
+                          disabled={processingId === `dmg-${item.id}`}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(239,68,68,0.3)] hover:bg-red-600 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          {locale === 'th' ? 'ปฏิเสธ' : 'Reject'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">SKU</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{item.productItem.productMaster?.sku || item.productItem.sku}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'ชื่อสินค้า' : 'Product'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">
+                            {item.productItem.productMaster
+                              ? (locale === 'th' ? item.productItem.productMaster.nameTh : item.productItem.productMaster.nameEn || item.productItem.productMaster.nameTh)
+                              : item.productItem.name}
+                          </p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'สถานะปัจจุบัน' : 'Current Status'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{item.productItem.status}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'รุ่น/ขนาด' : 'Model'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{item.productItem.productMaster?.modelSize || '-'}</p>
+                        </div>
+                      </div>
+                      {item.repairNote && (
+                        <div className="mt-4 p-3 bg-orange-50 rounded-xl border border-orange-100">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Note'}</p>
+                          <p className="text-sm text-[var(--color-charcoal)]">{item.repairNote}</p>
                         </div>
                       )}
                     </div>

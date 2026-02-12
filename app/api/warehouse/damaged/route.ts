@@ -73,6 +73,17 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       prisma.productItem.count({ where }),
     ])
 
+    // Get pending damaged action requests for these items
+    const itemIds = items.map(i => i.id)
+    const pendingRequests = await prisma.damagedActionRequest.findMany({
+      where: {
+        productItemId: { in: itemIds },
+        status: 'PENDING',
+      },
+      select: { productItemId: true, actionType: true, createdAt: true },
+    })
+    const pendingMap = new Map(pendingRequests.map(r => [r.productItemId, r]))
+
     // Get damage/return notes from event logs
     const itemsWithNotes = await Promise.all(
       items.map(async (item) => {
@@ -90,6 +101,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         })
 
         const details = eventLog?.details as { reason?: string; note?: string; notes?: string } | null
+        const pending = pendingMap.get(item.id)
         return {
           ...item,
           warehouse: item.grnLine?.grnHeader?.warehouse || null,
@@ -99,6 +111,10 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
           } : null,
           damagedAt: eventLog?.createdAt,
           damagedBy: eventLog?.user?.displayName,
+          pendingRequest: pending ? {
+            actionType: pending.actionType,
+            createdAt: pending.createdAt,
+          } : null,
         }
       })
     )

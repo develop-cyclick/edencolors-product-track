@@ -25,6 +25,7 @@ interface DamagedProduct {
   damageNote: { reason?: string; note?: string } | null
   damagedAt: string | null
   damagedBy: string | null
+  pendingRequest: { actionType: string; createdAt: string } | null
 }
 
 interface SearchResult {
@@ -210,12 +211,6 @@ export default function DamagedProductsPage() {
   const [isConverting, setIsConverting] = useState(false)
   const [convertClinicSearch, setConvertClinicSearch] = useState('')
 
-  // --- Approve/Reject Modal ---
-  const [showApproveModal, setShowApproveModal] = useState(false)
-  const [selectedTransaction, setSelectedTransaction] = useState<BorrowTransaction | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
-  const [isApproving, setIsApproving] = useState(false)
-
   const fetchItems = async () => {
     setLoading(true)
     try {
@@ -260,6 +255,12 @@ export default function DamagedProductsPage() {
 
       const data = await res.json()
       if (data.success) {
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'ส่งคำขออนุมัติแล้ว รอผู้จัดการอนุมัติ' : 'Request submitted for approval',
+          variant: 'success',
+          icon: 'success',
+        })
         setShowRestoreModal(false)
         setSelectedItem(null)
         setRepairNote('')
@@ -619,55 +620,6 @@ export default function DamagedProductsPage() {
     }
   }
 
-  const handleApproveReject = async (action: 'approve' | 'reject') => {
-    if (!selectedTransaction) return
-
-    if (action === 'reject' && !rejectReason.trim()) {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณากรอกเหตุผลในการปฏิเสธ' : 'Please enter rejection reason', variant: 'warning', icon: 'warning' })
-      return
-    }
-
-    setIsApproving(true)
-    try {
-      const res = await fetch(`/api/warehouse/borrow/${selectedTransaction.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          rejectedReason: action === 'reject' ? rejectReason.trim() : undefined,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (data.success) {
-        await alert({
-          title: locale === 'th' ? 'สำเร็จ' : 'Success',
-          message: action === 'approve'
-            ? locale === 'th'
-              ? 'อนุมัติคำขอยืมสินค้าสำเร็จ'
-              : 'Borrow request approved'
-            : locale === 'th'
-              ? 'ปฏิเสธคำขอยืมสินค้าสำเร็จ'
-              : 'Borrow request rejected',
-          variant: 'success',
-          icon: 'success'
-        })
-        setShowApproveModal(false)
-        setSelectedTransaction(null)
-        setRejectReason('')
-        fetchBorrowHistory()
-      } else {
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
-      }
-    } catch (error) {
-      console.error('Approve/Reject error:', error)
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Operation failed', variant: 'error', icon: 'error' })
-    } finally {
-      setIsApproving(false)
-    }
-  }
-
   const openConvertModal = async () => {
     try {
       const [clinicsRes, warehousesRes, shippingRes] = await Promise.all([
@@ -976,12 +928,22 @@ export default function DamagedProductsPage() {
                           {formatDate(item.damagedAt)}
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <button
-                            onClick={() => openRestoreModal(item)}
-                            className="px-3 py-1.5 text-sm bg-[var(--color-mint)] text-white rounded-lg hover:bg-[var(--color-mint-dark)] transition-colors"
-                          >
-                            {locale === 'th' ? 'จัดการ' : 'Manage'}
-                          </button>
+                          {item.pendingRequest ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-lg">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              {locale === 'th' ? 'รออนุมัติ' : 'Pending'}
+                              ({locale === 'th'
+                                ? (item.pendingRequest.actionType === 'RESTORE' ? 'คืนคลัง' : 'ทิ้ง')
+                                : item.pendingRequest.actionType.toLowerCase()})
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openRestoreModal(item)}
+                              className="px-3 py-1.5 text-sm bg-[var(--color-mint)] text-white rounded-lg hover:bg-[var(--color-mint-dark)] transition-colors"
+                            >
+                              {locale === 'th' ? 'จัดการ' : 'Manage'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -1701,17 +1663,6 @@ export default function DamagedProductsPage() {
                         <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{formatDate(txn.createdAt)}</td>
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {txn.status === 'PENDING' && txn.type === 'BORROW' && (
-                              <button
-                                onClick={() => {
-                                  setSelectedTransaction(txn)
-                                  setShowApproveModal(true)
-                                }}
-                                className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-                              >
-                                {locale === 'th' ? 'อนุมัติ' : 'Review'}
-                              </button>
-                            )}
                             <button
                               onClick={() => openBorrowDocument(txn.id)}
                               className="px-3 py-1.5 text-sm border border-[var(--color-beige)] rounded-lg hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] transition-all"
@@ -1967,98 +1918,6 @@ export default function DamagedProductsPage() {
         </div>
       )}
 
-      {/* Borrow Approve/Reject Modal */}
-      {showApproveModal && selectedTransaction && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              {locale === 'th' ? 'อนุมัติ/ปฏิเสธคำขอยืมสินค้า' : 'Approve/Reject Borrow Request'}
-            </h3>
-
-            <div className="bg-[var(--color-off-white)] rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่' : 'No.'}</span>
-                  <p className="font-mono font-semibold text-[var(--color-gold)]">{selectedTransaction.transactionNo}</p>
-                </div>
-                <div>
-                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ผู้ยืม' : 'Borrower'}</span>
-                  <p className="font-medium">{selectedTransaction.borrowerName}</p>
-                </div>
-                <div>
-                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'จำนวนสินค้า' : 'Items'}</span>
-                  <p className="font-medium">{selectedTransaction.lines.length} {locale === 'th' ? 'รายการ' : 'items'}</p>
-                </div>
-                <div>
-                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'สร้างโดย' : 'Created by'}</span>
-                  <p className="font-medium">{selectedTransaction.createdBy?.displayName || '-'}</p>
-                </div>
-              </div>
-              {selectedTransaction.reason && (
-                <div className="mt-3 pt-3 border-t border-[var(--color-beige)]">
-                  <span className="text-[var(--color-foreground-muted)] text-sm">{locale === 'th' ? 'เหตุผล' : 'Reason'}</span>
-                  <p className="text-sm">{selectedTransaction.reason}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Products List */}
-            <div className="mb-4">
-              <h4 className="text-sm font-medium mb-2">{locale === 'th' ? 'รายการสินค้า' : 'Products'}</h4>
-              <div className="max-h-32 overflow-y-auto bg-[var(--color-off-white)] rounded-lg p-3 space-y-1 text-sm">
-                {selectedTransaction.lines.map((line) => (
-                  <div key={line.id} className="flex justify-between">
-                    <span className="font-mono text-[var(--color-gold)]">{line.productItem.serial12}</span>
-                    <span className="text-[var(--color-charcoal)] truncate ml-2">{line.itemName}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Rejection Reason */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">
-                {locale === 'th' ? 'เหตุผลในการปฏิเสธ (ถ้าปฏิเสธ)' : 'Rejection Reason (if rejecting)'}
-              </label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
-                placeholder={locale === 'th' ? 'กรอกเหตุผลในการปฏิเสธ' : 'Enter rejection reason'}
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleApproveReject('approve')}
-                disabled={isApproving}
-                className="flex-1 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 font-medium"
-              >
-                {isApproving ? '...' : (locale === 'th' ? 'อนุมัติ' : 'Approve')}
-              </button>
-              <button
-                onClick={() => handleApproveReject('reject')}
-                disabled={isApproving || !rejectReason.trim()}
-                className="flex-1 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 font-medium"
-              >
-                {isApproving ? '...' : (locale === 'th' ? 'ปฏิเสธ' : 'Reject')}
-              </button>
-              <button
-                onClick={() => {
-                  setShowApproveModal(false)
-                  setSelectedTransaction(null)
-                  setRejectReason('')
-                }}
-                disabled={isApproving}
-                className="px-4 py-2.5 border border-[var(--color-beige)] rounded-lg disabled:opacity-50"
-              >
-                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Convert to PO & Outbound Modal */}
       {showConvertModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

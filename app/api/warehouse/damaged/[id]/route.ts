@@ -7,7 +7,7 @@ import type { JWTPayload } from '@/lib/auth'
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
 
-// PATCH /api/warehouse/damaged/[id] - Restore damaged product
+// PATCH /api/warehouse/damaged/[id] - Submit restore/scrap request for approval
 async function handlePATCH(request: NextRequest, context: HandlerContext) {
   if (!context.params) {
     return errorResponse('Missing params')
@@ -28,6 +28,10 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       repairNote?: string
     }
 
+    if (action !== 'restore' && action !== 'scrap') {
+      return errorResponse('Invalid action')
+    }
+
     const item = await prisma.productItem.findUnique({
       where: { id: productItemId },
     })
@@ -36,61 +40,54 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errors.notFound('Product item')
     }
 
-    if (item.status !== 'DAMAGED') {
-      return errorResponse('Product is not in DAMAGED status')
+    if (item.status !== 'DAMAGED' && item.status !== 'RETURNED') {
+      return errorResponse('Product is not in DAMAGED or RETURNED status')
     }
 
-    if (action === 'restore') {
-      // Restore to IN_STOCK
-      await prisma.$transaction(async (tx) => {
-        await tx.productItem.update({
-          where: { id: productItemId },
-          data: {
-            status: 'IN_STOCK',
-            assignedClinicId: null,
-          },
-        })
+    // Check no existing PENDING request for this item
+    const existingRequest = await prisma.damagedActionRequest.findFirst({
+      where: { productItemId, status: 'PENDING' },
+    })
 
-        await tx.eventLog.create({
-          data: {
-            eventType: 'REPAIR',
-            productItemId,
-            userId: user.userId,
-            details: {
-              action: 'restore',
-              repairNote,
-            },
-          },
-        })
-      })
+    if (existingRequest) {
+      return errorResponse('This product already has a pending action request')
+    }
 
-      return successResponse({
-        message: 'Product restored to stock',
-        serial12: item.serial12,
-      })
-    } else if (action === 'scrap') {
-      // Mark as scrapped (keep as DAMAGED but log it)
-      await prisma.eventLog.create({
+    const actionRequest = await prisma.$transaction(async (tx) => {
+      const request = await tx.damagedActionRequest.create({
         data: {
-          eventType: 'SCRAP',
+          productItemId,
+          actionType: action === 'restore' ? 'RESTORE' : 'SCRAP',
+          repairNote: repairNote || null,
+          createdById: user.userId,
+        },
+      })
+
+      await tx.eventLog.create({
+        data: {
+          eventType: 'DAMAGED_ACTION_REQUEST',
           productItemId,
           userId: user.userId,
           details: {
-            action: 'scrap',
-            note: repairNote,
+            action,
+            repairNote,
+            requestId: request.id,
           },
         },
       })
 
-      return successResponse({
-        message: 'Product marked as scrapped',
-        serial12: item.serial12,
-      })
-    }
+      return request
+    })
 
-    return errorResponse('Invalid action')
+    return successResponse({
+      message: action === 'restore'
+        ? 'Restore request submitted for approval'
+        : 'Scrap request submitted for approval',
+      requestId: actionRequest.id,
+      serial12: item.serial12,
+    })
   } catch (error) {
-    console.error('Restore damaged product error:', error)
+    console.error('Damaged action request error:', error)
     return errors.internalError()
   }
 }
