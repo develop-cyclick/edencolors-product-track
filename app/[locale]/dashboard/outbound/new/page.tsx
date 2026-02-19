@@ -293,8 +293,8 @@ export default function NewOutboundPage() {
     setSelectedPO(po || null)
 
     if (po) {
-      // Pre-fill delivery info from PO
-      if (po.deliveryNoteNo) setDeliveryNoteNo(po.deliveryNoteNo)
+      // Pre-fill delivery info from PO (except deliveryNoteNo - each outbound must have unique IV No.)
+      setDeliveryNoteNo('') // Clear so backend auto-generates a unique number
       if (po.contractNo) setContractNo(po.contractNo)
       if (po.salesPersonName) setSalesPersonName(po.salesPersonName)
       if (po.companyContact) setCompanyContact(po.companyContact)

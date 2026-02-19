@@ -78,7 +78,19 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         clinic: { select: { id: true, name: true, province: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
-        purchaseOrder: { select: { id: true, poNo: true } },
+        purchaseOrder: {
+          select: {
+            id: true,
+            poNo: true,
+            status: true,
+            lines: {
+              select: {
+                quantity: true,
+                shippedQuantity: true,
+              },
+            },
+          },
+        },
         _count: { select: { lines: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -88,8 +100,31 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     prisma.outboundHeader.count({ where }),
   ])
 
+  // Enrich with PO shipping summary
+  const enriched = outbounds.map((ob) => {
+    const po = ob.purchaseOrder
+    let poSummary = null
+    if (po) {
+      const totalOrdered = po.lines.reduce((s, l) => s + l.quantity, 0)
+      const totalShipped = po.lines.reduce((s, l) => s + l.shippedQuantity, 0)
+      poSummary = {
+        id: po.id,
+        poNo: po.poNo,
+        status: po.status,
+        totalOrdered,
+        totalShipped,
+        totalRemaining: totalOrdered - totalShipped,
+        isPartial: totalShipped > 0 && totalShipped < totalOrdered,
+        isComplete: totalShipped >= totalOrdered,
+      }
+    }
+    // Remove raw PO lines from response
+    const { purchaseOrder: _po, ...rest } = ob
+    return { ...rest, purchaseOrder: poSummary }
+  })
+
   return successResponse({
-    items: outbounds,
+    items: enriched,
     pagination: {
       page,
       limit,
@@ -318,8 +353,12 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       linesCreated: result.lines.length,
       selectedSerials: result.selectedSerials, // Return which serials were selected (for FIFO)
     }, 201)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Create Outbound error:', error)
+    // Handle unique constraint violation on delivery_note_no
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return errorResponse('เลขที่ใบส่งสินค้า (IV No.) ซ้ำ กรุณาเว้นว่างเพื่อให้ระบบสร้างอัตโนมัติ หรือระบุเลขใหม่', 409)
+    }
     return errors.internalError()
   }
 }

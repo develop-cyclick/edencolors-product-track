@@ -45,7 +45,16 @@
       "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma db push:*)",
       "Bash(npx next build:*)",
       "Bash(npx next lint:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(docker exec:*)",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 5432 -ErrorAction SilentlyContinue | Select-Object LocalAddress, LocalPort, OwningProcess | Format-Table\")",
+      "Bash(powershell.exe -Command \"Get-Process -Id 9460,7432 -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, Path | Format-Table -AutoSize\")",
+      "Bash(powershell.exe -Command \"Get-Service -Name ''postgresql*'' | Select-Object Name, Status, DisplayName | Format-Table -AutoSize\")",
+      "mcp__figma__generate_figma_design",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__select_page"
     ]
   }
 }

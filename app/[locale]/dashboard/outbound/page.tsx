@@ -4,12 +4,22 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+interface POSummary {
+  id: number
+  poNo: string
+  status: string
+  totalOrdered: number
+  totalShipped: number
+  totalRemaining: number
+  isPartial: boolean
+  isComplete: boolean
+}
+
 interface Outbound {
   id: number
   deliveryNoteNo: string
   shippedAt: string | null
   status: string
-  poNo: string | null
   approvedAt: string | null
   rejectReason: string | null
   createdAt: string
@@ -18,8 +28,11 @@ interface Outbound {
   clinic: { id: number; name: string; province: string }
   createdBy: { id: number; displayName: string }
   approvedBy: { id: number; displayName: string } | null
+  purchaseOrder: POSummary | null
   _count: { lines: number }
 }
+
+type StatusFilter = 'all' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
 interface ApiResponse {
   success: boolean
@@ -43,7 +56,7 @@ export default function OutboundListPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   useEffect(() => {
     fetchOutbounds()
@@ -53,7 +66,7 @@ export default function OutboundListPage() {
     setLoading(true)
     try {
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : ''
-      const statusParam = statusFilter ? `&status=${statusFilter}` : ''
+      const statusParam = statusFilter !== 'all' ? `&status=${statusFilter}` : ''
       const res = await fetch(`/api/warehouse/outbound?page=${page}&limit=20${searchParam}${statusParam}`)
       const data: ApiResponse = await res.json()
       if (data.success) {
@@ -94,6 +107,36 @@ export default function OutboundListPage() {
     )
   }
 
+  const getShipmentBadge = (po: POSummary, size: 'sm' | 'md' = 'md') => {
+    if (po.isComplete) {
+      const sizeClasses = size === 'sm' ? 'gap-1 px-2 py-0.5 text-[10px]' : 'gap-1.5 px-3 py-1 text-xs'
+      const dotSize = size === 'sm' ? 'w-1 h-1' : 'w-1.5 h-1.5'
+      return (
+        <span className={`inline-flex items-center ${sizeClasses} rounded-full font-medium bg-blue-100 text-blue-700`}>
+          <span className={`${dotSize} rounded-full bg-blue-500`} />
+          {locale === 'th'
+            ? `ส่งครบ ${po.totalShipped}/${po.totalOrdered}`
+            : `Complete ${po.totalShipped}/${po.totalOrdered}`
+          }
+        </span>
+      )
+    }
+    if (po.isPartial) {
+      const sizeClasses = size === 'sm' ? 'gap-1 px-2 py-0.5 text-[10px]' : 'gap-1.5 px-3 py-1 text-xs'
+      const dotSize = size === 'sm' ? 'w-1 h-1' : 'w-1.5 h-1.5'
+      return (
+        <span className={`inline-flex items-center ${sizeClasses} rounded-full font-medium bg-orange-100 text-orange-700`}>
+          <span className={`${dotSize} rounded-full bg-orange-500`} />
+          {locale === 'th'
+            ? `ส่งบางส่วน ${po.totalShipped}/${po.totalOrdered}`
+            : `Partial ${po.totalShipped}/${po.totalOrdered}`
+          }
+        </span>
+      )
+    }
+    return null
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -117,47 +160,55 @@ export default function OutboundListPage() {
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="relative flex-1">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-foreground-muted)]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder={locale === 'th' ? 'ค้นหา Delivery No., Clinic...' : 'Search...'}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              className="w-full pl-12 pr-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 placeholder:text-[var(--color-foreground-muted)] focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
-            />
+      {/* Search & Filter */}
+      <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-4 sm:p-5 space-y-4">
+        <div className="relative">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-foreground-muted)]">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
-          <div className="relative sm:w-40">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
+          <input
+            type="text"
+            placeholder={locale === 'th' ? 'ค้นหา Delivery No., PO No., Clinic...' : 'Search Delivery No., PO No., Clinic...'}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+            className="w-full pl-12 pr-4 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 placeholder:text-[var(--color-foreground-muted)] focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
+          />
+        </div>
+
+        {/* Status Filter Tabs (like GRN page) */}
+        <div className="flex flex-wrap gap-2">
+          {([
+            { value: 'all', label: locale === 'th' ? 'ทั้งหมด' : 'All' },
+            { value: 'PENDING', label: locale === 'th' ? 'รออนุมัติ' : 'Pending' },
+            { value: 'APPROVED', label: locale === 'th' ? 'อนุมัติแล้ว' : 'Approved' },
+            { value: 'REJECTED', label: locale === 'th' ? 'ถูกปฏิเสธ' : 'Rejected' },
+          ] as const).map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => {
+                setStatusFilter(tab.value)
                 setPage(1)
               }}
-              className="w-full appearance-none pl-4 pr-10 py-3 text-[0.9375rem] bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl transition-all duration-200 focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)]"
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                statusFilter === tab.value
+                  ? tab.value === 'REJECTED'
+                    ? 'bg-red-500 text-white shadow-sm'
+                    : tab.value === 'APPROVED'
+                    ? 'bg-[var(--color-mint)] text-white shadow-sm'
+                    : tab.value === 'PENDING'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-[var(--color-gold)] text-white shadow-sm'
+                  : 'bg-[var(--color-off-white)] text-[var(--color-foreground-muted)] hover:bg-[var(--color-beige)] hover:text-[var(--color-charcoal)]'
+              }`}
             >
-              <option value="">{locale === 'th' ? 'ทุกสถานะ' : 'All Status'}</option>
-              <option value="DRAFT">{locale === 'th' ? 'ฉบับร่าง' : 'Draft'}</option>
-              <option value="PENDING">{locale === 'th' ? 'รออนุมัติ' : 'Pending'}</option>
-              <option value="APPROVED">{locale === 'th' ? 'อนุมัติแล้ว' : 'Approved'}</option>
-              <option value="REJECTED">{locale === 'th' ? 'ปฏิเสธ' : 'Rejected'}</option>
-            </select>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -194,7 +245,7 @@ export default function OutboundListPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-mono font-medium text-[var(--color-gold)]">
                           {ob.deliveryNoteNo}
                         </span>
@@ -211,6 +262,27 @@ export default function OutboundListPage() {
                         <span>{ob.shippingMethod.nameTh}</span>
                         <span>{ob._count.lines} {locale === 'th' ? 'รายการ' : 'items'}</span>
                       </div>
+                      {/* PO Info for Mobile */}
+                      {ob.purchaseOrder && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-gold)]/10 text-[var(--color-gold-dark)]">
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {ob.purchaseOrder.poNo}
+                          </span>
+                          {getShipmentBadge(ob.purchaseOrder, 'sm')}
+                        </div>
+                      )}
+                      {/* Rejection Reason for Mobile */}
+                      {ob.status === 'REJECTED' && ob.rejectReason && (
+                        <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-100">
+                          <p className="text-xs font-medium text-red-700 mb-0.5">
+                            {locale === 'th' ? 'เหตุผลที่ปฏิเสธ:' : 'Rejection reason:'}
+                          </p>
+                          <p className="text-xs text-red-600">{ob.rejectReason}</p>
+                        </div>
+                      )}
                     </div>
                     <svg className="w-5 h-5 text-[var(--color-foreground-muted)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -233,6 +305,9 @@ export default function OutboundListPage() {
                       {locale === 'th' ? 'คลินิก' : 'Clinic'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                      PO No.
+                    </th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'วิธีส่ง' : 'Shipping'}
                     </th>
                     <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
@@ -246,7 +321,7 @@ export default function OutboundListPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-beige)]">
                   {outbounds.map((ob) => (
-                    <tr key={ob.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                    <tr key={ob.id} className={`hover:bg-[var(--color-off-white)]/50 transition-colors ${ob.status === 'REJECTED' ? 'bg-red-50/30' : ''}`}>
                       <td className="px-5 py-4">
                         <Link
                           href={`/${locale}/dashboard/outbound/${ob.id}`}
@@ -262,15 +337,47 @@ export default function OutboundListPage() {
                         <div className="text-sm font-medium text-[var(--color-charcoal)]">{ob.clinic.name}</div>
                         <div className="text-xs text-[var(--color-foreground-muted)]">{ob.clinic.province}</div>
                       </td>
+                      <td className="px-5 py-4">
+                        {ob.purchaseOrder ? (
+                          <div className="space-y-1">
+                            <span className="font-mono text-sm text-[var(--color-charcoal)]">
+                              {ob.purchaseOrder.poNo}
+                            </span>
+                            {/* {getShipmentBadge(ob.purchaseOrder)} */}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-[var(--color-foreground-muted)]">-</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
                         {ob.shippingMethod.nameTh}
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--color-beige)]/50 font-medium text-sm">
+                        <span className="inline-flex items-center justify-center min-w-[2rem] h-8 rounded-lg bg-[var(--color-beige)]/50 font-medium text-sm px-2">
                           {ob._count.lines}
                         </span>
                       </td>
-                      <td className="px-5 py-4">{getStatusBadge(ob.status)}</td>
+                      <td className="px-5 py-4">
+                        <div className="space-y-1">
+                          {getStatusBadge(ob.status)}
+                          {/* Shipment partial/complete badge */}
+                          {ob.purchaseOrder && getShipmentBadge(ob.purchaseOrder)}
+                          {/* Rejection reason tooltip */}
+                          {ob.status === 'REJECTED' && ob.rejectReason && (
+                            <div className="group relative">
+                              <p className="text-xs text-red-600 truncate max-w-[200px] cursor-help" title={ob.rejectReason}>
+                                {ob.rejectReason}
+                              </p>
+                              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-10">
+                                <div className="bg-red-800 text-white text-xs rounded-lg px-3 py-2 max-w-xs shadow-lg">
+                                  <p className="font-medium mb-1">{locale === 'th' ? 'เหตุผลที่ปฏิเสธ:' : 'Rejection reason:'}</p>
+                                  <p>{ob.rejectReason}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-5 py-4 text-right">
                         <Link
                           href={`/${locale}/dashboard/outbound/${ob.id}`}

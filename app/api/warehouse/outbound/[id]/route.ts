@@ -28,7 +28,35 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       clinic: { select: { id: true, name: true, province: true, branchName: true } },
       createdBy: { select: { id: true, displayName: true, username: true } },
       approvedBy: { select: { id: true, displayName: true, username: true } },
-      purchaseOrder: { select: { id: true, poNo: true, status: true } },
+      purchaseOrder: {
+        select: {
+          id: true,
+          poNo: true,
+          status: true,
+          lines: {
+            select: {
+              id: true,
+              quantity: true,
+              shippedQuantity: true,
+              productMaster: {
+                select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true },
+              },
+            },
+          },
+          outbounds: {
+            select: {
+              id: true,
+              deliveryNoteNo: true,
+              status: true,
+              createdAt: true,
+              shippedAt: true,
+              createdBy: { select: { id: true, displayName: true } },
+              _count: { select: { lines: true } },
+            },
+            orderBy: { createdAt: 'asc' as const },
+          },
+        },
+      },
       lines: {
         include: {
           productItem: {
@@ -50,7 +78,28 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     return errors.notFound('Outbound')
   }
 
-  return successResponse({ outbound })
+  // Compute PO summary
+  let poSummary = null
+  if (outbound.purchaseOrder) {
+    const po = outbound.purchaseOrder
+    const totalOrdered = po.lines.reduce((s, l) => s + l.quantity, 0)
+    const totalShipped = po.lines.reduce((s, l) => s + l.shippedQuantity, 0)
+    poSummary = {
+      id: po.id,
+      poNo: po.poNo,
+      status: po.status,
+      totalOrdered,
+      totalShipped,
+      totalRemaining: totalOrdered - totalShipped,
+      isPartial: totalShipped > 0 && totalShipped < totalOrdered,
+      isComplete: totalShipped >= totalOrdered,
+      lines: po.lines,
+      outbounds: po.outbounds,
+    }
+  }
+
+  const { purchaseOrder: _po, ...rest } = outbound
+  return successResponse({ outbound: { ...rest, purchaseOrder: poSummary } })
 }
 
 // PATCH /api/warehouse/outbound/[id] - Update/Approve/Reject Outbound

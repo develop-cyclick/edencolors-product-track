@@ -23,6 +23,36 @@ interface OutboundLine {
   unit: { id: number; nameTh: string; nameEn: string }
 }
 
+interface POLine {
+  id: number
+  quantity: number
+  shippedQuantity: number
+  productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
+}
+
+interface POOutbound {
+  id: number
+  deliveryNoteNo: string
+  status: string
+  createdAt: string
+  shippedAt: string | null
+  createdBy: { id: number; displayName: string }
+  _count: { lines: number }
+}
+
+interface POSummary {
+  id: number
+  poNo: string
+  status: string
+  totalOrdered: number
+  totalShipped: number
+  totalRemaining: number
+  isPartial: boolean
+  isComplete: boolean
+  lines: POLine[]
+  outbounds: POOutbound[]
+}
+
 interface OutboundHeader {
   id: number
   outboundNo: string
@@ -40,11 +70,7 @@ interface OutboundHeader {
   clinicEmail: string | null
   clinicContactName: string | null
   remarks: string | null
-  purchaseOrder: {
-    id: number
-    poNo: string
-    status: string
-  } | null
+  purchaseOrder: POSummary | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null
   clinic: { id: number; name: string; province: string; branchName: string | null } | null
@@ -383,11 +409,24 @@ export default function OutboundDetailPage() {
             </svg>
           </button>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">
                 {outbound.outboundNo}
               </h1>
               {getStatusBadge(outbound.status)}
+              {outbound.purchaseOrder && (
+                outbound.purchaseOrder.isComplete ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    {locale === 'th' ? 'ส่งครบแล้ว' : 'Fully Shipped'}
+                  </span>
+                ) : outbound.purchaseOrder.isPartial ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                    {locale === 'th' ? 'ส่งบางส่วน' : 'Partial'}
+                  </span>
+                ) : null
+              )}
             </div>
             <p className="text-[var(--color-foreground-muted)] mt-1">
               {locale === 'th' ? 'รายละเอียดการส่งออกสินค้า' : 'Outbound Details'}
@@ -407,6 +446,18 @@ export default function OutboundDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               {locale === 'th' ? 'แก้ไข' : 'Edit'}
+            </Link>
+          )}
+          {/* Ship More Button - Only when approved + PO partial */}
+          {outbound.status === 'APPROVED' && outbound.purchaseOrder && !outbound.purchaseOrder.isComplete && outbound.purchaseOrder.totalRemaining > 0 && (
+            <Link
+              href={`/${locale}/dashboard/outbound/new?clinicId=${outbound.clinic?.id}&poId=${outbound.purchaseOrder.id}`}
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(249,115,22,0.25)] hover:bg-orange-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(249,115,22,0.35)] transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {locale === 'th' ? 'สร้างใบส่งเพิ่ม' : 'Ship More'}
             </Link>
           )}
           {/* View Document Button */}
@@ -650,6 +701,154 @@ export default function OutboundDetailPage() {
           )}
         </div>
       </div>
+
+      {/* PO Shipping Plan Summary */}
+      {outbound.purchaseOrder && outbound.purchaseOrder.lines.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+          <div className="p-5 border-b border-[var(--color-beige)] bg-[var(--color-off-white)]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[var(--color-charcoal)]">
+                {locale === 'th' ? 'สรุปแผนการจัดส่ง' : 'Shipping Plan Summary'}
+              </h2>
+              <span className="font-mono text-sm text-[var(--color-gold)]">{outbound.purchaseOrder.poNo}</span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'สินค้า (SKU)' : 'Product (SKU)'}
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'สั่งทั้งหมด' : 'Ordered'}
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ส่งแล้ว' : 'Shipped'}
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'คงเหลือ' : 'Remaining'}
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]" style={{ minWidth: 120 }}>
+                    {locale === 'th' ? 'ความคืบหน้า' : 'Progress'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-beige)]">
+                {outbound.purchaseOrder.lines.map((pl) => {
+                  const pct = pl.quantity > 0 ? Math.round((pl.shippedQuantity / pl.quantity) * 100) : 0
+                  const remaining = pl.quantity - pl.shippedQuantity
+                  return (
+                    <tr key={pl.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                      <td className="px-5 py-3 text-sm">
+                        <div className="font-medium text-[var(--color-charcoal)]">{locale === 'th' ? pl.productMaster.nameTh : (pl.productMaster.nameEn || pl.productMaster.nameTh)}</div>
+                        <div className="text-xs text-[var(--color-foreground-muted)]">{pl.productMaster.sku}{pl.productMaster.modelSize ? ` (${pl.productMaster.modelSize})` : ''}</div>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-charcoal)]">{pl.quantity}</td>
+                      <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-mint-dark)]">{pl.shippedQuantity}</td>
+                      <td className="px-5 py-3 text-sm text-center font-medium">
+                        <span className={remaining > 0 ? 'text-orange-600' : 'text-[var(--color-mint-dark)]'}>
+                          {remaining}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-[var(--color-beige)] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-[var(--color-mint)]' : 'bg-orange-400'}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-[var(--color-foreground-muted)] w-10 text-right">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Outbound Timeline from PO */}
+      {outbound.purchaseOrder && outbound.purchaseOrder.outbounds.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6">
+          <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-5">
+            {locale === 'th' ? 'ประวัติการจัดส่ง (PO นี้)' : 'Shipping History (this PO)'}
+          </h2>
+          <div className="relative">
+            {/* Vertical line */}
+            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[var(--color-beige)]" />
+
+            <div className="space-y-6">
+              {outbound.purchaseOrder.outbounds.map((ob, idx) => {
+                const isCurrent = ob.id === outbound.id
+                const statusBadges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
+                  DRAFT: { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400', label: 'ฉบับร่าง', labelEn: 'Draft' },
+                  PENDING: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รออนุมัติ', labelEn: 'Pending' },
+                  APPROVED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'อนุมัติแล้ว', labelEn: 'Approved' },
+                  REJECTED: { bg: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'ปฏิเสธ', labelEn: 'Rejected' },
+                }
+                const badge = statusBadges[ob.status] || statusBadges.DRAFT
+                return (
+                  <div key={ob.id} className="relative pl-12">
+                    {/* Dot */}
+                    <div className={`absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-white shadow-sm ${isCurrent ? 'bg-[var(--color-gold)]' : 'bg-[var(--color-beige)]'}`} />
+
+                    <div className={`${isCurrent ? 'bg-[var(--color-gold)]/5 border border-[var(--color-gold)]/20 rounded-xl p-3 -ml-1' : ''}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-[var(--color-charcoal)]">
+                          {locale === 'th' ? `ครั้งที่ ${idx + 1}` : `Shipment ${idx + 1}`}
+                        </span>
+                        {isCurrent ? (
+                          <Link
+                            href={`/${locale}/dashboard/outbound/${ob.id}`}
+                            className="font-mono text-xs text-[var(--color-gold)] font-medium"
+                          >
+                            {ob.deliveryNoteNo} ({locale === 'th' ? 'ใบนี้' : 'Current'})
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/${locale}/dashboard/outbound/${ob.id}`}
+                            className="font-mono text-xs text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] hover:underline transition-colors"
+                          >
+                            {ob.deliveryNoteNo}
+                          </Link>
+                        )}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.bg}`}>
+                          <span className={`w-1 h-1 rounded-full ${badge.dot}`} />
+                          {locale === 'th' ? badge.label : badge.labelEn}
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-gold)]/10 text-[var(--color-gold)]">
+                          {ob._count.lines} {locale === 'th' ? 'รายการ' : 'items'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-foreground-muted)]">
+                        <span>{formatDate(ob.createdAt)}</span>
+                        <span>{ob.createdBy.displayName}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Pending indicator for partial */}
+              {!outbound.purchaseOrder.isComplete && outbound.purchaseOrder.totalRemaining > 0 && (
+                <div className="relative pl-12">
+                  <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-orange-400 bg-white" />
+                  <div className="text-sm text-orange-600 font-medium">
+                    {locale === 'th'
+                      ? `รอจัดส่งเพิ่ม — คงเหลือ ${outbound.purchaseOrder.totalRemaining} รายการ`
+                      : `Pending — ${outbound.purchaseOrder.totalRemaining} items remaining`
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Products Table */}
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
