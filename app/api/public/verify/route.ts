@@ -212,6 +212,14 @@ export async function GET(request: NextRequest) {
         result = VerifyResult.RETURNED
         message = 'Product was returned'
         break
+      case 'SCRAPPED':
+        result = VerifyResult.REVOKED
+        message = 'Product has been suspended (scrapped)'
+        break
+      case 'DAMAGED':
+        result = VerifyResult.REVOKED
+        message = 'Product is marked as damaged'
+        break
       default:
         result = VerifyResult.GENUINE_IN_STOCK
         message = 'Genuine product'

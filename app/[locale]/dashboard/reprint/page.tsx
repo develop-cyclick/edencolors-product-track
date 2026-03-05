@@ -48,6 +48,11 @@ export default function ReprintPage() {
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null)
   const [reprintReason, setReprintReason] = useState('')
 
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [batchReprinting, setBatchReprinting] = useState(false)
+  const [batchResult, setBatchResult] = useState<{ items: ReprintResult[]; count: number } | null>(null)
+
   useEffect(() => {
     fetchProducts()
   }, [])
@@ -138,6 +143,77 @@ export default function ReprintPage() {
     }
   }
 
+  // Multi-select handlers
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === products.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(products.map(p => p.id)))
+    }
+  }
+
+  const handleBatchReprint = async () => {
+    if (selectedIds.size === 0) return
+    setBatchReprinting(true)
+    try {
+      const res = await fetch('/api/warehouse/reprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productItemIds: Array.from(selectedIds),
+          reason: reprintReason || 'Batch reprint',
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setBatchResult({ items: data.data.items, count: data.data.count })
+        setSelectedIds(new Set())
+        setReprintReason('')
+        fetchProducts(searchSerial)
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถพิมพ์ใหม่ได้' : 'Failed to reprint', variant: 'error', icon: 'error' })
+    } finally {
+      setBatchReprinting(false)
+    }
+  }
+
+  const downloadBatchLabels = async (itemIds: number[]) => {
+    try {
+      const res = await fetch('/api/warehouse/labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productItemIds: itemIds, layout: 'grid' }),
+      })
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `labels-reprint-${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Label ได้' : 'Failed to generate labels', variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Label ได้' : 'Failed to download labels', variant: 'error', icon: 'error' })
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'ในคลัง', labelEn: 'In Stock' },
@@ -194,6 +270,46 @@ export default function ReprintPage() {
         </form>
       </div>
 
+      {/* Batch Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="text-sm text-purple-800 font-medium">
+            {locale === 'th'
+              ? `เลือกแล้ว ${selectedIds.size} รายการ`
+              : `${selectedIds.size} item(s) selected`}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={reprintReason}
+              onChange={(e) => setReprintReason(e.target.value)}
+              placeholder={locale === 'th' ? 'เหตุผล (ไม่บังคับ)' : 'Reason (optional)'}
+              className="px-3 py-2 text-sm border border-purple-200 rounded-lg focus:outline-none focus:border-purple-400"
+            />
+            <button
+              onClick={handleBatchReprint}
+              disabled={batchReprinting}
+              className="px-5 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-all flex items-center gap-2"
+            >
+              {batchReprinting ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+              )}
+              {locale === 'th' ? 'พิมพ์ใหม่ที่เลือก' : 'Reprint Selected'}
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-2 text-sm text-purple-600 hover:text-purple-800 transition-colors"
+            >
+              {locale === 'th' ? 'ยกเลิก' : 'Clear'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Products List */}
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
         <div className="px-6 py-4 bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
@@ -231,11 +347,19 @@ export default function ReprintPage() {
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-[var(--color-beige)]">
               {products.map((product) => (
-                <div key={product.id} className="p-4">
+                <div key={product.id} className={`p-4 ${selectedIds.has(product.id) ? 'bg-purple-50/50' : ''}`}>
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <span className="font-mono text-sm font-medium text-[var(--color-gold)]">
-                      {product.serial12}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(product.id)}
+                        onChange={() => toggleSelect(product.id)}
+                        className="w-4 h-4 rounded border-[var(--color-beige)] text-purple-500 focus:ring-purple-500"
+                      />
+                      <span className="font-mono text-sm font-medium text-[var(--color-gold)]">
+                        {product.serial12}
+                      </span>
+                    </div>
                     <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-lg bg-[var(--color-charcoal)]/10 text-xs font-medium text-[var(--color-charcoal)]">
                       v{product.currentTokenVersion}
                     </span>
@@ -279,6 +403,14 @@ export default function ReprintPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                    <th className="px-3 py-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={products.length > 0 && selectedIds.size === products.length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-[var(--color-beige)] text-purple-500 focus:ring-purple-500"
+                      />
+                    </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial</th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}
@@ -298,7 +430,15 @@ export default function ReprintPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-beige)]">
                   {products.map((product) => (
-                    <tr key={product.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
+                    <tr key={product.id} className={`hover:bg-[var(--color-off-white)]/50 transition-colors ${selectedIds.has(product.id) ? 'bg-purple-50/50' : ''}`}>
+                      <td className="px-3 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(product.id)}
+                          onChange={() => toggleSelect(product.id)}
+                          className="w-4 h-4 rounded border-[var(--color-beige)] text-purple-500 focus:ring-purple-500"
+                        />
+                      </td>
                       <td className="px-5 py-4 font-mono text-[var(--color-gold)]">{product.serial12}</td>
                       <td className="px-5 py-4 text-sm font-medium text-[var(--color-charcoal)]">{product.name}</td>
                       <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{product.category}</td>
@@ -410,6 +550,55 @@ export default function ReprintPage() {
                   className="flex-1 px-4 py-3 bg-purple-500 text-white font-medium rounded-xl hover:bg-purple-600 disabled:opacity-50 transition-colors"
                 >
                   {locale === 'th' ? 'ยืนยันพิมพ์ใหม่' : 'Confirm Reprint'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Reprint Success Modal */}
+      {batchResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-lg)] max-w-md w-full animate-scaleIn">
+            <div className="p-6">
+              <div className="text-center mb-4">
+                <div className="w-16 h-16 bg-[var(--color-mint)]/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-8 h-8 text-[var(--color-mint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-display text-lg font-semibold text-[var(--color-charcoal)]">
+                  {locale === 'th' ? `พิมพ์ใหม่สำเร็จ ${batchResult.count} รายการ` : `${batchResult.count} item(s) reprinted!`}
+                </h3>
+              </div>
+
+              <div className="bg-[var(--color-off-white)] rounded-xl p-4 mb-6 max-h-48 overflow-y-auto">
+                <div className="space-y-2 text-sm">
+                  {batchResult.items.map((item) => (
+                    <div key={item.productItemId} className="flex justify-between">
+                      <span className="font-mono text-[var(--color-gold)]">{item.serial12}</span>
+                      <span className="text-[var(--color-foreground-muted)]">v{item.previousVersion} → v{item.newVersion}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setBatchResult(null)}
+                  className="flex-1 px-4 py-3 text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-xl hover:bg-[var(--color-off-white)] transition-colors"
+                >
+                  {locale === 'th' ? 'ปิด' : 'Close'}
+                </button>
+                <button
+                  onClick={() => downloadBatchLabels(batchResult.items.map(i => i.productItemId))}
+                  className="flex-1 px-4 py-3 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  {locale === 'th' ? 'ดาวน์โหลด Label ทั้งหมด' : 'Download All Labels'}
                 </button>
               </div>
             </div>

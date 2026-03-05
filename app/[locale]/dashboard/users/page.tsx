@@ -8,7 +8,7 @@ interface User {
   id: number
   username: string
   displayName: string
-  role: 'ADMIN' | 'MANAGER' | 'WAREHOUSE'
+  role: 'ADMIN' | 'MANAGER' | 'WAREHOUSE' | 'MARKETING'
   isActive: boolean
   forcePwChange: boolean
   createdAt: string
@@ -19,6 +19,7 @@ const ROLES = [
   { value: 'ADMIN', labelTh: 'ผู้ดูแลระบบ', labelEn: 'Admin' },
   { value: 'MANAGER', labelTh: 'ผู้จัดการ', labelEn: 'Manager' },
   { value: 'WAREHOUSE', labelTh: 'พนักงานคลัง', labelEn: 'Warehouse' },
+  { value: 'MARKETING', labelTh: 'การตลาด', labelEn: 'Marketing' },
 ]
 
 export default function UsersPage() {
@@ -38,7 +39,7 @@ export default function UsersPage() {
     username: '',
     password: '',
     displayName: '',
-    role: 'WAREHOUSE' as 'ADMIN' | 'MANAGER' | 'WAREHOUSE',
+    role: 'WAREHOUSE' as 'ADMIN' | 'MANAGER' | 'WAREHOUSE' | 'MARKETING',
     isActive: true,
   })
 
@@ -320,6 +321,7 @@ export default function UsersPage() {
       ADMIN: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500' },
       MANAGER: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
       WAREHOUSE: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]' },
+      MARKETING: { bg: 'bg-pink-100 text-pink-700', dot: 'bg-pink-500' },
     }
     const style = styles[role] || { bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' }
     const label = ROLES.find((r) => r.value === role)
@@ -544,7 +546,7 @@ export default function UsersPage() {
                 <div className="relative">
                   <select
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'MANAGER' | 'WAREHOUSE' })}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'MANAGER' | 'WAREHOUSE' | 'MARKETING' })}
                     className={selectClass}
                   >
                     {ROLES.map((role) => (

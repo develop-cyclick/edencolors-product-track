@@ -17,7 +17,7 @@ interface ProductMaster {
   activationType: 'SINGLE' | 'PACK'
   maxActivations: number
   isActive: boolean
-  category: { id: number; nameTh: string; nameEn: string }
+  category: { id: number; nameTh: string; nameEn: string; serialCode: string }
   defaultUnit: { id: number; nameTh: string; nameEn: string } | null
   stats: {
     total: number
@@ -33,6 +33,7 @@ interface Category {
   id: number
   nameTh: string
   nameEn: string
+  serialCode: string
 }
 
 export default function ProductMasterPage() {
@@ -382,7 +383,7 @@ export default function ProductMasterPage() {
                     {locale === 'th' ? 'รูป' : 'Image'}
                   </th>
                   <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">SKU</th>
-                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial Code</th>
+                  <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">Serial Prefix</th>
                   <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                     {locale === 'th' ? 'ชื่อสินค้า' : 'Product Name'}
                   </th>
@@ -429,7 +430,9 @@ export default function ProductMasterPage() {
                       <span className="font-mono text-sm font-medium text-[var(--color-charcoal)]">{pm.sku}</span>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="font-mono text-sm text-[var(--color-gold)]">{pm.serialCode}</span>
+                      <span className="font-mono text-sm text-[var(--color-gold)]">
+                        <span className="text-[var(--color-foreground-muted)]">{pm.category.serialCode}</span>{pm.serialCode}
+                      </span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="font-medium text-[var(--color-charcoal)]">
@@ -639,11 +642,36 @@ export default function ProductMasterPage() {
                       <option value="">{locale === 'th' ? 'เลือกหมวดหมู่' : 'Select category'}</option>
                       {categories.map((cat) => (
                         <option key={cat.id} value={cat.id}>
-                          {locale === 'th' ? cat.nameTh : cat.nameEn}
+                          [{cat.serialCode}] {locale === 'th' ? cat.nameTh : cat.nameEn}
                         </option>
                       ))}
                     </select>
                   </div>
+                  {/* Serial Preview */}
+                  {formData.serialCode && formData.categoryId && (
+                    <div className="col-span-full">
+                      <div className="px-4 py-3 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-lg">
+                        <p className="text-xs text-[var(--color-foreground-muted)] mb-1">
+                          {locale === 'th' ? 'ตัวอย่าง Serial' : 'Serial Preview'}
+                        </p>
+                        <p className="font-mono text-sm font-medium text-[var(--color-charcoal)]">
+                          <span className="text-blue-600">{formData.activationType === 'SINGLE' ? 'S' : 'P'}</span>
+                          <span className="text-purple-600">{categories.find(c => c.id.toString() === formData.categoryId)?.serialCode || '?'}</span>
+                          <span className="text-[var(--color-gold)]">{formData.serialCode.padEnd(5, '_')}</span>
+                          <span className="text-[var(--color-foreground-muted)]">{'0'.repeat(12)}</span>
+                        </p>
+                        <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                          <span className="text-blue-600">{locale === 'th' ? 'ประเภท' : 'Type'}</span>
+                          {' + '}
+                          <span className="text-purple-600">{locale === 'th' ? 'หมวดหมู่' : 'Category'}</span>
+                          {' + '}
+                          <span className="text-[var(--color-gold)]">Serial Code</span>
+                          {' + '}
+                          <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ลำดับ' : 'Sequence'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">

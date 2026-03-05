@@ -82,3 +82,10 @@ export function withManager<T = unknown>(handler: ApiHandler<T>) {
 export function withWarehouse<T = unknown>(handler: ApiHandler<T>) {
   return withRoles([UserRole.ADMIN, UserRole.MANAGER, UserRole.WAREHOUSE], handler)
 }
+
+/**
+ * Analytics routes - Admin, Manager, or Marketing
+ */
+export function withAnalytics<T = unknown>(handler: ApiHandler<T>) {
+  return withRoles([UserRole.ADMIN, UserRole.MANAGER, UserRole.MARKETING], handler)
+}

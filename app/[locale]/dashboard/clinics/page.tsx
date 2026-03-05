@@ -7,6 +7,7 @@ import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 interface Clinic {
   id: number
   name: string
+  companyName: string | null
   province: string
   branchName: string | null
   isActive: boolean
@@ -40,6 +41,7 @@ export default function ClinicsPage() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
+    companyName: '',
     province: '',
     branchName: '',
     isActive: true,
@@ -68,6 +70,7 @@ export default function ClinicsPage() {
     setEditingClinic(null)
     setFormData({
       name: '',
+      companyName: '',
       province: '',
       branchName: '',
       isActive: true,
@@ -79,6 +82,7 @@ export default function ClinicsPage() {
     setEditingClinic(clinic)
     setFormData({
       name: clinic.name,
+      companyName: clinic.companyName || '',
       province: clinic.province,
       branchName: clinic.branchName || '',
       isActive: clinic.isActive,
@@ -91,6 +95,7 @@ export default function ClinicsPage() {
     setEditingClinic(null)
     setFormData({
       name: '',
+      companyName: '',
       province: '',
       branchName: '',
       isActive: true,
@@ -106,6 +111,7 @@ export default function ClinicsPage() {
         // Update clinic
         const updateData: Record<string, unknown> = {
           name: formData.name,
+          companyName: formData.companyName || null,
           province: formData.province,
           branchName: formData.branchName || null,
           isActive: formData.isActive,
@@ -152,6 +158,7 @@ export default function ClinicsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: formData.name,
+            companyName: formData.companyName || null,
             province: formData.province,
             branchName: formData.branchName || null,
             isActive: formData.isActive,
@@ -459,6 +466,9 @@ export default function ClinicsPage() {
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
                       <div className="font-medium text-[var(--color-charcoal)]">{clinic.name}</div>
+                      {clinic.companyName && (
+                        <div className="text-xs text-[var(--color-charcoal)]/70">{clinic.companyName}</div>
+                      )}
                       <div className="text-xs text-[var(--color-foreground-muted)]">
                         {clinic.province} {clinic.branchName && `• ${clinic.branchName}`}
                       </div>
@@ -533,6 +543,9 @@ export default function ClinicsPage() {
                       {locale === 'th' ? 'ชื่อคลินิก' : 'Clinic Name'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                      {locale === 'th' ? 'บริษัท' : 'Company'}
+                    </th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'จังหวัด' : 'Province'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
@@ -552,6 +565,11 @@ export default function ClinicsPage() {
                     <tr key={clinic.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
                       <td className="px-5 py-4">
                         <span className="font-medium text-[var(--color-charcoal)]">{clinic.name}</span>
+                      </td>
+                      <td className="px-5 py-4 text-[var(--color-charcoal)]">
+                        {clinic.companyName || (
+                          <span className="text-[var(--color-foreground-muted)]">-</span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-[var(--color-charcoal)]">{clinic.province}</td>
                       <td className="px-5 py-4 text-[var(--color-charcoal)]">
@@ -649,6 +667,22 @@ export default function ClinicsPage() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className={inputClass}
                   placeholder={locale === 'th' ? 'ชื่อคลินิก' : 'Clinic name'}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  {locale === 'th' ? 'ชื่อบริษัท' : 'Company Name'}
+                  <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                    ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                  className={inputClass}
+                  placeholder={locale === 'th' ? 'ชื่อบริษัท (ถ้ามี)' : 'Company name (if any)'}
                 />
               </div>
 

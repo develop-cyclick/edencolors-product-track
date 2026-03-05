@@ -10,9 +10,9 @@ async function main() {
   // 1. Product Categories (หมวดหมู่สินค้า)
   // ============================================
   const categories = [
-    { nameTh: 'ยา', nameEn: 'Medicine' },
-    { nameTh: 'เครื่องมือแพทย์', nameEn: 'Medical Instruments' },
-    { nameTh: 'เครื่องสำอาง', nameEn: 'Cosmetic' },
+    { nameTh: 'ยา', nameEn: 'Medicine', serialCode: 'A' },
+    { nameTh: 'เครื่องมือแพทย์', nameEn: 'Medical Instruments', serialCode: 'B' },
+    { nameTh: 'เครื่องสำอาง', nameEn: 'Cosmetic', serialCode: 'C' },
   ]
 
   for (const cat of categories) {
@@ -105,6 +105,7 @@ async function main() {
   // ============================================
   const warehousePassword = await bcrypt.hash('warehouse123', 10)
   const managerPassword = await bcrypt.hash('manager123', 10)
+  const marketingPassword = await bcrypt.hash('marketing123', 10)
 
   await prisma.user.upsert({
     where: { username: 'warehouse1' },
@@ -126,6 +127,18 @@ async function main() {
       passwordHash: managerPassword,
       displayName: 'ผู้จัดการ 1',
       role: UserRole.MANAGER,
+      isActive: true,
+    },
+  })
+
+  await prisma.user.upsert({
+    where: { username: 'marketing1' },
+    update: {},
+    create: {
+      username: 'marketing1',
+      passwordHash: marketingPassword,
+      displayName: 'การตลาด 1',
+      role: UserRole.MARKETING,
       isActive: true,
     },
   })
@@ -202,6 +215,7 @@ async function main() {
   console.log('   Admin:     admin / admin123 (force password change)')
   console.log('   Warehouse: warehouse1 / warehouse123')
   console.log('   Manager:   manager1 / manager123')
+  console.log('   Marketing: marketing1 / marketing123')
 }
 
 main()

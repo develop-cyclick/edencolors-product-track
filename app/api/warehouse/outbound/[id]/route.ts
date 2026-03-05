@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
+import { sendPushToUser } from '@/lib/push-notification'
 
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
@@ -230,6 +231,16 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return updated
     })
 
+    // Notify the warehouse user who created the outbound
+    if (outbound.createdById) {
+      sendPushToUser(outbound.createdById, {
+        title: 'ใบส่งสินค้าได้รับอนุมัติ',
+        body: `ใบส่ง ${outbound.deliveryNoteNo} ได้รับอนุมัติแล้ว`,
+        url: `/${outbound.id}`,
+        tag: `outbound-${outbound.id}`,
+      }).catch(() => {})
+    }
+
     return successResponse(result)
   }
 
@@ -287,6 +298,16 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
       return updated
     })
+
+    // Notify the warehouse user who created the outbound
+    if (outbound.createdById) {
+      sendPushToUser(outbound.createdById, {
+        title: 'ใบส่งสินค้าถูกปฏิเสธ',
+        body: `ใบส่ง ${outbound.deliveryNoteNo} ถูกปฏิเสธ: ${body.rejectReason || ''}`,
+        url: `/${outbound.id}`,
+        tag: `outbound-${outbound.id}`,
+      }).catch(() => {})
+    }
 
     return successResponse(result)
   }
@@ -365,6 +386,17 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       createdBy: { select: { id: true, displayName: true } },
     },
   })
+
+  // Notify managers when outbound submitted for approval
+  if (body.submit) {
+    const { notifyManagers } = await import('@/lib/push-notification')
+    notifyManagers({
+      title: 'ใบส่งสินค้ารออนุมัติ',
+      body: `ใบส่ง ${outbound.deliveryNoteNo} ถูกส่งเข้ารออนุมัติ`,
+      url: '/th/dashboard/approval',
+      tag: `outbound-pending-${outbound.id}`,
+    }).catch(() => {})
+  }
 
   return successResponse(updated)
 }

@@ -57,6 +57,8 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [exporting, setExporting] = useState(false);
+
   // Filters
   const [search, setSearch] = useState('');
   const [selectedClinic, setSelectedClinic] = useState('');
@@ -96,6 +98,36 @@ export default function TimelinePage() {
     e.preventDefault();
     setPage(1);
     fetchData();
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/analytics/activations/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locale,
+          search: search || undefined,
+          clinicId: selectedClinic || undefined,
+          province: selectedProvince || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-activations-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      console.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading && !data) {
@@ -145,19 +177,35 @@ export default function TimelinePage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <Link
-          href={`/${locale}/dashboard/analytics`}
-          className="text-[#C9A35A] hover:underline text-sm mb-2 inline-block"
+      <div className="flex items-center justify-between">
+        <div>
+          <Link
+            href={`/${locale}/dashboard/analytics`}
+            className="text-[#C9A35A] hover:underline text-sm mb-2 inline-block"
+          >
+            ← {locale === 'th' ? 'กลับ' : 'Back to Analytics'}
+          </Link>
+          <h1 className="text-3xl font-bold text-[#2D2D2D]">
+            {locale === 'th' ? 'ไทม์ไลน์การเปิดใช้งาน' : 'Activation Timeline'}
+          </h1>
+          <p className="text-[#666666] mt-1">
+            {data.pagination.total} {locale === 'th' ? 'รายการ' : 'activations'}
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="px-4 py-2 bg-[var(--color-charcoal)] text-white rounded-lg hover:bg-[var(--color-charcoal)]/90 disabled:opacity-50 transition-colors flex items-center gap-2 h-fit"
         >
-          ← {locale === 'th' ? 'กลับ' : 'Back to Analytics'}
-        </Link>
-        <h1 className="text-3xl font-bold text-[#2D2D2D]">
-          {locale === 'th' ? 'ไทม์ไลน์การเปิดใช้งาน' : 'Activation Timeline'}
-        </h1>
-        <p className="text-[#666666] mt-1">
-          {data.pagination.total} {locale === 'th' ? 'รายการ' : 'activations'}
-        </p>
+          {exporting ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          )}
+          Excel
+        </button>
       </div>
 
       {/* Demographics Overview */}

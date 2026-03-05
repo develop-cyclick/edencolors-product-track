@@ -23,9 +23,10 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errorResponse('Invalid product item ID')
     }
 
-    const { action, repairNote } = body as {
+    const { action, repairNote, replacementItemId } = body as {
       action: 'restore' | 'scrap'
       repairNote?: string
+      replacementItemId?: number
     }
 
     if (action !== 'restore' && action !== 'scrap') {
@@ -53,12 +54,29 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errorResponse('This product already has a pending action request')
     }
 
+    // Validate replacement item if provided (scrap with pre-gen QR replacement)
+    if (replacementItemId && action === 'scrap') {
+      const replacementItem = await prisma.productItem.findUnique({
+        where: { id: replacementItemId },
+      })
+      if (!replacementItem) {
+        return errorResponse('Replacement item not found')
+      }
+      if (replacementItem.status !== 'PENDING_LINK') {
+        return errorResponse('Replacement item is not available (must be PENDING_LINK)')
+      }
+      if (replacementItem.productMasterId !== item.productMasterId) {
+        return errorResponse('Replacement item must be the same product type')
+      }
+    }
+
     const actionRequest = await prisma.$transaction(async (tx) => {
       const request = await tx.damagedActionRequest.create({
         data: {
           productItemId,
           actionType: action === 'restore' ? 'RESTORE' : 'SCRAP',
           repairNote: repairNote || null,
+          replacementItemId: action === 'scrap' ? (replacementItemId || null) : null,
           createdById: user.userId,
         },
       })
@@ -71,6 +89,7 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
           details: {
             action,
             repairNote,
+            replacementItemId: replacementItemId || null,
             requestId: request.id,
           },
         },

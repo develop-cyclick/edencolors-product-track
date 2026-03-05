@@ -11,6 +11,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   roles: string[]
+  badgeKey?: string
 }
 
 interface SidebarProps {
@@ -25,6 +26,9 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
   const pathname = usePathname()
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({})
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -32,6 +36,106 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       onMobileClose()
     }
   }, [pathname])
+
+  // Check push subscription status on mount
+  useEffect(() => {
+    checkPushStatus()
+  }, [])
+
+  // Fetch badge counts + listen for refresh events
+  useEffect(() => {
+    fetchBadgeCounts()
+    const interval = setInterval(fetchBadgeCounts, 30000)
+    const handleRefresh = () => fetchBadgeCounts()
+    window.addEventListener('badges:refresh', handleRefresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('badges:refresh', handleRefresh)
+    }
+  }, [])
+
+  const fetchBadgeCounts = async () => {
+    try {
+      const res = await fetch('/api/notifications/badges')
+      const data = await res.json()
+      if (data.success) setBadgeCounts(data.data)
+    } catch { /* ignore */ }
+  }
+
+  const checkPushStatus = async () => {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+      const res = await fetch('/api/notifications/subscribe')
+      const data = await res.json()
+      if (data.success) setPushEnabled(data.data.subscribed)
+    } catch { /* ignore */ }
+  }
+
+  const togglePush = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert(locale === 'th' ? 'เบราว์เซอร์ไม่รองรับการแจ้งเตือน' : 'Browser does not support push notifications')
+      return
+    }
+
+    setPushLoading(true)
+    try {
+      if (pushEnabled) {
+        // Unsubscribe
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          await fetch('/api/notifications/subscribe', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          })
+          await sub.unsubscribe()
+        }
+        setPushEnabled(false)
+      } else {
+        // Register SW and subscribe
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') {
+          alert(locale === 'th' ? 'กรุณาอนุญาตการแจ้งเตือนในเบราว์เซอร์' : 'Please allow notifications in your browser')
+          setPushLoading(false)
+          return
+        }
+
+        const reg = await navigator.serviceWorker.register('/sw.js')
+        await navigator.serviceWorker.ready
+
+        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        })
+
+        const subJson = sub.toJSON()
+        await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint: sub.endpoint,
+            keys: { p256dh: subJson.keys?.p256dh, auth: subJson.keys?.auth },
+          }),
+        })
+        setPushEnabled(true)
+      }
+    } catch (err) {
+      console.error('Push toggle error:', err)
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
+    return outputArray
+  }
 
   const switchLanguage = () => {
     const newLocale = locale === 'th' ? 'en' : 'th'
@@ -49,7 +153,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       ),
-      roles: ['ADMIN', 'MANAGER', 'WAREHOUSE'],
+      roles: ['ADMIN', 'MANAGER', 'WAREHOUSE', 'MARKETING'],
     },
     {
       label: 'สร้าง QR ล่วงหน้า',
@@ -106,6 +210,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
         </svg>
       ),
       roles: ['ADMIN', 'MANAGER'],
+      badgeKey: 'approval',
     },
     
     {
@@ -152,6 +257,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
         </svg>
       ),
       roles: ['ADMIN', 'WAREHOUSE'],
+      badgeKey: 'damaged',
     },
     
     {
@@ -185,7 +291,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       ),
-      roles: ['ADMIN', 'MANAGER'],
+      roles: ['ADMIN', 'MANAGER', 'MARKETING'],
     },
     {
       label: 'ตั้งค่าระบบ',
@@ -216,6 +322,8 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
         return 'bg-[var(--color-mint)]/20 text-[var(--color-mint)]'
       case 'WAREHOUSE':
         return 'bg-blue-500/20 text-blue-400'
+      case 'MARKETING':
+        return 'bg-purple-500/20 text-purple-400'
       default:
         return 'bg-gray-500/20 text-gray-400'
     }
@@ -249,11 +357,21 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
                   : 'text-white/70 hover:bg-white/10 hover:text-white'
               }`}
             >
-              <div className={`flex-shrink-0 ${isActive ? '' : 'group-hover:text-[var(--color-gold)]'}`}>
+              <div className={`flex-shrink-0 relative ${isActive ? '' : 'group-hover:text-[var(--color-gold)]'}`}>
                 {item.icon}
+                {isCollapsed && item.badgeKey && (badgeCounts[item.badgeKey] || 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold rounded-full bg-red-500 text-white leading-none">
+                    {badgeCounts[item.badgeKey] > 99 ? '99+' : badgeCounts[item.badgeKey]}
+                  </span>
+                )}
               </div>
               {!isCollapsed && (
-                <span className="truncate">{locale === 'th' ? item.label : item.labelEn}</span>
+                <span className="truncate flex-1">{locale === 'th' ? item.label : item.labelEn}</span>
+              )}
+              {!isCollapsed && item.badgeKey && (badgeCounts[item.badgeKey] || 0) > 0 && (
+                <span className="ml-auto min-w-[20px] h-[20px] flex items-center justify-center px-1.5 text-[11px] font-bold rounded-full bg-red-500 text-white leading-none">
+                  {badgeCounts[item.badgeKey] > 99 ? '99+' : badgeCounts[item.badgeKey]}
+                </span>
               )}
             </Link>
           )
@@ -294,6 +412,43 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
             className="w-full mt-3 flex items-center justify-center p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200"
           >
             <span className="text-xs font-bold">{locale === 'th' ? 'EN' : 'TH'}</span>
+          </button>
+        )}
+
+        {/* Push Notification Toggle */}
+        {!isCollapsed ? (
+          <button
+            onClick={togglePush}
+            disabled={pushLoading}
+            className={`w-full mt-1 flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-all duration-200 ${
+              pushEnabled
+                ? 'text-[var(--color-gold)] bg-[var(--color-gold)]/10 hover:bg-[var(--color-gold)]/20'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <svg className="w-4 h-4" fill={pushEnabled ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {pushLoading
+              ? (locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...')
+              : pushEnabled
+                ? (locale === 'th' ? 'ปิดการแจ้งเตือน' : 'Disable Notifications')
+                : (locale === 'th' ? 'เปิดการแจ้งเตือน' : 'Enable Notifications')}
+          </button>
+        ) : (
+          <button
+            onClick={togglePush}
+            disabled={pushLoading}
+            title={pushEnabled ? (locale === 'th' ? 'ปิดการแจ้งเตือน' : 'Disable Notifications') : (locale === 'th' ? 'เปิดการแจ้งเตือน' : 'Enable Notifications')}
+            className={`w-full mt-1 flex items-center justify-center p-2 rounded-lg transition-all duration-200 ${
+              pushEnabled
+                ? 'text-[var(--color-gold)] bg-[var(--color-gold)]/10'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <svg className="w-5 h-5" fill={pushEnabled ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
           </button>
         )}
 

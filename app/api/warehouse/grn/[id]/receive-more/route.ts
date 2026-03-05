@@ -227,7 +227,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           for (let i = 0; i < inputLine.quantity; i++) {
             const serialNumber = await generateSerialNumber({
               activationType: productMaster.activationType,
-              categoryId: productMaster.categoryId,
+              categorySerialCode: productMaster.category.serialCode,
               serialCode: productMaster.serialCode,
             })
 

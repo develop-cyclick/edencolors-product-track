@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { withManager } from '@/lib/api-middleware';
+import { withAnalytics } from '@/lib/api-middleware';
 import { successResponse, errors } from '@/lib/api-response';
 import type { JWTPayload } from '@/lib/auth';
 import { getClinicDetail } from '@/lib/analytics-queries';
@@ -121,4 +121,4 @@ async function handleGET(
   }
 }
 
-export const GET = withManager(handleGET);
+export const GET = withAnalytics(handleGET);

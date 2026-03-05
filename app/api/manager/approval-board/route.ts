@@ -12,7 +12,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
   const { searchParams } = request.nextUrl
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '20')
-  const type = searchParams.get('type') || 'all' // 'grn', 'outbound', 'damaged', 'borrow', 'all'
+  const type = searchParams.get('type') || 'all' // 'grn', 'outbound', 'damaged', 'borrow', 'claim', 'all'
   const status = searchParams.get('status') || 'PENDING'
 
   const skip = (page - 1) * limit
@@ -81,6 +81,17 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     }
   }
 
+  // Get Damaged Claim stats
+  const claimStats = await prisma.damagedClaim.groupBy({
+    by: ['status'],
+    _count: { status: true },
+  })
+
+  const claimStatusCounts = { PENDING: 0, APPROVED: 0, REJECTED: 0 }
+  for (const stat of claimStats) {
+    claimStatusCounts[stat.status] = stat._count.status
+  }
+
   // Combined stats
   const stats = {
     grn: {
@@ -90,7 +101,8 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     outbound: outboundStatusCounts,
     damaged: damagedStatusCounts,
     borrow: borrowStatusCounts,
-    totalPending: grnPending + outboundStatusCounts.PENDING + damagedStatusCounts.PENDING + borrowStatusCounts.PENDING,
+    claim: claimStatusCounts,
+    totalPending: grnPending + outboundStatusCounts.PENDING + damagedStatusCounts.PENDING + borrowStatusCounts.PENDING + claimStatusCounts.PENDING,
   }
 
   // Fetch data based on type
@@ -98,6 +110,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
   let outboundItems: unknown[] = []
   let damagedItems: unknown[] = []
   let borrowItems: unknown[] = []
+  let claimItems: unknown[] = []
 
   if (type === 'grn' || type === 'all') {
     // Get GRN IDs using raw SQL to filter by rejected_at
@@ -227,6 +240,9 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
             },
           },
         },
+        replacementItem: {
+          select: { id: true, serial12: true },
+        },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
       },
@@ -271,6 +287,24 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     })
   }
 
+  if (type === 'claim' || type === 'all') {
+    const filterClaimStatus = (['PENDING', 'APPROVED', 'REJECTED'].includes(status) ? status : 'PENDING') as DamagedActionStatus
+
+    claimItems = await prisma.damagedClaim.findMany({
+      where: { status: filterClaimStatus },
+      include: {
+        clinic: { select: { id: true, name: true, province: true } },
+        productMaster: { select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true } },
+        createdBy: { select: { id: true, displayName: true } },
+        approvedBy: { select: { id: true, displayName: true } },
+        attachments: { select: { id: true, fileUrl: true, fileName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: type === 'claim' ? skip : 0,
+      take: type === 'claim' ? limit : 10,
+    })
+  }
+
   // Calculate total based on type
   let total = 0
   if (type === 'grn') {
@@ -281,6 +315,8 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     total = damagedStatusCounts[status as keyof typeof damagedStatusCounts] || 0
   } else if (type === 'borrow') {
     total = borrowStatusCounts[status as keyof typeof borrowStatusCounts] || 0
+  } else if (type === 'claim') {
+    total = claimStatusCounts[status as keyof typeof claimStatusCounts] || 0
   } else {
     total = stats.totalPending
   }
@@ -290,6 +326,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     outbound: outboundItems,
     damaged: damagedItems,
     borrow: borrowItems,
+    claim: claimItems,
     pagination: {
       page,
       limit,

@@ -17,6 +17,7 @@ export const GET = withWarehouse(async (request: NextRequest, context: HandlerCo
     const productMasterId = parseInt(id)
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const sort = searchParams.get('sort') || 'fifo' // fifo | lifo | status
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
 
@@ -33,9 +34,14 @@ export const GET = withWarehouse(async (request: NextRequest, context: HandlerCo
     }
 
     // Get items with pagination
-    const itemWhere = {
-      productMasterId,
-      ...(status && { status: status as 'IN_STOCK' | 'PENDING_OUT' | 'SHIPPED' | 'ACTIVATED' | 'RETURNED' }),
+    // Default: hide SCRAPPED/DAMAGED/PENDING_LINK. 'all' shows everything.
+    const itemWhere: Record<string, unknown> = { productMasterId }
+    if (status === 'all') {
+      // Show everything including SCRAPPED/DAMAGED
+    } else if (status) {
+      itemWhere.status = status
+    } else {
+      itemWhere.status = { notIn: ['SCRAPPED', 'DAMAGED', 'PENDING_LINK'] }
     }
 
     const [items, total] = await Promise.all([
@@ -54,8 +60,26 @@ export const GET = withWarehouse(async (request: NextRequest, context: HandlerCo
               },
             },
           },
+          damagedActionRequests: {
+            where: { actionType: 'SCRAP', status: 'APPROVED', replacementItemId: { not: null } },
+            select: {
+              replacementItem: { select: { id: true, serial12: true } },
+            },
+            take: 1,
+          },
+          replacementForRequests: {
+            where: { status: 'APPROVED' },
+            select: {
+              productItem: { select: { id: true, serial12: true } },
+            },
+            take: 1,
+          },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: sort === 'lifo'
+          ? { createdAt: 'desc' }
+          : sort === 'status'
+            ? [{ status: 'asc' }, { createdAt: 'asc' }]
+            : { createdAt: 'asc' }, // fifo (default)
         skip: (page - 1) * limit,
         take: limit,
       }),

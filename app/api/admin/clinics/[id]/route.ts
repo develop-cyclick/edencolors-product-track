@@ -55,6 +55,7 @@ export const PATCH = withAdmin<Promise<Params>>(async (request: NextRequest, { p
       where: { id: clinicId },
       data: {
         ...(body.name && { name: body.name }),
+        ...(body.companyName !== undefined && { companyName: body.companyName || null }),
         ...(body.province && { province: body.province }),
         ...(body.branchName !== undefined && { branchName: body.branchName }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),

@@ -467,6 +467,7 @@ export default function NewOutboundPage() {
           variant: 'success',
           icon: 'success'
         })
+        window.dispatchEvent(new Event('badges:refresh'))
         router.push(`/${locale}/dashboard/outbound/${outboundId}`)
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })

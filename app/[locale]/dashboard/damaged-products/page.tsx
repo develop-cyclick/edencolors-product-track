@@ -67,7 +67,7 @@ interface LotProduct {
   } | null
 }
 
-type ActiveTab = 'damaged' | 'return' | 'borrow' | 'return_borrowed' | 'history'
+type ActiveTab = 'damaged' | 'return' | 'borrow' | 'return_borrowed' | 'history' | 'claim'
 type ReturnMode = 'individual' | 'lot'
 type StatusFilter = 'all' | 'DAMAGED' | 'RETURNED'
 type BorrowHistoryFilter = 'all' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'RETURNED'
@@ -211,6 +211,32 @@ export default function DamagedProductsPage() {
   const [isConverting, setIsConverting] = useState(false)
   const [convertClinicSearch, setConvertClinicSearch] = useState('')
 
+  // --- Claim Tab ---
+  const [claimClinics, setClaimClinics] = useState<{ id: number; name: string; province: string }[]>([])
+  const [claimProducts, setClaimProducts] = useState<{ id: number; sku: string; nameTh: string; modelSize: string | null }[]>([])
+  const [claimClinicId, setClaimClinicId] = useState(0)
+  const [claimProductId, setClaimProductId] = useState(0)
+  const [claimQty, setClaimQty] = useState(1)
+  const [claimReason, setClaimReason] = useState('')
+  const [claimNote, setClaimNote] = useState('')
+  const [claimFiles, setClaimFiles] = useState<File[]>([])
+  const [claimSubmitting, setClaimSubmitting] = useState(false)
+  const [claimList, setClaimList] = useState<Array<{
+    id: number; claimNumber: string; quantity: number; reason: string; note: string | null; status: string
+    createdAt: string; rejectReason: string | null
+    clinic: { name: string; province: string }
+    productMaster: { sku: string; nameTh: string; modelSize: string | null }
+    createdBy: { displayName: string }
+    attachments: Array<{ id: number; fileUrl: string; fileName: string }>
+  }>>([])
+  const [claimListLoading, setClaimListLoading] = useState(false)
+
+  // Pre-gen replacement states
+  const [showPreGenModal, setShowPreGenModal] = useState(false)
+  const [preGenItems, setPreGenItems] = useState<{ id: number; serial12: string; batchNo: string | null }[]>([])
+  const [selectedPreGenId, setSelectedPreGenId] = useState<number | null>(null)
+  const [loadingPreGen, setLoadingPreGen] = useState(false)
+
   const fetchItems = async () => {
     setLoading(true)
     try {
@@ -242,7 +268,7 @@ export default function DamagedProductsPage() {
     fetchItems()
   }, [pagination.page, search, statusFilter])
 
-  const handleRestore = async (action: 'restore' | 'scrap') => {
+  const handleRestore = async (action: 'restore' | 'scrap', replacementItemId?: number | null) => {
     if (!selectedItem) return
 
     setRestoring(true)
@@ -250,7 +276,7 @@ export default function DamagedProductsPage() {
       const res = await fetch(`/api/warehouse/damaged/${selectedItem.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, repairNote }),
+        body: JSON.stringify({ action, repairNote, ...(replacementItemId && { replacementItemId }) }),
       })
 
       const data = await res.json()
@@ -262,9 +288,13 @@ export default function DamagedProductsPage() {
           icon: 'success',
         })
         setShowRestoreModal(false)
+        setShowPreGenModal(false)
         setSelectedItem(null)
         setRepairNote('')
+        setSelectedPreGenId(null)
+        setPreGenItems([])
         fetchItems()
+        window.dispatchEvent(new Event('badges:refresh'))
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.message || 'Error', variant: 'error', icon: 'error' })
       }
@@ -272,6 +302,24 @@ export default function DamagedProductsPage() {
       console.error('Failed to restore product:', error)
     } finally {
       setRestoring(false)
+    }
+  }
+
+  const openPreGenModal = async () => {
+    if (!selectedItem?.productMaster) return
+    setShowPreGenModal(true)
+    setLoadingPreGen(true)
+    setSelectedPreGenId(null)
+    try {
+      const res = await fetch(`/api/warehouse/pre-generate/available?productMasterId=${selectedItem.productMaster.id}&limit=100`)
+      const data = await res.json()
+      if (data.success) {
+        setPreGenItems(data.data.items || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch pre-gen items:', error)
+    } finally {
+      setLoadingPreGen(false)
     }
   }
 
@@ -407,6 +455,7 @@ export default function DamagedProductsPage() {
         setReturnReason('')
         setReturnNotes('')
         fetchItems()
+        window.dispatchEvent(new Event('badges:refresh'))
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
@@ -448,6 +497,7 @@ export default function DamagedProductsPage() {
         setReturnReason('')
         setReturnNotes('')
         fetchItems()
+        window.dispatchEvent(new Event('badges:refresh'))
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
@@ -539,6 +589,63 @@ export default function DamagedProductsPage() {
     }
   }, [activeTab, borrowProductsPagination.page, borrowProductsFilter])
 
+  // --- Claim Tab Logic ---
+  useEffect(() => {
+    if (activeTab === 'claim') {
+      fetchClaimData()
+      fetchClaimList()
+    }
+  }, [activeTab])
+
+  const fetchClaimData = async () => {
+    try {
+      const [clinicsRes, productsRes] = await Promise.all([
+        fetch('/api/admin/clinics?limit=999'),
+        fetch('/api/admin/masters/products?limit=999'),
+      ])
+      const clinicsData = await clinicsRes.json()
+      const productsData = await productsRes.json()
+      if (clinicsData.success) setClaimClinics(clinicsData.data?.clinics || [])
+      if (productsData.success) setClaimProducts(productsData.data?.productMasters || [])
+    } catch (e) { console.error('Failed to fetch claim data:', e) }
+  }
+
+  const fetchClaimList = async () => {
+    setClaimListLoading(true)
+    try {
+      const res = await fetch('/api/warehouse/damaged-claim')
+      const data = await res.json()
+      if (data.success) setClaimList(data.data?.claims || [])
+    } catch (e) { console.error('Failed to fetch claims:', e) }
+    finally { setClaimListLoading(false) }
+  }
+
+  const handleClaimSubmit = async () => {
+    if (!claimClinicId || !claimProductId || !claimReason || claimQty < 1) return
+    setClaimSubmitting(true)
+    try {
+      const formData = new FormData()
+      formData.append('clinicId', claimClinicId.toString())
+      formData.append('productMasterId', claimProductId.toString())
+      formData.append('quantity', claimQty.toString())
+      formData.append('reason', claimReason)
+      if (claimNote) formData.append('note', claimNote)
+      for (const file of claimFiles) formData.append('files', file)
+
+      const res = await fetch('/api/warehouse/damaged-claim', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ยื่นคำร้องเรียบร้อย' : 'Claim submitted', variant: 'success', icon: 'success' })
+        setClaimClinicId(0); setClaimProductId(0); setClaimQty(1); setClaimReason(''); setClaimNote(''); setClaimFiles([])
+        fetchClaimList()
+        window.dispatchEvent(new Event('badges:refresh'))
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.message || 'Error', variant: 'error', icon: 'error' })
+      }
+    } catch { await alert({ title: 'Error', message: 'An error occurred', variant: 'error', icon: 'error' }) }
+    finally { setClaimSubmitting(false) }
+  }
+
   const toggleBorrowProductSelection = (productId: number) => {
     setSelectedBorrowProducts((prev) =>
       prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
@@ -609,6 +716,7 @@ export default function DamagedProductsPage() {
         await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         clearBorrowForm()
         fetchBorrowHistory()
+        window.dispatchEvent(new Event('badges:refresh'))
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
       }
@@ -763,6 +871,7 @@ export default function DamagedProductsPage() {
   const tabs: { key: ActiveTab; labelTh: string; labelEn: string }[] = [
     { key: 'damaged', labelTh: 'สินค้าเสียหาย', labelEn: 'Damaged Products' },
     { key: 'return', labelTh: 'รับคืนสินค้าเสียหาย', labelEn: 'Return Products' },
+    { key: 'claim', labelTh: 'ยื่นคำร้อง', labelEn: 'Submit Claim' },
     { key: 'borrow', labelTh: 'ยืมสินค้า', labelEn: 'Borrow' },
     { key: 'return_borrowed', labelTh: 'คืนสินค้ายืม', labelEn: 'Return Borrowed' },
     { key: 'history', labelTh: 'ประวัติ', labelEn: 'History' },
@@ -1296,6 +1405,238 @@ export default function DamagedProductsPage() {
         </div>
       )}
 
+      {/* ==================== CLAIM TAB ==================== */}
+      {activeTab === 'claim' && (
+        <div className="space-y-6">
+          {/* Claim Form */}
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+            <div className="p-4 border-b border-[var(--color-beige)] bg-orange-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'ยื่นคำร้องเคลมสินค้าเสียหาย' : 'Submit Damaged Product Claim'}
+                  </h3>
+                  <p className="text-sm text-[var(--color-foreground-muted)]">
+                    {locale === 'th' ? 'สำหรับกรณีที่ไม่มี Serial Number' : 'For cases without Serial Number'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Clinic */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'คลินิก *' : 'Clinic *'}
+                  </label>
+                  <select
+                    value={claimClinicId}
+                    onChange={(e) => setClaimClinicId(parseInt(e.target.value))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none"
+                  >
+                    <option value={0}>{locale === 'th' ? '-- เลือกคลินิก --' : '-- Select clinic --'}</option>
+                    {claimClinics.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.province})</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Product */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'สินค้า *' : 'Product *'}
+                  </label>
+                  <select
+                    value={claimProductId}
+                    onChange={(e) => setClaimProductId(parseInt(e.target.value))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none"
+                  >
+                    <option value={0}>{locale === 'th' ? '-- เลือกสินค้า --' : '-- Select product --'}</option>
+                    {claimProducts.map(p => (
+                      <option key={p.id} value={p.id}>{p.sku} - {p.nameTh}{p.modelSize ? ` (${p.modelSize})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'จำนวน *' : 'Quantity *'}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={claimQty}
+                    onChange={(e) => setClaimQty(parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none"
+                  />
+                </div>
+                {/* Reason */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                    {locale === 'th' ? 'สาเหตุ *' : 'Reason *'}
+                  </label>
+                  <select
+                    value={claimReason}
+                    onChange={(e) => setClaimReason(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none"
+                  >
+                    <option value="">{locale === 'th' ? '-- เลือกสาเหตุ --' : '-- Select reason --'}</option>
+                    <option value="ชำรุดจากการขนส่ง">{locale === 'th' ? 'ชำรุดจากการขนส่ง' : 'Damaged during shipping'}</option>
+                    <option value="สินค้ามีตำหนิ">{locale === 'th' ? 'สินค้ามีตำหนิ' : 'Product defect'}</option>
+                    <option value="บรรจุภัณฑ์เสียหาย">{locale === 'th' ? 'บรรจุภัณฑ์เสียหาย' : 'Packaging damaged'}</option>
+                    <option value="สินค้าหมดอายุ">{locale === 'th' ? 'สินค้าหมดอายุ' : 'Product expired'}</option>
+                    <option value="ลูกค้าแจ้งเคลม">{locale === 'th' ? 'ลูกค้าแจ้งเคลม' : 'Customer claim'}</option>
+                    <option value="อื่นๆ">{locale === 'th' ? 'อื่นๆ' : 'Other'}</option>
+                  </select>
+                </div>
+              </div>
+              {/* Note */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                  {locale === 'th' ? 'หมายเหตุ' : 'Notes'}
+                </label>
+                <textarea
+                  value={claimNote}
+                  onChange={(e) => setClaimNote(e.target.value)}
+                  rows={2}
+                  placeholder={locale === 'th' ? 'รายละเอียดเพิ่มเติม...' : 'Additional details...'}
+                  className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none resize-none"
+                />
+              </div>
+              {/* File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                  {locale === 'th' ? 'แนบหลักฐาน (รูปภาพ/เอกสาร)' : 'Attach Evidence (Images/Documents)'}
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                  multiple
+                  onChange={(e) => setClaimFiles(Array.from(e.target.files || []))}
+                  className="w-full text-sm text-[var(--color-foreground-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[var(--color-gold)]/10 file:text-[var(--color-gold)] hover:file:bg-[var(--color-gold)]/20"
+                />
+                <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                  {locale === 'th' ? 'รองรับ: JPG, PNG, WEBP, PDF, DOC, DOCX, XLS, XLSX, CSV, TXT (สูงสุด 10MB/ไฟล์)' : 'Supported: JPG, PNG, WEBP, PDF, DOC, DOCX, XLS, XLSX, CSV, TXT (max 10MB/file)'}
+                </p>
+                {claimFiles.length > 0 && (
+                  <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                    {claimFiles.length} {locale === 'th' ? 'ไฟล์' : 'files'} ({claimFiles.map(f => f.name).join(', ')})
+                  </p>
+                )}
+              </div>
+              {/* Submit */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleClaimSubmit}
+                  disabled={!claimClinicId || !claimProductId || !claimReason || claimQty < 1 || claimSubmitting}
+                  className="px-6 py-2.5 bg-orange-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(249,115,22,0.25)] hover:bg-orange-600 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                >
+                  {claimSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {locale === 'th' ? 'กำลังส่ง...' : 'Submitting...'}
+                    </span>
+                  ) : (locale === 'th' ? 'ยื่นคำร้อง' : 'Submit Claim')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Claim List */}
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
+            <div className="p-4 border-b border-[var(--color-beige)]">
+              <h3 className="font-semibold text-[var(--color-charcoal)]">
+                {locale === 'th' ? 'รายการคำร้อง' : 'Claim History'} ({claimList.length})
+              </h3>
+            </div>
+            {claimListLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-[var(--color-gold)] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : claimList.length === 0 ? (
+              <div className="text-center py-8 text-[var(--color-foreground-muted)]">
+                {locale === 'th' ? 'ยังไม่มีคำร้อง' : 'No claims yet'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'เลขที่' : 'Claim No.'}</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'คลินิก' : 'Clinic'}</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สินค้า' : 'Product'}</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'จำนวน' : 'Qty'}</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'วันที่' : 'Date'}</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'หลักฐาน' : 'Evidence'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-beige)]">
+                    {claimList.map(claim => (
+                      <tr key={claim.id} className="hover:bg-[var(--color-off-white)]/50">
+                        <td className="px-4 py-3 text-sm font-mono font-medium text-[var(--color-charcoal)]">{claim.claimNumber}</td>
+                        <td className="px-4 py-3 text-sm">{claim.clinic.name}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div>{claim.productMaster.nameTh}</div>
+                          <div className="text-xs text-[var(--color-foreground-muted)]">{claim.productMaster.sku}</div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center font-medium">{claim.quantity}</td>
+                        <td className="px-4 py-3 text-sm">{claim.reason}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+                            claim.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                            claim.status === 'APPROVED' ? 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              claim.status === 'PENDING' ? 'bg-amber-500' :
+                              claim.status === 'APPROVED' ? 'bg-[var(--color-mint)]' :
+                              'bg-red-500'
+                            }`} />
+                            {claim.status === 'PENDING' ? (locale === 'th' ? 'รออนุมัติ' : 'Pending') :
+                             claim.status === 'APPROVED' ? (locale === 'th' ? 'อนุมัติ' : 'Approved') :
+                             (locale === 'th' ? 'ปฏิเสธ' : 'Rejected')}
+                          </span>
+                          {claim.status === 'REJECTED' && claim.rejectReason && (
+                            <div className="text-xs text-red-500 mt-1">{claim.rejectReason}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-[var(--color-foreground-muted)]">
+                          {new Date(claim.createdAt).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {claim.attachments.length > 0 ? (
+                            <div className="flex gap-1 justify-center">
+                              {claim.attachments.map(att => (
+                                <a key={att.id} href={att.fileUrl} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
+                                  title={att.fileName}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-[var(--color-foreground-muted)]">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ==================== BORROW TAB ==================== */}
       {/* ==================== RETURN BORROWED TAB ==================== */}
       {(activeTab === 'borrow' || activeTab === 'return_borrowed') && (
@@ -1748,7 +2089,7 @@ export default function DamagedProductsPage() {
                 {restoring ? '...' : (locale === 'th' ? 'คืนเข้าคลัง' : 'Restore')}
               </button>
               <button
-                onClick={() => handleRestore('scrap')}
+                onClick={openPreGenModal}
                 disabled={restoring}
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
               >
@@ -1763,6 +2104,99 @@ export default function DamagedProductsPage() {
                 className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
               >
                 {locale === 'th' ? 'ปิด' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Gen Replacement Modal */}
+      {showPreGenModal && selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[80vh] flex flex-col">
+            <h3 className="text-lg font-semibold mb-2">
+              {locale === 'th' ? 'เลือก QR ทดแทน (Pre-Gen)' : 'Select Replacement QR (Pre-Gen)'}
+            </h3>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
+              {locale === 'th'
+                ? 'เลือก QR ที่สร้างล่วงหน้าเพื่อใช้แทนสินค้าที่จะทิ้ง หรือข้ามหากไม่ต้องการ'
+                : 'Select a pre-generated QR to replace the scrapped item, or skip if not needed'}
+            </p>
+
+            <div className="bg-[var(--color-off-white)] rounded-lg p-3 mb-4">
+              <p className="text-xs text-[var(--color-foreground-muted)]">
+                {locale === 'th' ? 'สินค้าที่จะทิ้ง' : 'Item to scrap'}
+              </p>
+              <p className="font-mono text-sm font-medium">{selectedItem.serial12}</p>
+              <p className="text-sm">{selectedItem.productMaster?.sku} - {selectedItem.productMaster ? (locale === 'th' ? selectedItem.productMaster.nameTh : selectedItem.productMaster.nameEn || selectedItem.productMaster.nameTh) : selectedItem.name}</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mb-4 min-h-0">
+              {loadingPreGen ? (
+                <div className="text-center py-8 text-[var(--color-foreground-muted)]">
+                  {locale === 'th' ? 'กำลังโหลด...' : 'Loading...'}
+                </div>
+              ) : preGenItems.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-[var(--color-foreground-muted)]">
+                    {locale === 'th' ? 'ไม่มี QR Pre-Gen ที่พร้อมใช้สำหรับสินค้านี้' : 'No pre-gen QR available for this product'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {preGenItems.map((item) => (
+                    <label
+                      key={item.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        selectedPreGenId === item.id
+                          ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/5'
+                          : 'border-[var(--color-beige)] hover:border-[var(--color-gold)]/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="preGenItem"
+                        checked={selectedPreGenId === item.id}
+                        onChange={() => setSelectedPreGenId(item.id)}
+                        className="accent-[var(--color-gold)]"
+                      />
+                      <div>
+                        <p className="font-mono text-sm font-medium">{item.serial12}</p>
+                        {item.batchNo && (
+                          <p className="text-xs text-[var(--color-foreground-muted)]">Batch: {item.batchNo}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleRestore('scrap', selectedPreGenId)}
+                disabled={restoring || !selectedPreGenId}
+                className="flex-1 py-2 bg-[var(--color-gold)] text-white rounded-lg hover:bg-[var(--color-gold-dark)] disabled:opacity-50 font-medium"
+              >
+                {restoring ? '...' : (locale === 'th' ? 'ทิ้งและใช้ QR ทดแทน' : 'Scrap & Use Replacement')}
+              </button>
+              <button
+                onClick={() => handleRestore('scrap')}
+                disabled={restoring}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
+              >
+                {locale === 'th' ? 'ทิ้งอย่างเดียว' : 'Scrap Only'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowPreGenModal(false)
+                  setSelectedPreGenId(null)
+                  setPreGenItems([])
+                }}
+                disabled={restoring}
+                className="px-4 py-2 border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)]"
+              >
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
               </button>
             </div>
           </div>

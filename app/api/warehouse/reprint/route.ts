@@ -8,117 +8,122 @@ import type { JWTPayload } from '@/lib/auth'
 type HandlerContext = { user: JWTPayload }
 
 // POST /api/warehouse/reprint
-// Reprint QR label for a product - creates new token version and revokes old
+// Reprint QR label for product(s) - supports single or batch
+// Body: { productItemId: number } OR { productItemIds: number[], reason?: string }
 async function handlePOST(request: NextRequest, context: HandlerContext) {
   const body = await request.json()
-  const { productItemId, reason } = body as {
-    productItemId: number
-    reason?: string
-  }
   const user = context.user
+  const reason = body.reason as string | undefined
 
-  if (!productItemId) {
-    return errorResponse('Product item ID is required')
+  // Support both single and batch
+  const ids: number[] = body.productItemIds
+    ? (body.productItemIds as number[])
+    : body.productItemId
+      ? [body.productItemId as number]
+      : []
+
+  if (ids.length === 0) {
+    return errorResponse('Product item ID(s) required')
   }
 
-  // Find the product item with active token
-  const productItem = await prisma.productItem.findUnique({
-    where: { id: productItemId },
-    include: {
-      qrTokens: {
-        where: { status: 'ACTIVE' },
-        orderBy: { tokenVersion: 'desc' },
-        take: 1,
-      },
-      category: true,
-    },
-  })
-
-  if (!productItem) {
-    return errors.notFound('Product')
+  if (ids.length > 50) {
+    return errorResponse('Maximum 50 items per batch')
   }
-
-  // Check if product is in a valid state for reprinting
-  // Cannot reprint ACTIVATED or RETURNED products
-  if (productItem.status === 'ACTIVATED') {
-    return errorResponse('Cannot reprint label for activated product')
-  }
-
-  if (productItem.status === 'RETURNED') {
-    return errorResponse('Cannot reprint label for returned product')
-  }
-
-  const activeToken = productItem.qrTokens[0]
-  if (!activeToken) {
-    return errorResponse('No active token found for this product')
-  }
-
-  const newTokenVersion = activeToken.tokenVersion + 1
-  const now = new Date()
 
   try {
-    // Transaction: revoke old token and create new one
-    const result = await prisma.$transaction(async (tx) => {
-      // Revoke old token
-      await tx.qRToken.update({
-        where: { id: activeToken.id },
-        data: {
-          status: 'REVOKED',
-          revokedAt: now,
-          revokeReason: reason || 'Reprinted',
-        },
-      })
+    const results = await prisma.$transaction(async (tx) => {
+      const reprinted = []
 
-      // Create new QR token
-      const qrTokenString = await createQRToken({
-        serialNumber: productItem.serial12,
-        productItemId: productItem.id,
-        tokenVersion: newTokenVersion,
-        issuedAt: Math.floor(now.getTime() / 1000),
-      })
+      for (const itemId of ids) {
+        const productItem = await tx.productItem.findUnique({
+          where: { id: itemId },
+          include: {
+            qrTokens: {
+              where: { status: 'ACTIVE' },
+              orderBy: { tokenVersion: 'desc' },
+              take: 1,
+            },
+            category: true,
+          },
+        })
 
-      // Store new token hash
-      const newToken = await tx.qRToken.create({
-        data: {
+        if (!productItem) continue
+        if (['ACTIVATED', 'RETURNED', 'SCRAPPED', 'DAMAGED'].includes(productItem.status)) continue
+
+        const activeToken = productItem.qrTokens[0]
+        if (!activeToken) continue
+
+        const newTokenVersion = activeToken.tokenVersion + 1
+        const now = new Date()
+
+        // Revoke old token
+        await tx.qRToken.update({
+          where: { id: activeToken.id },
+          data: {
+            status: 'REVOKED',
+            revokedAt: now,
+            revokeReason: reason || 'Reprinted',
+          },
+        })
+
+        // Create new QR token
+        const qrTokenString = await createQRToken({
+          serialNumber: productItem.serial12,
           productItemId: productItem.id,
           tokenVersion: newTokenVersion,
-          tokenHash: hashToken(qrTokenString),
-          status: 'ACTIVE',
-        },
-      })
+          issuedAt: Math.floor(now.getTime() / 1000),
+        })
 
-      // Log event
-      await tx.eventLog.create({
-        data: {
-          eventType: 'REPRINT',
-          productItemId: productItem.id,
-          userId: user.userId,
-          details: {
-            previousVersion: activeToken.tokenVersion,
-            newVersion: newTokenVersion,
-            reason: reason || 'Reprinted',
-            reprintedAt: now.toISOString(),
+        await tx.qRToken.create({
+          data: {
+            productItemId: productItem.id,
+            tokenVersion: newTokenVersion,
+            tokenHash: hashToken(qrTokenString),
+            status: 'ACTIVE',
           },
-        },
-      })
+        })
 
-      return {
-        token: qrTokenString,
-        tokenVersion: newTokenVersion,
-        qrUrl: generateQRCodeURL(productItem.serial12),
-        newTokenId: newToken.id,
+        // Log event
+        await tx.eventLog.create({
+          data: {
+            eventType: 'REPRINT',
+            productItemId: productItem.id,
+            userId: user.userId,
+            details: {
+              previousVersion: activeToken.tokenVersion,
+              newVersion: newTokenVersion,
+              reason: reason || 'Reprinted',
+              reprintedAt: now.toISOString(),
+            },
+          },
+        })
+
+        reprinted.push({
+          productItemId: productItem.id,
+          serial12: productItem.serial12,
+          productName: productItem.name,
+          category: productItem.category.nameTh,
+          previousVersion: activeToken.tokenVersion,
+          newVersion: newTokenVersion,
+          qrUrl: generateQRCodeURL(productItem.serial12),
+        })
       }
+
+      return reprinted
     })
 
+    // Backward compatible: single item returns flat object, batch returns array
+    if (!body.productItemIds && results.length === 1) {
+      return successResponse({
+        ...results[0],
+        message: 'QR label reprinted successfully',
+      })
+    }
+
     return successResponse({
-      productItemId: productItem.id,
-      serial12: productItem.serial12,
-      productName: productItem.name,
-      category: productItem.category.nameTh,
-      previousVersion: activeToken.tokenVersion,
-      newVersion: result.tokenVersion,
-      qrUrl: result.qrUrl,
-      message: 'QR label reprinted successfully',
+      items: results,
+      count: results.length,
+      message: `${results.length} QR label(s) reprinted successfully`,
     })
   } catch (error) {
     console.error('Reprint error:', error)

@@ -275,6 +275,7 @@ export default function OutboundDetailPage() {
         setReplacementItems([])
         setSelectedReplacement(null)
         fetchOutbound()
+        window.dispatchEvent(new Event('badges:refresh'))
         const message = wantReplacement
           ? (locale === 'th' ? 'บันทึกสินค้าเสียหายและเปลี่ยนสินค้าทดแทนเรียบร้อย' : 'Product marked as damaged and replaced')
           : (locale === 'th' ? 'บันทึกสินค้าเสียหายเรียบร้อย' : 'Product marked as damaged')
@@ -1036,6 +1037,7 @@ export default function OutboundDetailPage() {
                 <option value="ชำรุดจากการขนส่ง">{locale === 'th' ? 'ชำรุดจากการขนส่ง' : 'Shipping damage'}</option>
                 <option value="สินค้ามีตำหนิ">{locale === 'th' ? 'สินค้ามีตำหนิ' : 'Product defect'}</option>
                 <option value="บรรจุภัณฑ์เสียหาย">{locale === 'th' ? 'บรรจุภัณฑ์เสียหาย' : 'Packaging damage'}</option>
+                <option value="QR Code เสียหาย">{locale === 'th' ? 'QR Code เสียหาย' : 'QR Code damaged'}</option>
                 <option value="สินค้าหมดอายุ">{locale === 'th' ? 'สินค้าหมดอายุ' : 'Expired'}</option>
                 <option value="ลูกค้าแจ้งปัญหา">{locale === 'th' ? 'ลูกค้าแจ้งปัญหา' : 'Customer reported issue'}</option>
                 <option value="อื่นๆ">{locale === 'th' ? 'อื่นๆ' : 'Other'}</option>

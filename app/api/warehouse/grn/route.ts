@@ -310,7 +310,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             // Generate serial number with product info
             const serialNumber = await generateSerialNumber({
               activationType: productMaster.activationType,
-              categoryId: productMaster.categoryId,
+              categorySerialCode: productMaster.category.serialCode,
               serialCode: productMaster.serialCode,
             })
 

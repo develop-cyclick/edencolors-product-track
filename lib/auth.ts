@@ -65,13 +65,14 @@ export function hasRole(userRole: UserRole, requiredRoles: UserRole[]): boolean 
 
 /**
  * Role hierarchy for permission checks
- * ADMIN > MANAGER > WAREHOUSE
+ * ADMIN > MANAGER > WAREHOUSE > MARKETING
  */
 export function hasMinimumRole(userRole: UserRole, minimumRole: UserRole): boolean {
   const roleHierarchy: Record<UserRole, number> = {
-    [UserRole.ADMIN]: 3,
-    [UserRole.MANAGER]: 2,
-    [UserRole.WAREHOUSE]: 1,
+    [UserRole.ADMIN]: 4,
+    [UserRole.MANAGER]: 3,
+    [UserRole.WAREHOUSE]: 2,
+    [UserRole.MARKETING]: 1,
   }
   return roleHierarchy[userRole] >= roleHierarchy[minimumRole]
 }

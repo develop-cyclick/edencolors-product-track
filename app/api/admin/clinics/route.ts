@@ -30,6 +30,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
     const clinic = await prisma.clinic.create({
       data: {
         name: body.name,
+        companyName: body.companyName || null,
         province: body.province,
         branchName: body.branchName || null,
         isActive: body.isActive ?? true,

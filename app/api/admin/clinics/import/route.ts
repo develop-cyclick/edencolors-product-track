@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx'
 
 interface ClinicRow {
   name: string
+  companyName?: string
   province: string
   branchName?: string
   isActive?: boolean
@@ -59,9 +60,14 @@ export const POST = withAdmin(async (request: NextRequest) => {
       isactive: 'isActive',
       is_active: 'isActive',
       active: 'isActive',
+      companyname: 'companyName',
+      company_name: 'companyName',
+      company: 'companyName',
       // Thai
       'ชื่อ': 'name',
       'ชื่อคลินิก': 'name',
+      'ชื่อบริษัท': 'companyName',
+      'บริษัท': 'companyName',
       'จังหวัด': 'province',
       'สาขา': 'branchName',
       'ชื่อสาขา': 'branchName',
@@ -105,6 +111,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
 
       clinicsToCreate.push({
         name: clinic.name,
+        companyName: clinic.companyName || undefined,
         province: clinic.province,
         branchName: clinic.branchName || undefined,
         isActive: clinic.isActive ?? true,
@@ -143,6 +150,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
         const clinic = await tx.clinic.create({
           data: {
             name: clinicData.name,
+            companyName: clinicData.companyName || null,
             province: clinicData.province,
             branchName: clinicData.branchName || null,
             isActive: clinicData.isActive ?? true,

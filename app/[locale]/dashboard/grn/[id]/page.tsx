@@ -40,6 +40,9 @@ interface GRNDetail {
       status: string
       category: { id: number; nameTh: string }
       qrTokens: Array<{ id: number; tokenVersion: number }>
+      damagedActionRequests?: Array<{
+        replacementItem: { id: number; serial12: string; status: string } | null
+      }>
     }
   }>
   planLines?: Array<{
@@ -80,6 +83,13 @@ export default function GRNDetailPage() {
   const [showPrintGuide, setShowPrintGuide] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [expandedSessions, setExpandedSessions] = useState<Set<number>>(new Set())
+
+  // Damage modal states
+  const [showDamageModal, setShowDamageModal] = useState(false)
+  const [damageItem, setDamageItem] = useState<{ id: number; serial12: string; sku: string; itemName: string } | null>(null)
+  const [damageReason, setDamageReason] = useState('')
+  const [damageNote, setDamageNote] = useState('')
+  const [damageLoading, setDamageLoading] = useState(false)
 
   // Check if user can approve (ADMIN or MANAGER only)
   const canApprove = userRole === 'ADMIN' || userRole === 'MANAGER'
@@ -240,6 +250,53 @@ export default function GRNDetailPage() {
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
     } finally {
       setPrintingItemId(null)
+    }
+  }
+
+  const openDamageModal = (line: GRNDetail['lines'][0], itemOverride?: { id: number; serial12: string }) => {
+    setDamageItem({
+      id: itemOverride?.id ?? line.productItem.id,
+      serial12: itemOverride?.serial12 ?? line.productItem.serial12,
+      sku: line.sku,
+      itemName: line.itemName,
+    })
+    setDamageReason('')
+    setDamageNote('')
+    setShowDamageModal(true)
+  }
+
+  const handleDamage = async () => {
+    if (!damageItem || !damageReason) return
+    setDamageLoading(true)
+    try {
+      const res = await fetch('/api/warehouse/damaged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productItemIds: [damageItem.id],
+          reason: damageReason,
+          note: damageNote || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({
+          title: locale === 'th' ? 'สำเร็จ' : 'Success',
+          message: locale === 'th' ? 'แจ้งสินค้าเสียหายแล้ว' : 'Product marked as damaged',
+          variant: 'success',
+          icon: 'success',
+        })
+        setShowDamageModal(false)
+        setDamageItem(null)
+        fetchGRN()
+        window.dispatchEvent(new Event('badges:refresh'))
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.message || 'Error', variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred', variant: 'error', icon: 'error' })
+    } finally {
+      setDamageLoading(false)
     }
   }
 
@@ -714,18 +771,29 @@ export default function GRNDetailPage() {
                 <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
                   {locale === 'th' ? 'พิมพ์ QR' : 'Print QR'}
                 </th>
+                <th className="px-5 py-4 text-center text-sm font-semibold text-[var(--color-charcoal)]">
+                  {locale === 'th' ? 'จัดการ' : 'Action'}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-beige)]">
-              {grn.lines.map((line, index) => (
+              {grn.lines.map((line, index) => {
+                const replacement = line.productItem.damagedActionRequests?.[0]?.replacementItem
+                const isScrappedWithReplacement = line.productItem.status === 'SCRAPPED' && replacement
+                // Show replacement item if scrapped+replaced, otherwise show original
+                const displayItem = isScrappedWithReplacement
+                  ? { id: replacement.id, serial12: replacement.serial12, status: replacement.status }
+                  : { id: line.productItem.id, serial12: line.productItem.serial12, status: line.productItem.status }
+
+                return (
                 <tr key={line.id} className="hover:bg-[var(--color-off-white)]/50 transition-colors">
                   <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{index + 1}</td>
                   <td className="px-5 py-4">
                     <Link
-                      href={`/${locale}/dashboard/products/${line.productItem.id}`}
+                      href={`/${locale}/dashboard/products/${displayItem.id}`}
                       className="font-mono text-sm font-medium text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] transition-colors"
                     >
-                      {line.productItem.serial12}
+                      {displayItem.serial12}
                     </Link>
                   </td>
                   <td className="px-5 py-4 text-sm text-[var(--color-charcoal)]">{line.sku}</td>
@@ -733,15 +801,15 @@ export default function GRNDetailPage() {
                   <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{line.productItem.category.nameTh}</td>
                   <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{line.lot || '-'}</td>
                   <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{formatDate(line.expDate)}</td>
-                  <td className="px-5 py-4">{getStatusBadge(line.productItem.status)}</td>
+                  <td className="px-5 py-4">{getStatusBadge(displayItem.status)}</td>
                   <td className="px-5 py-4 text-center">
                     <button
-                      onClick={() => handlePrintSingleLabel(line.productItem.id, line.productItem.serial12)}
-                      disabled={printingItemId === line.productItem.id}
+                      onClick={() => handlePrintSingleLabel(displayItem.id, displayItem.serial12)}
+                      disabled={printingItemId === displayItem.id}
                       className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--color-off-white)] text-[var(--color-charcoal)] hover:bg-[var(--color-gold)] hover:text-white disabled:opacity-50 transition-all duration-200"
                       title={locale === 'th' ? 'พิมพ์ QR Label' : 'Print QR Label'}
                     >
-                      {printingItemId === line.productItem.id ? (
+                      {printingItemId === displayItem.id ? (
                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       ) : (
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -750,12 +818,132 @@ export default function GRNDetailPage() {
                       )}
                     </button>
                   </td>
+                  <td className="px-5 py-4 text-center">
+                    {displayItem.status === 'IN_STOCK' && (
+                      <button
+                        onClick={() => openDamageModal(line, isScrappedWithReplacement ? displayItem : undefined)}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-200"
+                        title={locale === 'th' ? 'แจ้งเสียหาย' : 'Report Damage'}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </button>
+                    )}
+                  </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Damage Report Modal */}
+      {showDamageModal && damageItem && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-lg)] max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'แจ้งสินค้าเสียหาย' : 'Report Damage'}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => { setShowDamageModal(false); setDamageItem(null) }}
+                  className="w-8 h-8 rounded-full bg-[var(--color-off-white)] flex items-center justify-center text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] hover:bg-[var(--color-beige)] transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Product Info */}
+              <div className="bg-[var(--color-off-white)] rounded-xl p-4 mb-5">
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-[var(--color-foreground-muted)]">Serial</span>
+                    <span className="font-mono font-medium text-[var(--color-charcoal)]">{damageItem.serial12}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--color-foreground-muted)]">SKU</span>
+                    <span className="font-medium text-[var(--color-charcoal)]">{damageItem.sku}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ชื่อสินค้า' : 'Product'}</span>
+                    <span className="font-medium text-[var(--color-charcoal)]">{damageItem.itemName}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Damage Reason */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
+                  {locale === 'th' ? 'สาเหตุความเสียหาย *' : 'Damage Reason *'}
+                </label>
+                <select
+                  value={damageReason}
+                  onChange={(e) => setDamageReason(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm text-[var(--color-charcoal)] focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none transition-all"
+                >
+                  <option value="">{locale === 'th' ? '-- เลือกสาเหตุ --' : '-- Select reason --'}</option>
+                  <option value="ชำรุดจากการขนส่ง">{locale === 'th' ? 'ชำรุดจากการขนส่ง' : 'Damaged during shipping'}</option>
+                  <option value="สินค้ามีตำหนิ">{locale === 'th' ? 'สินค้ามีตำหนิ' : 'Product defect'}</option>
+                  <option value="บรรจุภัณฑ์เสียหาย">{locale === 'th' ? 'บรรจุภัณฑ์เสียหาย' : 'Packaging damaged'}</option>
+                  <option value="QR Code เสียหาย">{locale === 'th' ? 'QR Code เสียหาย' : 'QR Code damaged'}</option>
+                  <option value="สินค้าหมดอายุ">{locale === 'th' ? 'สินค้าหมดอายุ' : 'Product expired'}</option>
+                  <option value="อื่นๆ">{locale === 'th' ? 'อื่นๆ' : 'Other'}</option>
+                </select>
+              </div>
+
+              {/* Additional Notes */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-2">
+                  {locale === 'th' ? 'หมายเหตุเพิ่มเติม' : 'Additional Notes'}
+                </label>
+                <textarea
+                  value={damageNote}
+                  onChange={(e) => setDamageNote(e.target.value)}
+                  rows={3}
+                  placeholder={locale === 'th' ? 'ระบุรายละเอียดเพิ่มเติม...' : 'Enter additional details...'}
+                  className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-beige)] bg-white text-sm text-[var(--color-charcoal)] focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold)]/20 outline-none transition-all resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowDamageModal(false); setDamageItem(null) }}
+                  className="flex-1 px-4 py-2.5 border-2 border-[var(--color-beige)] text-[var(--color-foreground-muted)] rounded-xl font-medium hover:bg-[var(--color-off-white)] transition-all"
+                >
+                  {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+                </button>
+                <button
+                  onClick={handleDamage}
+                  disabled={!damageReason || damageLoading}
+                  className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(239,68,68,0.25)] hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(239,68,68,0.35)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                >
+                  {damageLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {locale === 'th' ? 'กำลังบันทึก...' : 'Saving...'}
+                    </span>
+                  ) : (
+                    locale === 'th' ? 'ยืนยันแจ้งเสียหาย' : 'Confirm Damage'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Guidance Modal */}
       {showPrintGuide && (

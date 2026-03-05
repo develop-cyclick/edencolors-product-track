@@ -30,7 +30,7 @@ interface ProductItem {
   lot: string | null
   mfgDate: string | null
   expDate: string | null
-  status: 'IN_STOCK' | 'PENDING_OUT' | 'SHIPPED' | 'ACTIVATED' | 'RETURNED' | 'DAMAGED'
+  status: 'IN_STOCK' | 'PENDING_OUT' | 'SHIPPED' | 'ACTIVATED' | 'RETURNED' | 'DAMAGED' | 'SCRAPPED'
   assignedClinic: { id: number; name: string } | null
   grnLine: {
     unit: { nameTh: string; nameEn: string | null }
@@ -52,6 +52,7 @@ const statusLabels: Record<string, { th: string; en: string; color: string }> = 
   ACTIVATED: { th: 'เปิดใช้แล้ว', en: 'Activated', color: 'bg-purple-100 text-purple-700' },
   RETURNED: { th: 'รับคืนสินค้า', en: 'Returned', color: 'bg-orange-100 text-orange-700' },
   DAMAGED: { th: 'เสียหาย', en: 'Damaged', color: 'bg-red-100 text-red-700' },
+  SCRAPPED: { th: 'ทิ้งแล้ว', en: 'Scrapped', color: 'bg-gray-200 text-gray-700' },
 }
 
 export default function ProductMasterDetailPage() {
@@ -65,6 +66,7 @@ export default function ProductMasterDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('')
+  const [sortOrder, setSortOrder] = useState<string>('fifo')
   const [currentPage, setCurrentPage] = useState(1)
 
   const fetchData = useCallback(async () => {
@@ -74,6 +76,7 @@ export default function ProductMasterDetailPage() {
       const searchParams = new URLSearchParams({
         page: currentPage.toString(),
         limit: '20',
+        sort: sortOrder,
       })
       if (statusFilter) {
         searchParams.set('status', statusFilter)
@@ -94,7 +97,7 @@ export default function ProductMasterDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [id, currentPage, statusFilter])
+  }, [id, currentPage, statusFilter, sortOrder])
 
   useEffect(() => {
     fetchData()
@@ -227,21 +230,38 @@ export default function ProductMasterDetailPage() {
           <h2 className="text-lg font-semibold text-[var(--color-charcoal)]">
             {locale === 'th' ? 'รายการสินค้าแต่ละชิ้น' : 'Product Items'}
           </h2>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setCurrentPage(1)
-            }}
-            className="border border-[var(--color-beige)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)] focus:border-transparent"
-          >
-            <option value="">{locale === 'th' ? 'ทุกสถานะ' : 'All Status'}</option>
-            <option value="IN_STOCK">{locale === 'th' ? 'ในคลัง' : 'In Stock'}</option>
-            <option value="PENDING_OUT">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</option>
-            <option value="SHIPPED">{locale === 'th' ? 'ส่งออกแล้ว' : 'Shipped'}</option>
-            <option value="ACTIVATED">{locale === 'th' ? 'เปิดใช้แล้ว' : 'Activated'}</option>
-            <option value="RETURNED">{locale === 'th' ? 'รับคืนสินค้า' : 'Returned'}</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={sortOrder}
+              onChange={(e) => {
+                setSortOrder(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="border border-[var(--color-beige)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)] focus:border-transparent"
+            >
+              <option value="fifo">{locale === 'th' ? 'เข้าก่อนแสดงก่อน (FIFO)' : 'Oldest first (FIFO)'}</option>
+              <option value="lifo">{locale === 'th' ? 'เข้าหลังแสดงก่อน (LIFO)' : 'Newest first (LIFO)'}</option>
+              <option value="status">{locale === 'th' ? 'ตามสถานะ' : 'By Status'}</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="border border-[var(--color-beige)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)] focus:border-transparent"
+            >
+              <option value="">{locale === 'th' ? 'ทุกสถานะ (ไม่รวมทิ้ง)' : 'All Status (excl. scrapped)'}</option>
+              <option value="all">{locale === 'th' ? 'ทั้งหมด' : 'All'}</option>
+              <option value="IN_STOCK">{locale === 'th' ? 'ในคลัง' : 'In Stock'}</option>
+              <option value="PENDING_OUT">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</option>
+              <option value="SHIPPED">{locale === 'th' ? 'ส่งออกแล้ว' : 'Shipped'}</option>
+              <option value="ACTIVATED">{locale === 'th' ? 'เปิดใช้แล้ว' : 'Activated'}</option>
+              <option value="RETURNED">{locale === 'th' ? 'รับคืนสินค้า' : 'Returned'}</option>
+              <option value="SCRAPPED">{locale === 'th' ? 'ทิ้งแล้ว' : 'Scrapped'}</option>
+              <option value="DAMAGED">{locale === 'th' ? 'เสียหาย' : 'Damaged'}</option>
+            </select>
+          </div>
         </div>
 
         {items.length === 0 ? (
@@ -277,6 +297,9 @@ export default function ProductMasterDetailPage() {
                       {locale === 'th' ? 'คลินิก' : 'Clinic'}
                     </th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-[var(--color-foreground-muted)]">
+                      {locale === 'th' ? 'วันที่รับเข้า' : 'Received'}
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-[var(--color-foreground-muted)]">
                       {locale === 'th' ? 'เลขที่ GRN' : 'GRN No.'}
                     </th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-[var(--color-foreground-muted)]">
@@ -303,6 +326,7 @@ export default function ProductMasterDetailPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-[var(--color-charcoal)]">{item.assignedClinic?.name || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--color-charcoal)]">{item.grnLine?.grnHeader.receivedAt ? formatDate(item.grnLine.grnHeader.receivedAt) : '-'}</td>
                       <td className="px-4 py-3 text-sm text-[var(--color-charcoal)]">{item.grnLine?.grnHeader.grnNo || '-'}</td>
                       <td className="px-4 py-3 text-center">
                         <Link

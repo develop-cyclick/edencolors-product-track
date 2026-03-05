@@ -131,11 +131,29 @@ interface BorrowTransaction {
   _count: { lines: number }
 }
 
+interface DamagedClaim {
+  id: number
+  claimNumber: string
+  quantity: number
+  reason: string
+  note: string | null
+  status: string
+  createdAt: string
+  approvedAt: string | null
+  rejectReason: string | null
+  clinic: { id: number; name: string; province: string }
+  productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
+  createdBy: { id: number; displayName: string }
+  approvedBy: { id: number; displayName: string } | null
+  attachments: Array<{ id: number; fileUrl: string; fileName: string }>
+}
+
 interface Stats {
   grn: { pending: number; approved: number }
   outbound: { DRAFT: number; PENDING: number; APPROVED: number; REJECTED: number }
   damaged: { PENDING: number; APPROVED: number; REJECTED: number }
   borrow: { PENDING: number; APPROVED: number; REJECTED: number }
+  claim: { PENDING: number; APPROVED: number; REJECTED: number }
   totalPending: number
 }
 
@@ -149,15 +167,17 @@ export default function ApprovalBoardPage() {
   const [outboundItems, setOutboundItems] = useState<Outbound[]>([])
   const [damagedItems, setDamagedItems] = useState<DamagedAction[]>([])
   const [borrowItems, setBorrowItems] = useState<BorrowTransaction[]>([])
+  const [claimItems, setClaimItems] = useState<DamagedClaim[]>([])
   const [stats, setStats] = useState<Stats>({
     grn: { pending: 0, approved: 0 },
     outbound: { DRAFT: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 },
     damaged: { PENDING: 0, APPROVED: 0, REJECTED: 0 },
     borrow: { PENDING: 0, APPROVED: 0, REJECTED: 0 },
+    claim: { PENDING: 0, APPROVED: 0, REJECTED: 0 },
     totalPending: 0,
   })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'approved'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'claim' | 'approved'>('all')
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [expandedGrn, setExpandedGrn] = useState<number | null>(null)
   const [expandedOutbound, setExpandedOutbound] = useState<number | null>(null)
@@ -178,8 +198,10 @@ export default function ApprovalBoardPage() {
         setOutboundItems(data.data.outbound || [])
         setDamagedItems(data.data.damaged || [])
         setBorrowItems(data.data.borrow || [])
+        setClaimItems(data.data.claim || [])
         setStats(data.data.stats)
       }
+      window.dispatchEvent(new Event('badges:refresh'))
     } catch (error) {
       console.error('Failed to fetch:', error)
     } finally {
@@ -415,6 +437,63 @@ export default function ApprovalBoardPage() {
     }
   }
 
+  const handleApproveClaim = async (id: number) => {
+    const confirmed = await confirm({
+      title: locale === 'th' ? 'อนุมัติคำร้องเคลม' : 'Approve Claim',
+      message: locale === 'th' ? 'ยืนยันอนุมัติคำร้องเคลมนี้?' : 'Confirm approve this claim?',
+      confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info',
+      icon: 'success',
+    })
+    if (!confirmed) return
+
+    setProcessingId(`claim-${id}`)
+    try {
+      const res = await fetch(`/api/manager/damaged-claim/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติคำร้องสำเร็จ' : 'Claim approved', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to approve', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleRejectClaim = async (id: number) => {
+    const reason = prompt(locale === 'th' ? 'ระบุเหตุผลที่ปฏิเสธ:' : 'Enter reject reason:')
+    if (!reason) return
+
+    setProcessingId(`claim-${id}`)
+    try {
+      const res = await fetch(`/api/manager/damaged-claim/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', rejectReason: reason }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธคำร้องสำเร็จ' : 'Claim rejected', variant: 'success', icon: 'success' })
+        fetchData()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: 'Failed to reject', variant: 'error', icon: 'error' })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
       year: 'numeric',
@@ -455,7 +534,7 @@ export default function ApprovalBoardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
         <button
           onClick={() => setActiveTab('all')}
           className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
@@ -542,6 +621,23 @@ export default function ApprovalBoardPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('claim')}
+          className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
+            activeTab === 'claim'
+              ? 'border-[var(--color-gold)] bg-rose-50 shadow-[0_4px_14px_rgba(201,163,90,0.15)]'
+              : 'border-[var(--color-beige)] bg-white hover:border-[var(--color-gold)]/50'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <span className="w-3 h-3 rounded-full bg-rose-500" />
+            <span className="text-3xl font-bold text-[var(--color-charcoal)]">{stats.claim?.PENDING || 0}</span>
+          </div>
+          <p className="text-sm text-[var(--color-foreground-muted)]">
+            {locale === 'th' ? 'เคลม รออนุมัติ' : 'Claim Pending'}
+          </p>
+        </button>
+
+        <button
           onClick={() => setActiveTab('approved')}
           className={`p-5 rounded-2xl border-2 transition-all duration-200 text-left ${
             activeTab === 'approved'
@@ -574,7 +670,7 @@ export default function ApprovalBoardPage() {
             </p>
           </div>
         </div>
-      ) : grnItems.length === 0 && outboundItems.length === 0 && damagedItems.length === 0 && borrowItems.length === 0 ? (
+      ) : grnItems.length === 0 && outboundItems.length === 0 && damagedItems.length === 0 && borrowItems.length === 0 && claimItems.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-mint)]/20 flex items-center justify-center">
             <svg className="w-8 h-8 text-[var(--color-mint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1251,6 +1347,127 @@ export default function ApprovalBoardPage() {
                         <div className="mt-4 p-3 bg-violet-50 rounded-xl border border-violet-100">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</p>
                           <p className="text-sm text-[var(--color-charcoal)]">{txn.remarks}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Claim Section */}
+          {(activeTab === 'all' || activeTab === 'claim') && claimItems.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                {locale === 'th' ? 'คำร้องเคลมสินค้า รออนุมัติ' : 'Damaged Claims Pending Approval'}
+                <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({claimItems.length})</span>
+              </h2>
+              <div className="space-y-4">
+                {claimItems.map((claim) => (
+                  <div key={claim.id} className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden hover:shadow-[var(--shadow-lg)] transition-shadow">
+                    <div className="p-5 border-b border-[var(--color-beige)] bg-rose-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-semibold text-rose-600 font-mono">
+                            {claim.claimNumber}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            claim.status === 'PENDING' ? 'bg-amber-100 text-amber-700'
+                              : claim.status === 'APPROVED' ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {claim.status === 'PENDING' ? (locale === 'th' ? 'รออนุมัติ' : 'Pending')
+                              : claim.status === 'APPROVED' ? (locale === 'th' ? 'อนุมัติแล้ว' : 'Approved')
+                              : (locale === 'th' ? 'ปฏิเสธ' : 'Rejected')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
+                          {locale === 'th' ? 'สร้างเมื่อ' : 'Created'}: {formatDate(claim.createdAt)} {locale === 'th' ? 'โดย' : 'by'} {claim.createdBy.displayName}
+                        </p>
+                      </div>
+                      {claim.status === 'PENDING' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleApproveClaim(claim.id)}
+                            disabled={processingId === `claim-${claim.id}`}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-[var(--color-mint)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            {locale === 'th' ? 'อนุมัติ' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={() => handleRejectClaim(claim.id)}
+                            disabled={processingId === `claim-${claim.id}`}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(239,68,68,0.3)] hover:bg-red-600 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            {locale === 'th' ? 'ปฏิเสธ' : 'Reject'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'คลินิก' : 'Clinic'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{claim.clinic.name}</p>
+                          <p className="text-xs text-[var(--color-foreground-muted)]">{claim.clinic.province}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'สินค้า' : 'Product'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{claim.productMaster.nameTh}</p>
+                          <p className="text-xs text-[var(--color-foreground-muted)]">{claim.productMaster.sku} {claim.productMaster.modelSize ? `| ${claim.productMaster.modelSize}` : ''}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'จำนวน' : 'Quantity'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)] text-lg">{claim.quantity}</p>
+                        </div>
+                        <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</p>
+                          <p className="font-medium text-[var(--color-charcoal)]">{claim.reason}</p>
+                        </div>
+                      </div>
+
+                      {claim.note && (
+                        <div className="mt-4 p-3 bg-rose-50 rounded-xl border border-rose-100">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Note'}</p>
+                          <p className="text-sm text-[var(--color-charcoal)]">{claim.note}</p>
+                        </div>
+                      )}
+
+                      {claim.attachments.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-xs text-[var(--color-foreground-muted)] mb-2">{locale === 'th' ? 'หลักฐาน' : 'Attachments'} ({claim.attachments.length})</p>
+                          <div className="flex flex-wrap gap-2">
+                            {claim.attachments.map((att) => (
+                              <a
+                                key={att.id}
+                                href={att.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-off-white)] rounded-lg border border-[var(--color-beige)] hover:border-[var(--color-gold)] text-sm text-[var(--color-charcoal)] transition-colors"
+                              >
+                                <svg className="w-4 h-4 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                </svg>
+                                {att.fileName}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {claim.rejectReason && (
+                        <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100">
+                          <p className="text-xs text-red-600 mb-1">{locale === 'th' ? 'เหตุผลที่ปฏิเสธ' : 'Reject Reason'}</p>
+                          <p className="text-sm text-red-700">{claim.rejectReason}</p>
                         </div>
                       )}
                     </div>

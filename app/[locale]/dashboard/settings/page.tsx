@@ -11,6 +11,7 @@ interface MasterItem {
   nameTh?: string
   nameEn?: string | null
   name?: string
+  serialCode?: string
   isActive: boolean
 }
 
@@ -42,6 +43,7 @@ export default function SettingsPage() {
     nameTh: '',
     nameEn: '',
     name: '',
+    serialCode: '',
     isActive: true,
   })
 
@@ -120,6 +122,7 @@ export default function SettingsPage() {
       nameTh: '',
       nameEn: '',
       name: '',
+      serialCode: '',
       isActive: true,
     })
     setShowModal(true)
@@ -131,6 +134,7 @@ export default function SettingsPage() {
       nameTh: item.nameTh || '',
       nameEn: item.nameEn || '',
       name: item.name || '',
+      serialCode: item.serialCode || '',
       isActive: item.isActive,
     })
     setShowModal(true)
@@ -159,6 +163,9 @@ export default function SettingsPage() {
         } else {
           updateData.nameTh = formData.nameTh
           updateData.nameEn = formData.nameEn || null
+          if (activeTab === 'categories') {
+            updateData.serialCode = formData.serialCode.toUpperCase()
+          }
         }
 
         const res = await fetch(currentTab.endpoint, {
@@ -194,6 +201,14 @@ export default function SettingsPage() {
           }
           createData.nameTh = formData.nameTh
           createData.nameEn = formData.nameEn || null
+          if (activeTab === 'categories') {
+            if (!formData.serialCode || !/^[A-Za-z]$/.test(formData.serialCode)) {
+              await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'รหัส Serial ต้องเป็นตัวอักษร A-Z 1 ตัว' : 'Serial code must be a single letter A-Z', variant: 'warning', icon: 'warning' })
+              setActionLoading(false)
+              return
+            }
+            createData.serialCode = formData.serialCode.toUpperCase()
+          }
         }
 
         const res = await fetch(currentTab.endpoint, {
@@ -414,6 +429,11 @@ export default function SettingsPage() {
                         <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                           {locale === 'th' ? 'ชื่อ (อังกฤษ)' : 'Name (English)'}
                         </th>
+                        {activeTab === 'categories' && (
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                            {locale === 'th' ? 'รหัส Serial' : 'Serial Code'}
+                          </th>
+                        )}
                       </>
                     )}
                     <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
@@ -437,6 +457,13 @@ export default function SettingsPage() {
                           <td className="px-4 py-3 text-[var(--color-charcoal)]">
                             {item.nameEn || <span className="text-[var(--color-foreground-muted)]">-</span>}
                           </td>
+                          {activeTab === 'categories' && (
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--color-gold)]/10 text-[var(--color-gold)] font-bold font-mono">
+                                {item.serialCode || '-'}
+                              </span>
+                            </td>
+                          )}
                         </>
                       )}
                       <td className="px-4 py-3">
@@ -542,6 +569,24 @@ export default function SettingsPage() {
                       placeholder={locale === 'th' ? 'ชื่อภาษาอังกฤษ' : 'English name'}
                     />
                   </div>
+                  {activeTab === 'categories' && (
+                    <div>
+                      <label className={labelClass}>
+                        {locale === 'th' ? 'รหัส Serial' : 'Serial Code'} <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.serialCode}
+                        onChange={(e) => setFormData({ ...formData, serialCode: e.target.value.toUpperCase().slice(0, 1) })}
+                        className={`${inputClass} font-mono text-center tracking-widest uppercase`}
+                        placeholder="A-Z"
+                        maxLength={1}
+                      />
+                      <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                        {locale === 'th' ? 'ตัวอักษร A-Z 1 ตัว ใช้เป็นส่วนหนึ่งของ Serial Number' : 'Single letter A-Z, used as part of Serial Number'}
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 

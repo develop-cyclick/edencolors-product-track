@@ -13,6 +13,7 @@ export const GET = withAdmin(async (_request: NextRequest) => {
     // Prepare data for Excel
     const data = clinics.map((clinic) => ({
       'ชื่อคลินิก': clinic.name,
+      'ชื่อบริษัท': clinic.companyName || '',
       'จังหวัด': clinic.province,
       'สาขา': clinic.branchName || '',
       'สถานะ': clinic.isActive ? 'ใช้งาน' : 'ปิดใช้งาน',
@@ -25,6 +26,7 @@ export const GET = withAdmin(async (_request: NextRequest) => {
     // Set column widths
     worksheet['!cols'] = [
       { wch: 30 }, // ชื่อคลินิก
+      { wch: 30 }, // ชื่อบริษัท
       { wch: 15 }, // จังหวัด
       { wch: 20 }, // สาขา
       { wch: 12 }, // สถานะ

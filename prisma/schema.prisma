@@ -18,6 +18,7 @@ enum UserRole {
   ADMIN
   MANAGER
   WAREHOUSE
+  MARKETING
 }
 
 enum ProductStatus {
@@ -107,6 +108,7 @@ model ProductMaster {
   purchaseOrderLines  PurchaseOrderLine[]
   preGeneratedBatches PreGeneratedBatch[]
   grnPlanLines        GRNPlanLine[]
+  damagedClaims       DamagedClaim[]
 
   @@index([sku])
   @@index([isActive])
@@ -114,12 +116,13 @@ model ProductMaster {
 }
 
 model ProductCategory {
-  id        Int      @id @default(autoincrement())
-  nameTh    String   @map("name_th")
-  nameEn    String?  @map("name_en")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         Int      @id @default(autoincrement())
+  nameTh     String   @map("name_th")
+  nameEn     String?  @map("name_en")
+  serialCode String   @unique @db.Char(1) @map("serial_code")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   products       ProductItem[]
   productMasters ProductMaster[]
@@ -199,6 +202,9 @@ model User {
   grnReceivingSessions    GRNReceivingSession[] @relation("GRNSessionReceivedBy")
   damagedActionsCreated   DamagedActionRequest[] @relation("DamagedActionCreatedBy")
   damagedActionsApproved  DamagedActionRequest[] @relation("DamagedActionApprovedBy")
+  damagedClaimsCreated    DamagedClaim[]         @relation("DamagedClaimCreatedBy")
+  damagedClaimsApproved   DamagedClaim[]         @relation("DamagedClaimApprovedBy")
+  pushSubscriptions       PushSubscription[]
 
   @@map("users")
 }
@@ -206,6 +212,7 @@ model User {
 model Clinic {
   id           Int      @id @default(autoincrement())
   name         String
+  companyName  String?  @map("company_name")
   province     String
   branchName   String?  @map("branch_name")
   isActive     Boolean  @default(true) @map("is_active")
@@ -215,6 +222,7 @@ model Clinic {
   products        ProductItem[]
   outbounds       OutboundHeader[]
   purchaseOrders  PurchaseOrder[]
+  damagedClaims   DamagedClaim[]
 
   @@map("clinics")
 }
@@ -252,7 +260,8 @@ model ProductItem {
   scanLogs            ScanLog[]
   eventLogs           EventLog[]
   borrowLines         BorrowTransactionLine[]
-  damagedActionRequests DamagedActionRequest[]
+  damagedActionRequests     DamagedActionRequest[] @relation("DamagedActionProduct")
+  replacementForRequests    DamagedActionRequest[] @relation("DamagedActionReplacement")
 
   @@index([serial12])
   @@index([status])
@@ -667,23 +676,95 @@ model BorrowTransactionLine {
 // ============================================
 
 model DamagedActionRequest {
-  id              Int                  @id @default(autoincrement())
-  productItemId   Int                  @map("product_item_id")
-  actionType      DamagedActionType    @map("action_type")
-  status          DamagedActionStatus  @default(PENDING)
-  repairNote      String?              @map("repair_note")
-  createdById     Int                  @map("created_by_id")
-  approvedById    Int?                 @map("approved_by_id")
-  approvedAt      DateTime?            @map("approved_at")
-  rejectReason    String?              @map("reject_reason")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
+  id                Int                  @id @default(autoincrement())
+  productItemId     Int                  @map("product_item_id")
+  actionType        DamagedActionType    @map("action_type")
+  status            DamagedActionStatus  @default(PENDING)
+  repairNote        String?              @map("repair_note")
+  replacementItemId Int?                 @map("replacement_item_id")
+  createdById       Int                  @map("created_by_id")
+  approvedById      Int?                 @map("approved_by_id")
+  approvedAt        DateTime?            @map("approved_at")
+  rejectReason      String?              @map("reject_reason")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
 
-  productItem     ProductItem          @relation(fields: [productItemId], references: [id])
-  createdBy       User                 @relation("DamagedActionCreatedBy", fields: [createdById], references: [id])
-  approvedBy      User?                @relation("DamagedActionApprovedBy", fields: [approvedById], references: [id])
+  productItem       ProductItem          @relation("DamagedActionProduct", fields: [productItemId], references: [id])
+  replacementItem   ProductItem?         @relation("DamagedActionReplacement", fields: [replacementItemId], references: [id])
+  createdBy         User                 @relation("DamagedActionCreatedBy", fields: [createdById], references: [id])
+  approvedBy        User?                @relation("DamagedActionApprovedBy", fields: [approvedById], references: [id])
 
   @@index([status])
   @@index([productItemId])
   @@map("damaged_action_requests")
+}
+
+// ============================================
+// DAMAGED CLAIM - คำร้องเคลมสินค้าเสียหาย (ไม่ระบุ Serial)
+// ============================================
+
+enum DamagedClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model DamagedClaim {
+  id                Int                  @id @default(autoincrement())
+  claimNumber       String               @unique @map("claim_number")
+  clinicId          Int                  @map("clinic_id")
+  productMasterId   Int                  @map("product_master_id")
+  quantity          Int
+  reason            String
+  note              String?              @db.Text
+  status            DamagedClaimStatus   @default(PENDING)
+  createdById       Int                  @map("created_by_id")
+  approvedById      Int?                 @map("approved_by_id")
+  approvedAt        DateTime?            @map("approved_at")
+  rejectReason      String?              @map("reject_reason")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  clinic            Clinic               @relation(fields: [clinicId], references: [id])
+  productMaster     ProductMaster        @relation(fields: [productMasterId], references: [id])
+  createdBy         User                 @relation("DamagedClaimCreatedBy", fields: [createdById], references: [id])
+  approvedBy        User?                @relation("DamagedClaimApprovedBy", fields: [approvedById], references: [id])
+  attachments       DamagedClaimAttachment[]
+
+  @@index([status])
+  @@index([clinicId])
+  @@map("damaged_claims")
+}
+
+model DamagedClaimAttachment {
+  id        Int      @id @default(autoincrement())
+  claimId   Int      @map("claim_id")
+  fileUrl   String   @map("file_url")
+  fileName  String   @map("file_name")
+  fileType  String   @map("file_type")
+  fileSize  Int      @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claim     DamagedClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@map("damaged_claim_attachments")
+}
+
+// ============================================
+// Push Notification Subscriptions
+// ============================================
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  endpoint  String   @db.Text
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@map("push_subscriptions")
 }

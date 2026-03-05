@@ -12,15 +12,8 @@ import prisma from './prisma'
 
 export interface SerialParams {
   activationType: 'SINGLE' | 'PACK'
-  categoryId: number
+  categorySerialCode: string // 1 char A-Z from ProductCategory.serialCode
   serialCode: string // 5 chars from ProductMaster
-}
-
-/**
- * Convert categoryId to letter: 1=A, 2=B, 3=C...
- */
-export function categoryIdToLetter(id: number): string {
-  return String.fromCharCode(64 + id)
 }
 
 /**
@@ -34,7 +27,7 @@ export async function generateSerialNumber(
   tx?: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
 ): Promise<string> {
   const typeChar = params.activationType === 'SINGLE' ? 'S' : 'P'
-  const categoryChar = categoryIdToLetter(params.categoryId)
+  const categoryChar = params.categorySerialCode
   const prefix = `${typeChar}${categoryChar}${params.serialCode}`
   const counterName = `SER_${prefix}`
 
@@ -154,6 +147,23 @@ export async function generateBorrowNumber(): Promise<string> {
 
   // Format as 6-digit number
   return `${result.prefix}${result.currentVal.toString().padStart(6, '0')}`
+}
+
+export async function generateClaimNumber(): Promise<string> {
+  const year = new Date().getFullYear()
+  const prefix = `CLM-${year}-`
+
+  const result = await prisma.$queryRaw<
+    Array<{ current_val: bigint }>
+  >`INSERT INTO sequence_counters (name, prefix, current_val)
+    VALUES ('CLAIM', ${prefix}, 1)
+    ON CONFLICT (name) DO UPDATE SET
+      prefix = ${prefix},
+      current_val = sequence_counters.current_val + 1
+    RETURNING current_val`
+
+  const val = Number(result[0].current_val)
+  return `${prefix}${val.toString().padStart(6, '0')}`
 }
 
 /**

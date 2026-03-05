@@ -41,6 +41,7 @@ export default function MonthlySummaryPage() {
   // State
   const [data, setData] = useState<MonthlySummaryData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [startMonth, setStartMonth] = useState('');
   const [endMonth, setEndMonth] = useState('');
 
@@ -83,6 +84,31 @@ export default function MonthlySummaryPage() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/analytics/monthly-summary/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startMonth, endMonth, locale, format: 'excel' }),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `monthly-summary-${startMonth}-to-${endMonth}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      console.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const formatMonth = (month: string) => {
@@ -177,6 +203,20 @@ export default function MonthlySummaryPage() {
             </div>
           </div>
 
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[var(--color-charcoal)] text-white rounded-xl font-medium hover:bg-[var(--color-charcoal)]/90 disabled:opacity-50 transition-all"
+          >
+            {exporting ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+            Excel
+          </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-2.5 bg-[#C9A35A] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[#B8924A] transition-all"

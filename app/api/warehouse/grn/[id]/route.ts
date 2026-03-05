@@ -35,6 +35,13 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
                 where: { status: 'ACTIVE' },
                 select: { id: true, tokenVersion: true, issuedAt: true },
               },
+              damagedActionRequests: {
+                where: { actionType: 'SCRAP', status: 'APPROVED', replacementItemId: { not: null } },
+                select: {
+                  replacementItem: { select: { id: true, serial12: true, status: true } },
+                },
+                take: 1,
+              },
             },
           },
           unit: { select: { id: true, nameTh: true, nameEn: true } },
@@ -524,7 +531,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
           for (let i = 0; i < line.quantity; i++) {
             const serialNumber = await generateSerialNumber({
               activationType: productMaster.activationType,
-              categoryId: productMaster.categoryId,
+              categorySerialCode: productMaster.category.serialCode,
               serialCode: productMaster.serialCode,
             })
 
