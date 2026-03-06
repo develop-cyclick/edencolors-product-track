@@ -3,8 +3,8 @@ set -e
 
 IMAGE="sunthornrk/edencolors"
 TAG="${1:-latest}"
-SERVER="root@143.198.192.140"
-REMOTE_DIR="/root/edencolors"
+SERVER="${DEPLOY_SERVER:-your-user@your-server-ip}"
+REMOTE_DIR="${REMOTE_DIR:-/root/edencolors}"
 
 echo "==> Building image ($IMAGE:$TAG)..."
 docker build --platform linux/amd64 -t $IMAGE:$TAG .

@@ -1,36 +1,155 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EdenColors — QR Authenticity & Product Activation System
 
-## Getting Started
+ระบบจัดการสินค้า QR Code สำหรับตรวจสอบความแท้และติดตามการเคลื่อนไหวของสินค้า  
+Built with **Next.js 16**, **PostgreSQL**, **Redis**, **Prisma**, **Docker**
 
-First, run the development server:
+---
 
+## 🧱 Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend + API | Next.js 16 (App Router, TypeScript) |
+| Database | PostgreSQL 16 |
+| Cache / Session | Redis 7 |
+| ORM | Prisma |
+| Reverse Proxy | Nginx |
+| Container | Docker + Docker Compose |
+| Auth | JWT + HTTP-only Cookie |
+| i18n | Thai / English |
+
+---
+
+## 🚀 Development (Local)
+
+### Prerequisites
+- Node.js 22+
+- Docker Desktop
+
+### 1. Clone & Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/YOUR_USERNAME/edencolors.git
+cd edencolors
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Setup Environment
+```bash
+cp .env.example .env
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Start Database (Docker)
+```bash
+npm run db:up        # Start PostgreSQL + Redis
+npm run db:migrate   # Run migrations
+npm run db:seed      # Seed initial data
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Run Development Server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000)
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🐳 Production Deploy (Docker)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Prerequisites (on server)
+- Docker + Docker Compose
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
 
-## Deploy on Vercel
+### 1. Clone project on server
+```bash
+git clone https://github.com/YOUR_USERNAME/edencolors.git
+cd edencolors
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. Setup production environment
+```bash
+cp .env.production.example .env.production
+nano .env.production   # Fill in all secrets and domain
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Generate secrets:
+```bash
+openssl rand -hex 32   # Use for JWT_SECRET, COOKIE_SECRET, QR_TOKEN_SECRET
+```
+
+### 3. Start all services
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### 4. Run database migration (first time only)
+```bash
+docker compose -f docker-compose.prod.yml exec app npx prisma migrate deploy
+```
+
+### 5. Access the app
+```
+http://YOUR_SERVER_IP
+```
+
+---
+
+## 🔄 Update / Redeploy
+
+```bash
+# On dev machine: build and push new image
+DEPLOY_SERVER=user@your-server-ip bash deploy.sh
+
+# Or manually on server:
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## 🗂️ Project Structure
+
+```
+├── app/                  # Next.js App Router (pages + API routes)
+├── components/           # Reusable UI components
+├── lib/                  # Utilities (auth, pdf, prisma, etc.)
+├── prisma/               # Database schema + migrations + seed
+├── public/               # Static assets + uploaded files
+├── i18n/                 # Translations (th/en)
+├── docker-compose.yml          # Dev: PostgreSQL + Redis
+├── docker-compose.prod.yml     # Prod: App + DB + Redis + Nginx
+├── Dockerfile            # Multi-stage production build
+├── nginx.conf            # Reverse proxy config
+└── deploy.sh             # Deploy script (build → push → server)
+```
+
+---
+
+## 📦 Useful Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server |
+| `npm run build` | Build for production |
+| `npm run db:up` | Start DB containers |
+| `npm run db:migrate` | Run Prisma migrations |
+| `npm run db:seed` | Seed initial data |
+| `npm run db:studio` | Open Prisma Studio |
+| `npm run db:reset` | Reset database |
+
+---
+
+## 🔐 Environment Variables
+
+See `.env.example` for development and `.env.production.example` for production.
+
+> ⚠️ Never commit `.env` or `.env.production` to version control.
+
+---
+
+## 📄 License
+
+Private — All rights reserved.

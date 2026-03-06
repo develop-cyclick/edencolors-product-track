@@ -48,3 +48,9 @@ next-env.d.ts
 /app/generated/prisma
 
 certificates
+
+# User uploaded files (do not commit real data)
+/public/uploads/products/*
+/public/uploads/claims/*
+!/public/uploads/products/.gitkeep
+!/public/uploads/claims/.gitkeep
