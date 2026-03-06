@@ -40,6 +40,8 @@ async function handlePOST(request: NextRequest) {
         a.gender,
         a.age,
         a.province as customer_province,
+        a.income,
+        a.discovery_channel,
         a.activation_number,
         a.created_at,
         EXTRACT(EPOCH FROM (a.created_at - oh.shipped_at)) / 86400 as days_to_activation
@@ -61,7 +63,9 @@ async function handlePOST(request: NextRequest) {
       if (!g) return '-'
       if (g === 'M') return th ? 'ชาย' : 'Male'
       if (g === 'F') return th ? 'หญิง' : 'Female'
-      return th ? 'อื่นๆ' : 'Other'
+      if (g === 'Non-binary') return th ? 'นอนไบนารี' : 'Non-binary'
+      if (g === 'Prefer not to say') return th ? 'ไม่ต้องการระบุ' : 'Prefer not to say'
+      return th ? 'เพศอื่นๆ' : 'Other'
     }
 
     const sheets = [
@@ -78,6 +82,8 @@ async function handlePOST(request: NextRequest) {
           th ? 'เพศ' : 'Gender',
           th ? 'อายุ' : 'Age',
           th ? 'จังหวัด (ลูกค้า)' : 'Province (Customer)',
+          th ? 'รายได้ต่อเดือน' : 'Monthly Income',
+          th ? 'ช่องทางที่พบสินค้า' : 'Discovery Channel',
           th ? 'วันที่เปิดใช้งาน' : 'Activation Date',
           th ? 'วันจัดส่ง→เปิดใช้งาน' : 'Days to Activation',
         ],
@@ -92,6 +98,8 @@ async function handlePOST(request: NextRequest) {
           genderLabel(r.gender),
           r.age ?? '-',
           r.customer_province || '-',
+          r.income || '-',
+          r.discovery_channel || '-',
           new Date(r.created_at).toLocaleDateString('th-TH'),
           r.days_to_activation ? Math.round(parseFloat(r.days_to_activation) * 10) / 10 : '-',
         ]),

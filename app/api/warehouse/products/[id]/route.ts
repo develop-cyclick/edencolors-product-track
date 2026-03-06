@@ -24,7 +24,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     where: { id: productId },
     include: {
       category: { select: { id: true, nameTh: true, nameEn: true } },
-      assignedClinic: { select: { id: true, name: true, province: true, branchName: true } },
+      assignedClinic: { select: { id: true, name: true, address: true, branchName: true } },
       qrTokens: {
         orderBy: { tokenVersion: 'desc' },
         select: {

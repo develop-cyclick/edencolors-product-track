@@ -44,12 +44,70 @@ interface OutboundHeader {
   clinic: {
     id: number;
     name: string;
-    province: string;
+    address: string;
     branchName: string | null;
   } | null;
   createdBy: { id: number; displayName: string; username: string };
   approvedBy: { id: number; displayName: string; username: string } | null;
   lines: OutboundLine[];
+}
+
+/**
+ * Format serial numbers as ranges where consecutive
+ * e.g. ["FA2401000001", "FA2401000002", "FA2401000003", "FA2401000005"]
+ *   → "FA2401000001-003, FA2401000005"
+ */
+function formatSerialRanges(serials: string[]): string {
+  if (serials.length === 0) return "";
+  if (serials.length === 1) return serials[0];
+
+  // Sort serials
+  const sorted = [...serials].sort();
+
+  // Find the common prefix length (where digits start differing)
+  const findNumericSuffix = (s: string) => {
+    let i = s.length - 1;
+    while (i >= 0 && /\d/.test(s[i])) i--;
+    return { prefix: s.slice(0, i + 1), num: s.slice(i + 1) };
+  };
+
+  const ranges: string[] = [];
+  let rangeStart = sorted[0];
+  let rangeEnd = sorted[0];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = findNumericSuffix(rangeEnd);
+    const curr = findNumericSuffix(sorted[i]);
+
+    // Check if same prefix and consecutive number
+    if (
+      prev.prefix === curr.prefix &&
+      prev.num.length === curr.num.length &&
+      parseInt(curr.num) === parseInt(prev.num) + 1
+    ) {
+      rangeEnd = sorted[i];
+    } else {
+      // Push previous range
+      if (rangeStart === rangeEnd) {
+        ranges.push(rangeStart);
+      } else {
+        const endSuffix = findNumericSuffix(rangeEnd).num;
+        ranges.push(`${rangeStart}-${endSuffix}`);
+      }
+      rangeStart = sorted[i];
+      rangeEnd = sorted[i];
+    }
+  }
+
+  // Push last range
+  if (rangeStart === rangeEnd) {
+    ranges.push(rangeStart);
+  } else {
+    const endSuffix = findNumericSuffix(rangeEnd).num;
+    ranges.push(`${rangeStart}-${endSuffix}`);
+  }
+
+  return ranges.join(", ");
 }
 
 export default function OutboundDocumentPage() {
@@ -193,8 +251,10 @@ export default function OutboundDocumentPage() {
             <h1 className="text-[10px] font-bold text-gray-800 mb-0.5">
               ใบส่งสินค้า
             </h1>
-            <p className="text-[10px] text-gray-600 text-left font-bold">
-              ผู้ส่งสินค้า : บริษัท อีเดนคัลเลอร์ (ประเทศไทย) จำกัด
+            <p className="text-[14px] text-left font-bold mt-2">
+              ผู้ส่งสินค้า : บริษัท อีเด็นคัลเลอร์ (ประเทศไทย) จำกัด
+              <p className=" pl-17">106/2 ถนนพุทธมณฑลสาย 1 แขวงบางระมาด เขตตลิ่งชัน กรุงเทพมหานคร 10170</p>
+              <p className=" pl-17">เลขประจำตัวเสียภาษี : 0145558004150</p>
             </p>
           </div>
 
@@ -218,7 +278,7 @@ export default function OutboundDocumentPage() {
                   <div className="flex-1 border-b border-gray-800 text-center">
                     <span className="text-[11px]">
                       {outbound.clinicAddress ||
-                        `${outbound.clinic?.province || ""}${outbound.clinic?.branchName ? ` (${outbound.clinic.branchName})` : ""}`}
+                        `${outbound.clinic?.address || ""}${outbound.clinic?.branchName ? ` (${outbound.clinic.branchName})` : ""}`}
                     </span>
                   </div>
                 </div>
@@ -317,35 +377,71 @@ export default function OutboundDocumentPage() {
                 </tr>
               </thead>
               <tbody>
-                {outbound.lines.map((line, index) => (
-                  <tr key={line.id} className="border border-gray-800">
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {index + 1}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1">
-                      {line.itemName}
-                      {line.modelSize && ` (${line.modelSize})`}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.lot || ""}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {formatDate(line.expDate)}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center font-mono text-[9px]">
-                      {line.productItem.serial12}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.quantity}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.unit?.nameTh || ""}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1">
-                      {outbound.remarks || ""}
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  // Group lines by same product type (sku + lot + expDate)
+                  const grouped: Array<{
+                    key: string;
+                    itemName: string;
+                    modelSize: string | null;
+                    sku: string;
+                    lot: string | null;
+                    expDate: string | null;
+                    unit: { nameTh: string; nameEn: string } | null;
+                    serials: string[];
+                    totalQty: number;
+                  }> = [];
+
+                  outbound.lines.forEach((line) => {
+                    const key = `${line.sku}|${line.lot || ""}|${line.expDate || ""}`;
+                    const existing = grouped.find((g) => g.key === key);
+                    if (existing) {
+                      existing.serials.push(line.productItem.serial12);
+                      existing.totalQty += line.quantity;
+                    } else {
+                      grouped.push({
+                        key,
+                        itemName: line.itemName,
+                        modelSize: line.modelSize,
+                        sku: line.sku,
+                        lot: line.lot,
+                        expDate: line.expDate,
+                        unit: line.unit,
+                        serials: [line.productItem.serial12],
+                        totalQty: line.quantity,
+                      });
+                    }
+                  });
+
+                  return grouped.map((group, index) => (
+                    <tr key={group.key} className="border border-gray-800">
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top">
+                        {index + 1}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 align-top">
+                        {group.itemName}
+                        {group.modelSize && ` (${group.modelSize})`}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top">
+                        {group.lot || ""}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top">
+                        {formatDate(group.expDate)}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top font-mono text-[9px]">
+                        {formatSerialRanges(group.serials)}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top">
+                        {group.totalQty}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 text-center align-top">
+                        {group.unit?.nameTh || ""}
+                      </td>
+                      <td className="border border-gray-800 px-1 py-1 align-top">
+                        {outbound.remarks || ""}
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
               <tfoot>
                 <tr className="border border-gray-800">
@@ -387,7 +483,7 @@ export default function OutboundDocumentPage() {
           </div>
 
           <div className="mb-2 text-[10px] text-center space-y-2">
-            <p className=" font-bold text-[13px]">Admin E-mail : cs@edencolorsthailand.com / Line ID : araclar_arapeel / TEL. 02-1250142 061-4659629</p>
+            <p className=" font-bold text-[13px]">Admin E-mail : cs@edencolorsthailand.com / Line ID : araclar_arapeel / TEL. 02-1250142 082-2616624</p>
             <p className="pt-4">
               *** หากลูกค้าได้รับสินค้าแล้ว ไม่มีการแจ้งกลับมาที่บริษัทฯ ภายใน 7
               วัน ทางบริษัทฯ จะถือว่าลูกค้าได้รับสินค้าครบตามจำนวน

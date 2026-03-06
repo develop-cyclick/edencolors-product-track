@@ -156,7 +156,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       where,
       include: {
         category: { select: { id: true, nameTh: true } },
-        assignedClinic: { select: { id: true, name: true, province: true } },
+        assignedClinic: { select: { id: true, name: true, address: true } },
         activations: {
           select: {
             customerName: true,

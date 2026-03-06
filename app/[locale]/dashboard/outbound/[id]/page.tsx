@@ -73,7 +73,7 @@ interface OutboundHeader {
   purchaseOrder: POSummary | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null
-  clinic: { id: number; name: string; province: string; branchName: string | null } | null
+  clinic: { id: number; name: string; address: string; branchName: string | null } | null
   createdBy: { id: number; displayName: string; username: string }
   approvedBy: { id: number; displayName: string; username: string } | null
   lines: OutboundLine[]
@@ -635,7 +635,7 @@ export default function OutboundDetailPage() {
               )}
               <div className="flex justify-between">
                 <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'จังหวัด' : 'Province'}</dt>
-                <dd className="font-medium text-[var(--color-charcoal)]">{outbound.clinic.province}</dd>
+                <dd className="font-medium text-[var(--color-charcoal)]">{outbound.clinic.address}</dd>
               </div>
               {outbound.clinicContactName && (
                 <div className="flex justify-between">

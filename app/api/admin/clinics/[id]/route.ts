@@ -56,8 +56,11 @@ export const PATCH = withAdmin<Promise<Params>>(async (request: NextRequest, { p
       data: {
         ...(body.name && { name: body.name }),
         ...(body.companyName !== undefined && { companyName: body.companyName || null }),
-        ...(body.province && { province: body.province }),
+        ...(body.address && { address: body.address }),
         ...(body.branchName !== undefined && { branchName: body.branchName }),
+        ...(body.invoiceName !== undefined && { invoiceName: body.invoiceName || null }),
+        ...(body.contactName !== undefined && { contactName: body.contactName || null }),
+        ...(body.contactPhone !== undefined && { contactPhone: body.contactPhone || null }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
       },
     })

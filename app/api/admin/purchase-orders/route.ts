@@ -34,7 +34,7 @@ export const GET = withWarehouse(async (request: NextRequest) => {
           select: {
             id: true,
             name: true,
-            province: true,
+            address: true,
             branchName: true,
           },
         },

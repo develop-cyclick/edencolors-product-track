@@ -220,7 +220,7 @@ export async function generateDeliveryNotePDF(data: DeliveryNoteData): Promise<B
   instructionY += 6
   doc.setFontSize(7)
   doc.setFont(font, 'bold')
-  doc.text('Admin E-mail : cs@edencolorsthailand.com / Line ID : araclar_arapeel / TEL. 02-1250142 061-4659629', 105, instructionY, { align: 'center' })
+  doc.text('Admin E-mail : cs@edencolorsthailand.com / Line ID : araclar_arapeel / TEL. 02-1250142 082-2616624', 105, instructionY, { align: 'center' })
 
   // === SIGNATURE SECTION ===
   const sigY = instructionY + 10

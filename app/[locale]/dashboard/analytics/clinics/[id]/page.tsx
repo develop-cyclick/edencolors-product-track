@@ -11,7 +11,7 @@ interface ClinicDetailData {
     id: number;
     name: string;
     branchName: string | null;
-    province: string;
+    address: string;
   };
   stats: {
     totalShipped: number;
@@ -53,6 +53,14 @@ interface ClinicDetailData {
       '46-60': number;
       '60+': number;
     };
+    incomeDistribution: Array<{
+      income: string;
+      count: number;
+    }>;
+    discoveryChannelDistribution: Array<{
+      channel: string;
+      count: number;
+    }>;
   };
 }
 
@@ -132,7 +140,17 @@ export default function ClinicDetailPage() {
     { name: '60+', value: data.demographics.ageGroups['60+'] },
   ].filter(item => item.value > 0);
 
-  const COLORS = ['#C9A35A', '#2D2D2D', '#999999'];
+  const incomeChartData = (data.demographics.incomeDistribution || []).map(item => ({
+    name: item.income,
+    value: item.count,
+  }));
+
+  const channelChartData = (data.demographics.discoveryChannelDistribution || []).map(item => ({
+    name: item.channel,
+    value: item.count,
+  }));
+
+  const COLORS = ['#C9A35A', '#2D2D2D', '#999999', '#E8D5A3', '#666666', '#B8924A', '#4A90D9'];
 
   const totalDemographicData = genderChartData.reduce((sum, item) => sum + item.value, 0);
 
@@ -150,7 +168,7 @@ export default function ClinicDetailPage() {
         {data.clinic.branchName && (
           <p className="text-[#666666]">{data.clinic.branchName}</p>
         )}
-        <p className="text-[#999999] text-sm">{data.clinic.province}</p>
+        <p className="text-[#999999] text-sm">{data.clinic.address}</p>
       </div>
 
       {/* Summary Stats */}
@@ -222,6 +240,52 @@ export default function ClinicDetailPage() {
                   <Tooltip />
                   <Bar dataKey="value" fill="#C9A35A" name={locale === 'th' ? 'จำนวน' : 'Count'} />
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Income Distribution */}
+          {incomeChartData.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-bold text-[#2D2D2D] mb-4">
+                {locale === 'th' ? 'รายได้ต่อเดือน' : 'Monthly Income'}
+              </h2>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={incomeChartData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#C9A35A" name={locale === 'th' ? 'จำนวน' : 'Count'} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Discovery Channel Distribution */}
+          {channelChartData.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-bold text-[#2D2D2D] mb-4">
+                {locale === 'th' ? 'ช่องทางที่พบสินค้า' : 'Discovery Channel'}
+              </h2>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={channelChartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {channelChartData.map((entry, index) => (
+                      <Cell key={`cell-ch-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           )}

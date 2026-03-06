@@ -81,6 +81,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       borrowerName,
       clinicName,
       clinicAddress,
+      contactName,
+      contactPhone,
       taxInvoiceRef,
       reason,
       remarks,
@@ -90,6 +92,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       borrowerName: string
       clinicName?: string
       clinicAddress?: string
+      contactName?: string
+      contactPhone?: string
       taxInvoiceRef?: string
       reason?: string
       remarks?: string
@@ -154,6 +158,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           borrowerName: borrowerName.trim(),
           clinicName: clinicName?.trim() || null,
           clinicAddress: clinicAddress?.trim() || null,
+          contactName: contactName?.trim() || null,
+          contactPhone: contactPhone?.trim() || null,
           taxInvoiceRef: taxInvoiceRef?.trim() || null,
           reason: reason?.trim() || null,
           remarks: remarks?.trim() || null,
@@ -184,6 +190,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             unitId: item.productMaster?.defaultUnitId || defaultUnitId,
             lot: item.lot,
             expDate: item.expDate,
+            remarks: remarks?.trim() || null,
           },
         })
 

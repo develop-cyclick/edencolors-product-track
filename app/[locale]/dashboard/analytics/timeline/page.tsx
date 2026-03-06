@@ -17,6 +17,8 @@ interface TimelineData {
     age: number | null;
     gender: string | null;
     province: string | null;
+    income: string | null;
+    discoveryChannel: string | null;
     createdAt: string;
     daysToActivation: number | null;
   }>;
@@ -35,6 +37,14 @@ interface TimelineData {
     };
     topProvinces: Array<{
       province: string;
+      count: number;
+    }>;
+    incomeDistribution: Array<{
+      income: string;
+      count: number;
+    }>;
+    discoveryChannelDistribution: Array<{
+      channel: string;
       count: number;
     }>;
   };
@@ -172,7 +182,17 @@ export default function TimelinePage() {
 
   const provinceChartData = data.demographics.topProvinces.slice(0, 10);
 
-  const COLORS = ['#C9A35A', '#2D2D2D', '#999999'];
+  const incomeChartData = (data.demographics.incomeDistribution || []).map(item => ({
+    name: item.income,
+    value: item.count,
+  }));
+
+  const channelChartData = (data.demographics.discoveryChannelDistribution || []).map(item => ({
+    name: item.channel,
+    value: item.count,
+  }));
+
+  const COLORS = ['#C9A35A', '#2D2D2D', '#999999', '#E8D5A3', '#666666', '#B8924A', '#4A90D9'];
 
   return (
     <div className="p-6 space-y-6">
@@ -275,6 +295,55 @@ export default function TimelinePage() {
         </div>
       )}
 
+      {/* Income & Discovery Channel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Income Distribution */}
+        {incomeChartData.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-bold text-[#2D2D2D] mb-4">
+              {locale === 'th' ? 'รายได้ต่อเดือน' : 'Monthly Income'}
+            </h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={incomeChartData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#C9A35A" name={locale === 'th' ? 'จำนวน' : 'Count'} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Discovery Channel Distribution */}
+        {channelChartData.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-bold text-[#2D2D2D] mb-4">
+              {locale === 'th' ? 'ช่องทางที่พบสินค้า' : 'Discovery Channel'}
+            </h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={channelChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {channelChartData.map((entry, index) => (
+                    <Cell key={`cell-ch-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4">
         <form onSubmit={handleSearch} className="flex flex-wrap gap-4">
@@ -364,7 +433,7 @@ export default function TimelinePage() {
                     )}
                   </div>
                 </div>
-                {(activation.customerName || activation.age || activation.gender || activation.province) && (
+                {(activation.customerName || activation.age || activation.gender || activation.province || activation.income || activation.discoveryChannel) && (
                   <div className="flex flex-wrap gap-3 mt-2 text-xs text-[#666666]">
                     {activation.customerName && (
                       <span className="flex items-center gap-1">
@@ -384,8 +453,7 @@ export default function TimelinePage() {
                     )}
                     {activation.gender && (
                       <span className="flex items-center gap-1">
-                        {activation.gender === 'M' ? '👨' : activation.gender === 'F' ? '👩' : '👤'}
-                        {activation.gender === 'M' ? (locale === 'th' ? 'ชาย' : 'Male') : activation.gender === 'F' ? (locale === 'th' ? 'หญิง' : 'Female') : (locale === 'th' ? 'อื่นๆ' : 'Other')}
+                        {activation.gender === 'M' ? (locale === 'th' ? 'ชาย' : 'Male') : activation.gender === 'F' ? (locale === 'th' ? 'หญิง' : 'Female') : activation.gender === 'Non-binary' ? (locale === 'th' ? 'นอนไบนารี' : 'Non-binary') : activation.gender === 'Prefer not to say' ? (locale === 'th' ? 'ไม่ระบุ' : 'N/A') : (locale === 'th' ? 'อื่นๆ' : 'Other')}
                       </span>
                     )}
                     {activation.province && (
@@ -394,6 +462,23 @@ export default function TimelinePage() {
                           <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
                         </svg>
                         {activation.province}
+                      </span>
+                    )}
+                    {activation.income && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                          <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
+                        </svg>
+                        {activation.income}
+                      </span>
+                    )}
+                    {activation.discoveryChannel && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        {activation.discoveryChannel}
                       </span>
                     )}
                   </div>

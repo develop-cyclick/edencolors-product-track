@@ -75,7 +75,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       include: {
         warehouse: { select: { id: true, name: true } },
         shippingMethod: { select: { id: true, nameTh: true } },
-        clinic: { select: { id: true, name: true, province: true } },
+        clinic: { select: { id: true, name: true, address: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
         purchaseOrder: {
@@ -270,7 +270,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           clinicId: body.clinicId,
           salesPersonName: body.salesPersonName,
           companyContact: body.companyContact,
-          clinicAddress: body.clinicAddress || `${clinic.name}, ${clinic.province}`,
+          clinicAddress: body.clinicAddress || `${clinic.name}, ${clinic.address}`,
           clinicPhone: body.clinicPhone,
           clinicEmail: body.clinicEmail,
           clinicContactName: body.clinicContactName,

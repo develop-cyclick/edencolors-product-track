@@ -8,8 +8,11 @@ interface Clinic {
   id: number
   name: string
   companyName: string | null
-  province: string
+  address: string
   branchName: string | null
+  invoiceName: string | null
+  contactName: string | null
+  contactPhone: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -33,7 +36,7 @@ export default function ClinicsPage() {
   const [importResult, setImportResult] = useState<{
     created: number
     skipped: number
-    skippedItems?: Array<{ name: string; province: string; branchName?: string; reason: string }>
+    skippedItems?: Array<{ name: string; address: string; branchName?: string; reason: string }>
     validationErrors?: string[]
   } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -42,8 +45,11 @@ export default function ClinicsPage() {
   const [formData, setFormData] = useState({
     name: '',
     companyName: '',
-    province: '',
+    address: '',
     branchName: '',
+    invoiceName: '',
+    contactName: '',
+    contactPhone: '',
     isActive: true,
   })
 
@@ -71,8 +77,11 @@ export default function ClinicsPage() {
     setFormData({
       name: '',
       companyName: '',
-      province: '',
+      address: '',
       branchName: '',
+      invoiceName: '',
+      contactName: '',
+      contactPhone: '',
       isActive: true,
     })
     setShowModal(true)
@@ -83,8 +92,11 @@ export default function ClinicsPage() {
     setFormData({
       name: clinic.name,
       companyName: clinic.companyName || '',
-      province: clinic.province,
+      address: clinic.address,
       branchName: clinic.branchName || '',
+      invoiceName: clinic.invoiceName || '',
+      contactName: clinic.contactName || '',
+      contactPhone: clinic.contactPhone || '',
       isActive: clinic.isActive,
     })
     setShowModal(true)
@@ -96,8 +108,11 @@ export default function ClinicsPage() {
     setFormData({
       name: '',
       companyName: '',
-      province: '',
+      address: '',
       branchName: '',
+      invoiceName: '',
+      contactName: '',
+      contactPhone: '',
       isActive: true,
     })
   }
@@ -112,8 +127,11 @@ export default function ClinicsPage() {
         const updateData: Record<string, unknown> = {
           name: formData.name,
           companyName: formData.companyName || null,
-          province: formData.province,
+          address: formData.address,
           branchName: formData.branchName || null,
+          invoiceName: formData.invoiceName || null,
+          contactName: formData.contactName || null,
+          contactPhone: formData.contactPhone || null,
           isActive: formData.isActive,
         }
 
@@ -142,10 +160,10 @@ export default function ClinicsPage() {
         }
       } else {
         // Create clinic
-        if (!formData.name || !formData.province) {
+        if (!formData.name || !formData.address) {
           await alert({
             title: locale === 'th' ? 'ข้อมูลไม่ครบถ้วน' : 'Missing Information',
-            message: locale === 'th' ? 'กรุณากรอกชื่อและจังหวัด' : 'Please enter name and province',
+            message: locale === 'th' ? 'กรุณากรอกชื่อและที่อยู่' : 'Please enter name and address',
             variant: 'warning',
             icon: 'warning',
           })
@@ -159,8 +177,11 @@ export default function ClinicsPage() {
           body: JSON.stringify({
             name: formData.name,
             companyName: formData.companyName || null,
-            province: formData.province,
+            address: formData.address,
             branchName: formData.branchName || null,
+            invoiceName: formData.invoiceName || null,
+            contactName: formData.contactName || null,
+            contactPhone: formData.contactPhone || null,
             isActive: formData.isActive,
           }),
         })
@@ -470,7 +491,7 @@ export default function ClinicsPage() {
                         <div className="text-xs text-[var(--color-charcoal)]/70">{clinic.companyName}</div>
                       )}
                       <div className="text-xs text-[var(--color-foreground-muted)]">
-                        {clinic.province} {clinic.branchName && `• ${clinic.branchName}`}
+                        {clinic.address} {clinic.branchName && `• ${clinic.branchName}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -546,10 +567,13 @@ export default function ClinicsPage() {
                       {locale === 'th' ? 'บริษัท' : 'Company'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
-                      {locale === 'th' ? 'จังหวัด' : 'Province'}
+                      {locale === 'th' ? 'ที่อยู่' : 'Address'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'สาขา' : 'Branch'}
+                    </th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                      {locale === 'th' ? 'ผู้ติดต่อ' : 'Contact'}
                     </th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
                       {locale === 'th' ? 'สถานะ' : 'Status'}
@@ -571,9 +595,21 @@ export default function ClinicsPage() {
                           <span className="text-[var(--color-foreground-muted)]">-</span>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-[var(--color-charcoal)]">{clinic.province}</td>
+                      <td className="px-5 py-4 text-[var(--color-charcoal)]">{clinic.address}</td>
                       <td className="px-5 py-4 text-[var(--color-charcoal)]">
                         {clinic.branchName || (
+                          <span className="text-[var(--color-foreground-muted)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-[var(--color-charcoal)]">
+                        {clinic.contactName ? (
+                          <div>
+                            <div className="text-sm">{clinic.contactName}</div>
+                            {clinic.contactPhone && (
+                              <div className="text-xs text-[var(--color-foreground-muted)]">{clinic.contactPhone}</div>
+                            )}
+                          </div>
+                        ) : (
                           <span className="text-[var(--color-foreground-muted)]">-</span>
                         )}
                       </td>
@@ -648,7 +684,7 @@ export default function ClinicsPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4">
               {editingClinic
                 ? (locale === 'th' ? 'แก้ไขคลินิก' : 'Edit Clinic')
@@ -673,9 +709,9 @@ export default function ClinicsPage() {
               <div>
                 <label className={labelClass}>
                   {locale === 'th' ? 'ชื่อบริษัท' : 'Company Name'}
-                  <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                  {/* <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
                     ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
-                  </span>
+                  </span> */}
                 </label>
                 <input
                   type="text"
@@ -688,23 +724,23 @@ export default function ClinicsPage() {
 
               <div>
                 <label className={labelClass}>
-                  {locale === 'th' ? 'จังหวัด' : 'Province'} <span className="text-red-500">*</span>
+                  {locale === 'th' ? 'ที่อยู่' : 'Address'} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  value={formData.province}
-                  onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className={inputClass}
-                  placeholder={locale === 'th' ? 'จังหวัด' : 'Province'}
+                  placeholder={locale === 'th' ? 'ที่อยู่' : 'Address'}
                 />
               </div>
 
               <div>
                 <label className={labelClass}>
                   {locale === 'th' ? 'สาขา' : 'Branch'}
-                  <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                  {/* <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
                     ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
-                  </span>
+                  </span> */}
                 </label>
                 <input
                   type="text"
@@ -712,6 +748,54 @@ export default function ClinicsPage() {
                   onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
                   className={inputClass}
                   placeholder={locale === 'th' ? 'ชื่อสาขา (ถ้ามี)' : 'Branch name (if any)'}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  {locale === 'th' ? 'ชื่อออกบิล' : 'Invoice Name'}
+                  {/* <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                    ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
+                  </span> */}
+                </label>
+                <input
+                  type="text"
+                  value={formData.invoiceName}
+                  onChange={(e) => setFormData({ ...formData, invoiceName: e.target.value })}
+                  className={inputClass}
+                  placeholder={locale === 'th' ? 'ชื่อออกบิล (ถ้ามี)' : 'Invoice name (if any)'}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  {locale === 'th' ? 'ชื่อผู้ติดต่อ' : 'Contact Name'}
+                  {/* <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                    ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
+                  </span> */}
+                </label>
+                <input
+                  type="text"
+                  value={formData.contactName}
+                  onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                  className={inputClass}
+                  placeholder={locale === 'th' ? 'ชื่อผู้ติดต่อ (ถ้ามี)' : 'Contact name (if any)'}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  {locale === 'th' ? 'เบอร์โทรศัพท์' : 'Phone Number'}
+                  {/* <span className="text-[var(--color-foreground-muted)] font-normal ml-1">
+                    ({locale === 'th' ? 'ไม่จำเป็น' : 'Optional'})
+                  </span> */}
+                </label>
+                <input
+                  type="text"
+                  value={formData.contactPhone}
+                  onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                  className={inputClass}
+                  placeholder={locale === 'th' ? 'เบอร์โทรศัพท์ (ถ้ามี)' : 'Phone number (if any)'}
                 />
               </div>
 
@@ -784,8 +868,8 @@ export default function ClinicsPage() {
               </h4>
               <ul className="text-xs text-blue-700 space-y-1">
                 <li>• Excel (.xlsx, .xls) {locale === 'th' ? 'หรือ' : 'or'} CSV</li>
-                <li>• {locale === 'th' ? 'คอลัมน์ที่ต้องการ:' : 'Required columns:'} <strong>name/ชื่อ</strong>, <strong>province/จังหวัด</strong></li>
-                <li>• {locale === 'th' ? 'คอลัมน์เสริม:' : 'Optional columns:'} branch/สาขา, isActive/สถานะ</li>
+                <li>• {locale === 'th' ? 'คอลัมน์ที่ต้องการ:' : 'Required columns:'} <strong>name/ชื่อ</strong>, <strong>address/ที่อยู่</strong></li>
+                <li>• {locale === 'th' ? 'คอลัมน์เสริม:' : 'Optional columns:'} branch/สาขา, company/บริษัท, invoiceName/ชื่อออกบิล, contactName/ผู้ติดต่อ, contactPhone/เบอร์โทร, isActive/สถานะ</li>
               </ul>
             </div>
 
@@ -866,7 +950,7 @@ export default function ClinicsPage() {
                     <ul className="mt-1 text-xs text-amber-600 pl-4 space-y-0.5">
                       {importResult.skippedItems.map((item, idx) => (
                         <li key={idx}>
-                          {item.name} ({item.province}{item.branchName ? `, ${item.branchName}` : ''})
+                          {item.name} ({item.address}{item.branchName ? `, ${item.branchName}` : ''})
                         </li>
                       ))}
                     </ul>

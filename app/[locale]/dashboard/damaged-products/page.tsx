@@ -42,7 +42,7 @@ interface SearchResult {
   assignedClinic?: {
     id: number
     name: string
-    province: string
+    address: string
   } | null
   activation?: {
     customerName: string
@@ -179,6 +179,8 @@ export default function DamagedProductsPage() {
   const [borrowTaxInvoice, setBorrowTaxInvoice] = useState('')
   const [borrowReason, setBorrowReason] = useState('')
   const [borrowRemarks, setBorrowRemarks] = useState('')
+  const [borrowContactName, setBorrowContactName] = useState('')
+  const [borrowContactPhone, setBorrowContactPhone] = useState('')
   const [isBorrowSubmitting, setIsBorrowSubmitting] = useState(false)
 
   // --- History ---
@@ -194,7 +196,7 @@ export default function DamagedProductsPage() {
 
   // --- Convert to Outbound Modal ---
   const [showConvertModal, setShowConvertModal] = useState(false)
-  const [convertClinics, setConvertClinics] = useState<{id:number,name:string,province:string,branchName:string|null}[]>([])
+  const [convertClinics, setConvertClinics] = useState<{id:number,name:string,address:string,branchName:string|null}[]>([])
   const [convertWarehouses, setConvertWarehouses] = useState<{id:number,name:string}[]>([])
   const [convertShippingMethods, setConvertShippingMethods] = useState<{id:number,nameTh:string}[]>([])
   const [convertClinicId, setConvertClinicId] = useState(0)
@@ -212,7 +214,7 @@ export default function DamagedProductsPage() {
   const [convertClinicSearch, setConvertClinicSearch] = useState('')
 
   // --- Claim Tab ---
-  const [claimClinics, setClaimClinics] = useState<{ id: number; name: string; province: string }[]>([])
+  const [claimClinics, setClaimClinics] = useState<{ id: number; name: string; address: string }[]>([])
   const [claimProducts, setClaimProducts] = useState<{ id: number; sku: string; nameTh: string; modelSize: string | null }[]>([])
   const [claimClinicId, setClaimClinicId] = useState(0)
   const [claimProductId, setClaimProductId] = useState(0)
@@ -224,7 +226,7 @@ export default function DamagedProductsPage() {
   const [claimList, setClaimList] = useState<Array<{
     id: number; claimNumber: string; quantity: number; reason: string; note: string | null; status: string
     createdAt: string; rejectReason: string | null
-    clinic: { name: string; province: string }
+    clinic: { name: string; address: string }
     productMaster: { sku: string; nameTh: string; modelSize: string | null }
     createdBy: { displayName: string }
     attachments: Array<{ id: number; fileUrl: string; fileName: string }>
@@ -670,6 +672,8 @@ export default function DamagedProductsPage() {
     setBorrowTaxInvoice('')
     setBorrowReason('')
     setBorrowRemarks('')
+    setBorrowContactName('')
+    setBorrowContactPhone('')
     setBorrowProductsFilter('')
     setBorrowProductsPagination((prev) => ({ ...prev, page: 1 }))
   }
@@ -695,6 +699,8 @@ export default function DamagedProductsPage() {
           borrowerName: borrowerName.trim(),
           clinicName: borrowClinicName.trim() || undefined,
           clinicAddress: borrowClinicAddress.trim() || undefined,
+          contactName: borrowContactName.trim() || undefined,
+          contactPhone: borrowContactPhone.trim() || undefined,
           taxInvoiceRef: borrowTaxInvoice.trim() || undefined,
           reason: borrowReason.trim() || undefined,
           remarks: borrowRemarks.trim() || undefined,
@@ -987,6 +993,7 @@ export default function DamagedProductsPage() {
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สินค้า' : 'Product'}</th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'สาเหตุ' : 'Reason'}</th>
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'หมายเหตุ' : 'Note'}</th>
                     <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'วันที่' : 'Date'}</th>
                     <th className="px-5 py-4 text-right text-sm font-semibold text-[var(--color-charcoal)]">{locale === 'th' ? 'จัดการ' : 'Actions'}</th>
                   </tr>
@@ -994,7 +1001,7 @@ export default function DamagedProductsPage() {
                 <tbody className="divide-y divide-[var(--color-beige)]">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="p-12 text-center">
+                      <td colSpan={7} className="p-12 text-center">
                         <div className="relative w-10 h-10 mx-auto mb-3">
                           <div className="absolute inset-0 rounded-full border-4 border-[var(--color-beige)]" />
                           <div className="absolute inset-0 rounded-full border-4 border-[var(--color-gold)] border-t-transparent animate-spin" />
@@ -1004,7 +1011,7 @@ export default function DamagedProductsPage() {
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-12 text-center">
+                      <td colSpan={7} className="p-12 text-center">
                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-beige)]/50 flex items-center justify-center">
                           <svg className="w-8 h-8 text-[var(--color-foreground-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -1032,6 +1039,9 @@ export default function DamagedProductsPage() {
                         <td className="px-5 py-4">{getStatusBadge(item.status)}</td>
                         <td className="px-5 py-4">
                           <p className="text-sm text-red-600">{item.damageNote?.reason || '-'}</p>
+                        </td>
+                        <td className="px-5 py-4">
+                          <p className="text-sm text-[var(--color-foreground-muted)]">{item.damageNote?.note || '-'}</p>
                         </td>
                         <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">
                           {formatDate(item.damagedAt)}
@@ -1441,7 +1451,7 @@ export default function DamagedProductsPage() {
                   >
                     <option value={0}>{locale === 'th' ? '-- เลือกคลินิก --' : '-- Select clinic --'}</option>
                     {claimClinics.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.province})</option>
+                      <option key={c.id} value={c.id}>{c.name} ({c.address})</option>
                     ))}
                   </select>
                 </div>
@@ -1820,6 +1830,30 @@ export default function DamagedProductsPage() {
                         onChange={(e) => setBorrowClinicAddress(e.target.value)}
                         className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
                         placeholder={locale === 'th' ? 'กรอกที่อยู่' : 'Enter address'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'ชื่อผู้ติดต่อ' : 'Contact Name'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowContactName}
+                        onChange={(e) => setBorrowContactName(e.target.value)}
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
+                        placeholder={locale === 'th' ? 'ชื่อผู้ติดต่อ' : 'Contact name'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        {locale === 'th' ? 'เบอร์โทรศัพท์' : 'Phone'}
+                      </label>
+                      <input
+                        type="text"
+                        value={borrowContactPhone}
+                        onChange={(e) => setBorrowContactPhone(e.target.value)}
+                        className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
+                        placeholder={locale === 'th' ? 'เบอร์โทรศัพท์' : 'Phone number'}
                       />
                     </div>
                     <div>
@@ -2433,7 +2467,7 @@ export default function DamagedProductsPage() {
                   (() => {
                     const matches = convertClinics.filter((c) =>
                       c.name.toLowerCase().includes(convertClinicSearch.toLowerCase()) ||
-                      c.province?.toLowerCase().includes(convertClinicSearch.toLowerCase()) ||
+                      c.address?.toLowerCase().includes(convertClinicSearch.toLowerCase()) ||
                       c.branchName?.toLowerCase().includes(convertClinicSearch.toLowerCase())
                     ).slice(0, 5)
                     return matches.length > 0 ? (
@@ -2450,7 +2484,7 @@ export default function DamagedProductsPage() {
                           >
                             <span className="font-medium">{c.name}</span>
                             {c.branchName && <span className="text-[var(--color-foreground-muted)]"> ({c.branchName})</span>}
-                            <span className="text-[var(--color-foreground-muted)]"> - {c.province}</span>
+                            <span className="text-[var(--color-foreground-muted)]"> - {c.address}</span>
                           </button>
                         ))}
                       </div>

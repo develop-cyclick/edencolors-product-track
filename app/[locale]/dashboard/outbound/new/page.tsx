@@ -8,7 +8,7 @@ import { useAlert } from '@/components/ui/confirm-modal'
 interface Clinic {
   id: number
   name: string
-  province: string
+  address: string
   branchName: string | null
 }
 
@@ -282,7 +282,7 @@ export default function NewOutboundPage() {
     // Update address when clinic changes
     const clinic = clinics.find((c) => c.id === clinicId)
     if (clinic) {
-      setClinicAddress(`${clinic.name}, ${clinic.province}${clinic.branchName ? ` (${clinic.branchName})` : ''}`)
+      setClinicAddress(`${clinic.name}, ${clinic.address}${clinic.branchName ? ` (${clinic.branchName})` : ''}`)
     }
   }, [clinicId, clinics])
 
@@ -342,7 +342,7 @@ export default function NewOutboundPage() {
     const searchLower = clinicSearch.toLowerCase()
     return (
       c.name.toLowerCase().includes(searchLower) ||
-      c.province.toLowerCase().includes(searchLower) ||
+      c.address.toLowerCase().includes(searchLower) ||
       (c.branchName && c.branchName.toLowerCase().includes(searchLower))
     )
   })
@@ -350,7 +350,7 @@ export default function NewOutboundPage() {
   // Get selected clinic display text
   const selectedClinic = clinics.find((c) => c.id === clinicId)
   const clinicDisplayText = selectedClinic
-    ? `${selectedClinic.name} (${selectedClinic.province})`
+    ? `${selectedClinic.name} (${selectedClinic.address})`
     : ''
 
   const addLine = () => {
@@ -632,7 +632,7 @@ export default function NewOutboundPage() {
                         >
                           <div className="font-medium">{c.name}</div>
                           <div className="text-xs text-[var(--color-foreground-muted)]">
-                            {c.province} {c.branchName && `• ${c.branchName}`}
+                            {c.address} {c.branchName && `• ${c.branchName}`}
                           </div>
                         </div>
                       ))

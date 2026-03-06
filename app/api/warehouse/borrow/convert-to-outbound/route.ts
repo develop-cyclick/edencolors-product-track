@@ -68,7 +68,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       })
       if (!defaultClinic) {
         defaultClinic = await prisma.clinic.create({
-          data: { name: 'อื่นๆ (Other)', province: '-', isActive: true },
+          data: { name: 'อื่นๆ (Other)', address: '-', isActive: true },
         })
       }
       clinicId = defaultClinic.id

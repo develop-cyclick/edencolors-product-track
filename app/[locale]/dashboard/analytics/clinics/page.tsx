@@ -180,7 +180,7 @@ export default function ClinicsPage() {
         <div className="flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-sm font-medium text-[#666666] mb-2">
-              {locale === 'th' ? 'จังหวัด' : 'Province'}
+              {locale === 'th' ? 'ที่อยู่' : 'Address'}
             </label>
             <select
               value={selectedProvince}
@@ -218,7 +218,7 @@ export default function ClinicsPage() {
                   onClick={() => handleSort('province')}
                 >
                   <div className="flex items-center gap-2">
-                    {locale === 'th' ? 'จังหวัด' : 'Province'}
+                    {locale === 'th' ? 'ที่อยู่' : 'Address'}
                     <SortIcon column="province" />
                   </div>
                 </th>

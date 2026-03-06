@@ -24,7 +24,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
           select: {
             id: true,
             name: true,
-            province: true,
+            address: true,
             branchName: true,
           },
         },

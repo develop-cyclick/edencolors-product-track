@@ -7,9 +7,10 @@ import { isValidSerialNumber } from '@/lib/serial-generator'
 interface UpdateCustomerInfoRequest {
   token?: string
   serial?: string
-  customerName?: string
   age?: number
-  gender?: 'M' | 'F' | 'Other'
+  gender?: string
+  income?: string
+  discoveryChannel?: string
 }
 
 // POST /api/public/update-customer-info
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: UpdateCustomerInfoRequest = await request.json()
-    const { token, serial, customerName, age, gender } = body
+    const { token, serial, age, gender, income, discoveryChannel } = body
 
     // Either token or serial must be provided
     if (!token && !serial) {
@@ -41,21 +42,14 @@ export async function POST(request: NextRequest) {
     }
 
     // At least one field to update must be provided
-    if (!customerName && !age && !gender) {
+    if (!age && !gender && !income && !discoveryChannel) {
       return NextResponse.json(
         { success: false, error: 'At least one field to update is required' },
         { status: 400 }
       )
     }
 
-    // Validate customer info
-    if (customerName && customerName.trim().length < 2) {
-      return NextResponse.json(
-        { success: false, error: 'Name must be at least 2 characters' },
-        { status: 400 }
-      )
-    }
-
+    // Validate age
     if (age !== undefined && (age < 1 || age > 150)) {
       return NextResponse.json(
         { success: false, error: 'Age must be between 1 and 150' },
@@ -63,7 +57,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (gender && !['M', 'F', 'Other'].includes(gender)) {
+    // Validate gender
+    const validGenders = ['M', 'F', 'Non-binary', 'Other', 'Prefer not to say']
+    if (gender && !validGenders.includes(gender)) {
       return NextResponse.json(
         { success: false, error: 'Invalid gender value' },
         { status: 400 }
@@ -140,9 +136,10 @@ export async function POST(request: NextRequest) {
 
     // Update the activation record
     const updateData: Record<string, unknown> = {}
-    if (customerName) updateData.customerName = customerName.trim()
     if (age) updateData.age = age
     if (gender) updateData.gender = gender
+    if (income) updateData.income = income
+    if (discoveryChannel) updateData.discoveryChannel = discoveryChannel
 
     await prisma.activation.update({
       where: { id: latestActivation.id },

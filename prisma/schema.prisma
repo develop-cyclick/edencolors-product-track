@@ -210,14 +210,17 @@ model User {
 }
 
 model Clinic {
-  id           Int      @id @default(autoincrement())
-  name         String
-  companyName  String?  @map("company_name")
-  province     String
-  branchName   String?  @map("branch_name")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            Int      @id @default(autoincrement())
+  name          String
+  companyName   String?  @map("company_name")
+  address       String   @map("province") // เดิมเป็น province เปลี่ยนเป็น address
+  branchName    String?  @map("branch_name")
+  invoiceName   String?  @map("invoice_name") // ชื่อออกบิล
+  contactName   String?  @map("contact_name") // ชื่อผู้ติดต่อ
+  contactPhone  String?  @map("contact_phone") // เบอร์โทรศัพท์
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   products        ProductItem[]
   outbounds       OutboundHeader[]
@@ -463,9 +466,11 @@ model Activation {
   activationNumber Int      @default(1) @map("activation_number") // ครั้งที่ activate (1, 2, 3...)
   customerName     String?  @map("customer_name") // optional
   age              Int?     // optional
-  gender           String?  // M/F/Other - optional
+  gender           String?  // M/F/Non-binary/Other/Prefer not to say - optional
   province         String?  // optional
   phone            String?
+  income           String?  // income range - optional
+  discoveryChannel String?  @map("discovery_channel") // how they found the product - optional
   consentAt        DateTime @map("consent_at")
   policyVersion    String   @map("policy_version")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -629,6 +634,8 @@ model BorrowTransaction {
   clinicName        String?       @map("clinic_name")
   clinicAddress     String?       @map("clinic_address")
   taxInvoiceRef     String?       @map("tax_invoice_ref")
+  contactName       String?       @map("contact_name")
+  contactPhone      String?       @map("contact_phone")
   reason            String?
   remarks           String?
   createdById       Int           @map("created_by_id")

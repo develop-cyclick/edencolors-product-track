@@ -25,7 +25,7 @@ interface Outbound {
   createdAt: string
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string }
-  clinic: { id: number; name: string; province: string }
+  clinic: { id: number; name: string; address: string }
   createdBy: { id: number; displayName: string }
   approvedBy: { id: number; displayName: string } | null
   purchaseOrder: POSummary | null
@@ -255,7 +255,7 @@ export default function OutboundListPage() {
                         {ob.clinic.name}
                       </p>
                       <p className="text-xs text-[var(--color-foreground-muted)]">
-                        {ob.clinic.province}
+                        {ob.clinic.address}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[var(--color-foreground-muted)]">
                         <span>{formatDate(ob.createdAt)}</span>
@@ -335,7 +335,7 @@ export default function OutboundListPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="text-sm font-medium text-[var(--color-charcoal)]">{ob.clinic.name}</div>
-                        <div className="text-xs text-[var(--color-foreground-muted)]">{ob.clinic.province}</div>
+                        <div className="text-xs text-[var(--color-foreground-muted)]">{ob.clinic.address}</div>
                       </td>
                       <td className="px-5 py-4">
                         {ob.purchaseOrder ? (

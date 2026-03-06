@@ -47,7 +47,7 @@ interface Outbound {
   remarks: string | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string }
-  clinic: { id: number; name: string; province: string; branchName: string | null }
+  clinic: { id: number; name: string; address: string; branchName: string | null }
   createdBy: { id: number; displayName: string }
   approvedBy: { id: number; displayName: string } | null
   lines: Array<{
@@ -141,7 +141,7 @@ interface DamagedClaim {
   createdAt: string
   approvedAt: string | null
   rejectReason: string | null
-  clinic: { id: number; name: string; province: string }
+  clinic: { id: number; name: string; address: string }
   productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
   createdBy: { id: number; displayName: string }
   approvedBy: { id: number; displayName: string } | null
@@ -1141,8 +1141,8 @@ export default function ApprovalBoardPage() {
                                 </div>
                               )}
                               <div>
-                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'จังหวัด:' : 'Province:'}</span>
-                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.province}</span>
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่:' : 'Address:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.address}</span>
                               </div>
                             </div>
                           </div>
@@ -1418,7 +1418,7 @@ export default function ApprovalBoardPage() {
                         <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'คลินิก' : 'Clinic'}</p>
                           <p className="font-medium text-[var(--color-charcoal)]">{claim.clinic.name}</p>
-                          <p className="text-xs text-[var(--color-foreground-muted)]">{claim.clinic.province}</p>
+                          <p className="text-xs text-[var(--color-foreground-muted)]">{claim.clinic.address}</p>
                         </div>
                         <div className="p-3 bg-[var(--color-off-white)] rounded-xl">
                           <p className="text-xs text-[var(--color-foreground-muted)] mb-1">{locale === 'th' ? 'สินค้า' : 'Product'}</p>

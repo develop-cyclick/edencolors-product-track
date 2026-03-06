@@ -8,7 +8,7 @@ import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 interface Clinic {
   id: number
   name: string
-  province: string
+  address: string
   branchName: string | null
 }
 
@@ -373,7 +373,7 @@ export default function PurchaseOrdersPage() {
 
   const filteredClinics = clinics.filter((c) => {
     const search = clinicSearch.toLowerCase()
-    return c.name.toLowerCase().includes(search) || c.province.toLowerCase().includes(search) || (c.branchName && c.branchName.toLowerCase().includes(search))
+    return c.name.toLowerCase().includes(search) || c.address.toLowerCase().includes(search) || (c.branchName && c.branchName.toLowerCase().includes(search))
   })
 
   const selectedClinic = clinics.find((c) => c.id === formClinicId)
@@ -420,7 +420,7 @@ export default function PurchaseOrdersPage() {
                 <option value={0}>{locale === 'th' ? '-- ทั้งหมด --' : '-- All --'}</option>
                 {clinics.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.province})
+                    {c.name} ({c.address})
                   </option>
                 ))}
               </select>
@@ -525,7 +525,7 @@ export default function PurchaseOrdersPage() {
                     <td className="px-5 py-4">
                       <div className="font-medium text-[var(--color-charcoal)]">{po.clinic.name}</div>
                       <div className="text-xs text-[var(--color-foreground-muted)]">
-                        {po.clinic.province} {po.clinic.branchName && `• ${po.clinic.branchName}`}
+                        {po.clinic.address} {po.clinic.branchName && `• ${po.clinic.branchName}`}
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -642,7 +642,7 @@ export default function PurchaseOrdersPage() {
                       />
                     ) : (
                       <span className={formClinicId ? 'text-[var(--color-charcoal)]' : 'text-[var(--color-foreground-muted)]'}>
-                        {selectedClinic ? `${selectedClinic.name} (${selectedClinic.province})` : locale === 'th' ? '-- เลือกคลินิก --' : '-- Select Clinic --'}
+                        {selectedClinic ? `${selectedClinic.name} (${selectedClinic.address})` : locale === 'th' ? '-- เลือกคลินิก --' : '-- Select Clinic --'}
                       </span>
                     )}
                   </div>
@@ -671,7 +671,7 @@ export default function PurchaseOrdersPage() {
                           >
                             <div className="font-medium">{c.name}</div>
                             <div className="text-xs text-[var(--color-foreground-muted)]">
-                              {c.province} {c.branchName && `• ${c.branchName}`}
+                              {c.address} {c.branchName && `• ${c.branchName}`}
                             </div>
                           </div>
                         ))
@@ -902,7 +902,7 @@ export default function PurchaseOrdersPage() {
               <div>
                 <h3 className="text-lg font-semibold text-[var(--color-charcoal)]">{selectedPO.poNo}</h3>
                 <p className="text-sm text-[var(--color-foreground-muted)]">
-                  {selectedPO.clinic.name} ({selectedPO.clinic.province})
+                  {selectedPO.clinic.name} ({selectedPO.clinic.address})
                 </p>
               </div>
               <button onClick={closeDetailModal} className="p-2 text-[var(--color-foreground-muted)] hover:text-[var(--color-charcoal)] rounded-lg transition-colors">

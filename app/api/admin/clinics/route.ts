@@ -23,16 +23,19 @@ export const POST = withAdmin(async (request: NextRequest) => {
     const body = await request.json()
 
     // Validate required fields
-    if (!body.name || !body.province) {
-      return errorResponse('Name and province are required', 400)
+    if (!body.name || !body.address) {
+      return errorResponse('Name and address are required', 400)
     }
 
     const clinic = await prisma.clinic.create({
       data: {
         name: body.name,
         companyName: body.companyName || null,
-        province: body.province,
+        address: body.address,
         branchName: body.branchName || null,
+        invoiceName: body.invoiceName || null,
+        contactName: body.contactName || null,
+        contactPhone: body.contactPhone || null,
         isActive: body.isActive ?? true,
       },
     })

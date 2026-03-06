@@ -14,9 +14,11 @@ interface ActivationRequest {
   // Optional customer info
   customerName?: string
   age?: number
-  gender?: 'M' | 'F' | 'Other'
+  gender?: string
   province?: string
   phone?: string
+  income?: string
+  discoveryChannel?: string
 }
 
 // POST /api/public/activate
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
     const body: ActivationRequest = await request.json()
 
     // Validate required fields
-    const { token, serial, customerName, age, gender, province, phone, consent, quantity: rawQty } = body
+    const { token, serial, customerName, age, gender, province, phone, income, discoveryChannel, consent, quantity: rawQty } = body
     const quantity = Math.max(1, Math.floor(rawQty || 1))
 
     // Either token or serial must be provided
@@ -79,7 +81,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (gender && !['M', 'F', 'Other'].includes(gender)) {
+    const validGenders = ['M', 'F', 'Non-binary', 'Other', 'Prefer not to say']
+    if (gender && !validGenders.includes(gender)) {
       return NextResponse.json(
         { success: false, error: 'Invalid gender value' },
         { status: 400 }
@@ -260,6 +263,8 @@ export async function POST(request: NextRequest) {
       gender: gender || null,
       province: province?.trim() || null,
       phone: phone?.trim() || null,
+      income: income || null,
+      discoveryChannel: discoveryChannel || null,
       consentAt: now,
       policyVersion: CURRENT_POLICY_VERSION,
     }))

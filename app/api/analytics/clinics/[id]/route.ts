@@ -32,7 +32,12 @@ async function handleGET(
     }
 
     // Calculate demographic stats from activations
-    const demographics = {
+    const demographics: {
+      gender: { male: number; female: number; other: number };
+      ageGroups: Record<string, number>;
+      incomeDistribution: Array<{ income: string; count: number }>;
+      discoveryChannelDistribution: Array<{ channel: string; count: number }>;
+    } = {
       gender: {
         male: 0,
         female: 0,
@@ -45,7 +50,12 @@ async function handleGET(
         '46-60': 0,
         '60+': 0,
       },
+      incomeDistribution: [],
+      discoveryChannelDistribution: [],
     };
+
+    const incomeCounts: Record<string, number> = {};
+    const channelCounts: Record<string, number> = {};
 
     // Process all activations to calculate demographics
     clinicData.productItems.forEach((item) => {
@@ -73,8 +83,26 @@ async function handleGET(
             demographics.ageGroups['60+']++;
           }
         }
+
+        // Income distribution
+        if (activation.income) {
+          incomeCounts[activation.income] = (incomeCounts[activation.income] || 0) + 1;
+        }
+
+        // Discovery channel distribution
+        if (activation.discoveryChannel) {
+          channelCounts[activation.discoveryChannel] = (channelCounts[activation.discoveryChannel] || 0) + 1;
+        }
       });
     });
+
+    demographics.incomeDistribution = Object.entries(incomeCounts)
+      .map(([income, count]) => ({ income, count }))
+      .sort((a, b) => b.count - a.count);
+
+    demographics.discoveryChannelDistribution = Object.entries(channelCounts)
+      .map(([channel, count]) => ({ channel, count }))
+      .sort((a, b) => b.count - a.count);
 
     // Calculate days to activation for each product item
     const productsWithDays = clinicData.productItems.map((item) => {

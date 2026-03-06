@@ -26,7 +26,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       include: {
         warehouse: { select: { id: true, name: true } },
         shippingMethod: { select: { id: true, nameTh: true, nameEn: true } },
-        clinic: { select: { id: true, name: true, province: true, branchName: true } },
+        clinic: { select: { id: true, name: true, address: true, branchName: true } },
         createdBy: { select: { id: true, displayName: true, username: true } },
         approvedBy: { select: { id: true, displayName: true, username: true } },
         purchaseOrder: { select: { id: true, poNo: true } },
@@ -51,7 +51,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     const pdfData = {
       deliveryNoteNo: outbound.deliveryNoteNo,
       customerName: outbound.clinic?.name || '',
-      customerAddress: outbound.clinicAddress || `${outbound.clinic?.province || ''}${outbound.clinic?.branchName ? ` (${outbound.clinic.branchName})` : ''}`,
+      customerAddress: outbound.clinicAddress || `${outbound.clinic?.address || ''}${outbound.clinic?.branchName ? ` (${outbound.clinic.branchName})` : ''}`,
       customerPhone: outbound.clinicPhone || '',
       customerContact: outbound.clinicContactName || '',
       shippedDate: (outbound.shippedAt || outbound.createdAt).toISOString(),

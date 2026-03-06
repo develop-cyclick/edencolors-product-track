@@ -15,7 +15,7 @@ interface ProductDetail {
   status: string
   activatedAt: string | null
   category: { id: number; nameTh: string; nameEn: string }
-  assignedClinic: { id: number; name: string; province: string; branchName: string | null } | null
+  assignedClinic: { id: number; name: string; address: string; branchName: string | null } | null
   qrTokens: Array<{
     id: number
     tokenVersion: number
@@ -329,7 +329,7 @@ export default function ProductDetailPage() {
                     </h3>
                     <div className="bg-[var(--color-off-white)] rounded-xl p-4">
                       <p className="font-medium text-[var(--color-charcoal)]">{product.assignedClinic.name}</p>
-                      <p className="text-sm text-[var(--color-foreground-muted)] mt-1">{product.assignedClinic.province}</p>
+                      <p className="text-sm text-[var(--color-foreground-muted)] mt-1">{product.assignedClinic.address}</p>
                       {product.assignedClinic.branchName && (
                         <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
                           {locale === 'th' ? 'สาขา' : 'Branch'}: {product.assignedClinic.branchName}

@@ -85,7 +85,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
                 select: {
                   id: true,
                   name: true,
-                  province: true,
+                  address: true,
                 },
               },
               outboundLines: {
@@ -140,11 +140,13 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         productName: activation.productItem.name,
         sku: activation.productItem.sku,
         clinicName: activation.productItem.assignedClinic?.name || 'Unknown',
-        clinicProvince: activation.productItem.assignedClinic?.province || 'Unknown',
+        clinicProvince: activation.productItem.assignedClinic?.address || 'Unknown',
         customerName: activation.customerName,
         age: activation.age,
         gender: activation.gender,
         province: activation.province,
+        income: (activation as any).income || null,
+        discoveryChannel: (activation as any).discoveryChannel || null,
         createdAt: activation.createdAt,
         daysToActivation,
       };
@@ -160,7 +162,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         select: {
           id: true,
           name: true,
-          province: true,
+          address: true,
         },
         orderBy: { name: 'asc' },
       }),

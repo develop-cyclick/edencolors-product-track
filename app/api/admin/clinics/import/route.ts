@@ -7,8 +7,11 @@ import * as XLSX from 'xlsx'
 interface ClinicRow {
   name: string
   companyName?: string
-  province: string
+  address: string
   branchName?: string
+  invoiceName?: string
+  contactName?: string
+  contactPhone?: string
   isActive?: boolean
 }
 
@@ -53,7 +56,8 @@ export const POST = withAdmin(async (request: NextRequest) => {
     const columnMapping: Record<string, keyof ClinicRow> = {
       // English
       name: 'name',
-      province: 'province',
+      address: 'address',
+      province: 'address',
       branch: 'branchName',
       branchname: 'branchName',
       branch_name: 'branchName',
@@ -63,14 +67,29 @@ export const POST = withAdmin(async (request: NextRequest) => {
       companyname: 'companyName',
       company_name: 'companyName',
       company: 'companyName',
+      invoicename: 'invoiceName',
+      invoice_name: 'invoiceName',
+      invoice: 'invoiceName',
+      contactname: 'contactName',
+      contact_name: 'contactName',
+      contact: 'contactName',
+      contactphone: 'contactPhone',
+      contact_phone: 'contactPhone',
+      phone: 'contactPhone',
       // Thai
       'ชื่อ': 'name',
       'ชื่อคลินิก': 'name',
       'ชื่อบริษัท': 'companyName',
       'บริษัท': 'companyName',
-      'จังหวัด': 'province',
+      'ที่อยู่': 'address',
+      'จังหวัด': 'address',
       'สาขา': 'branchName',
       'ชื่อสาขา': 'branchName',
+      'ชื่อออกบิล': 'invoiceName',
+      'ชื่อผู้ติดต่อ': 'contactName',
+      'ผู้ติดต่อ': 'contactName',
+      'เบอร์โทร': 'contactPhone',
+      'เบอร์โทรศัพท์': 'contactPhone',
       'สถานะ': 'isActive',
     }
 
@@ -104,16 +123,19 @@ export const POST = withAdmin(async (request: NextRequest) => {
         validationErrors.push(`Row ${rowNum}: Missing name/ชื่อ`)
         continue
       }
-      if (!clinic.province) {
-        validationErrors.push(`Row ${rowNum}: Missing province/จังหวัด`)
+      if (!clinic.address) {
+        validationErrors.push(`Row ${rowNum}: Missing address/ที่อยู่`)
         continue
       }
 
       clinicsToCreate.push({
         name: clinic.name,
         companyName: clinic.companyName || undefined,
-        province: clinic.province,
+        address: clinic.address,
         branchName: clinic.branchName || undefined,
+        invoiceName: clinic.invoiceName || undefined,
+        contactName: clinic.contactName || undefined,
+        contactPhone: clinic.contactPhone || undefined,
         isActive: clinic.isActive ?? true,
       })
     }
@@ -128,11 +150,11 @@ export const POST = withAdmin(async (request: NextRequest) => {
       const skipped = []
 
       for (const clinicData of clinicsToCreate) {
-        // Check if clinic with same name and province already exists
+        // Check if clinic with same name and address already exists
         const existing = await tx.clinic.findFirst({
           where: {
             name: clinicData.name,
-            province: clinicData.province,
+            address: clinicData.address,
             branchName: clinicData.branchName || null,
           },
         })
@@ -140,7 +162,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
         if (existing) {
           skipped.push({
             name: clinicData.name,
-            province: clinicData.province,
+            address: clinicData.address,
             branchName: clinicData.branchName,
             reason: 'Already exists',
           })
@@ -151,8 +173,11 @@ export const POST = withAdmin(async (request: NextRequest) => {
           data: {
             name: clinicData.name,
             companyName: clinicData.companyName || null,
-            province: clinicData.province,
+            address: clinicData.address,
             branchName: clinicData.branchName || null,
+            invoiceName: clinicData.invoiceName || null,
+            contactName: clinicData.contactName || null,
+            contactPhone: clinicData.contactPhone || null,
             isActive: clinicData.isActive ?? true,
           },
         })

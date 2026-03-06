@@ -185,7 +185,7 @@ export async function getClinicDetail(clinicId: number) {
       id: true,
       name: true,
       branchName: true,
-      province: true,
+      address: true,
     },
   });
 
@@ -240,6 +240,8 @@ export async function getClinicDetail(clinicId: number) {
           age: true,
           gender: true,
           province: true,
+          income: true,
+          discoveryChannel: true,
           createdAt: true,
         },
         orderBy: {
@@ -418,6 +420,14 @@ export interface DemographicStats {
     province: string;
     count: number;
   }>;
+  incomeDistribution: Array<{
+    income: string;
+    count: number;
+  }>;
+  discoveryChannelDistribution: Array<{
+    channel: string;
+    count: number;
+  }>;
 }
 
 export async function getDemographicStats(): Promise<DemographicStats> {
@@ -455,6 +465,28 @@ export async function getDemographicStats(): Promise<DemographicStats> {
     LIMIT 10
   `;
 
+  // Income distribution
+  const incomeResult: any[] = await prisma.$queryRaw`
+    SELECT
+      income,
+      COUNT(*)::int as count
+    FROM activations
+    WHERE activation_number = 1 AND income IS NOT NULL AND income != ''
+    GROUP BY income
+    ORDER BY count DESC
+  `;
+
+  // Discovery channel distribution
+  const channelResult: any[] = await prisma.$queryRaw`
+    SELECT
+      discovery_channel as channel,
+      COUNT(*)::int as count
+    FROM activations
+    WHERE activation_number = 1 AND discovery_channel IS NOT NULL AND discovery_channel != ''
+    GROUP BY discovery_channel
+    ORDER BY count DESC
+  `;
+
   return {
     genderDistribution: {
       male: genderResult[0]?.male || 0,
@@ -469,6 +501,8 @@ export async function getDemographicStats(): Promise<DemographicStats> {
       '60+': ageResult[0]?.['60+'] || 0,
     },
     topProvinces: provinceResult,
+    incomeDistribution: incomeResult,
+    discoveryChannelDistribution: channelResult,
   };
 }
 

@@ -25,6 +25,7 @@ interface VerifyResponse {
     modelSize?: string
     category: string
     imageUrl?: string
+    lot?: string
     expiryDate?: string
     status: string
     activationType?: 'SINGLE' | 'PACK'
@@ -33,7 +34,7 @@ interface VerifyResponse {
     canActivate?: boolean
     clinic?: {
       name: string
-      province: string
+      address: string
       branch?: string
     }
     activatedAt?: string
@@ -75,9 +76,11 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
   const [activateQty, setActivateQty] = useState(1)
 
   // Optional customer info
-  const [customerName, setCustomerName] = useState('')
   const [age, setAge] = useState('')
   const [gender, setGender] = useState('')
+  const [income, setIncome] = useState('')
+  const [discoveryChannel, setDiscoveryChannel] = useState('')
+  const [discoveryOther, setDiscoveryOther] = useState('')
   const [submittingCustomerInfo, setSubmittingCustomerInfo] = useState(false)
   const [customerInfoSubmitted, setCustomerInfoSubmitted] = useState(false)
 
@@ -100,9 +103,10 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
           consent: true,
           quantity: activateQty,
           // Include customer info only if provided
-          ...(customerName && { customerName }),
           ...(age && { age: parseInt(age) }),
           ...(gender && { gender }),
+          ...(income && { income }),
+          ...(discoveryChannel && { discoveryChannel: discoveryChannel === 'อื่นๆ' ? discoveryOther || 'อื่นๆ' : discoveryChannel }),
         }),
       })
 
@@ -135,7 +139,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
   }
 
   const handleSubmitCustomerInfo = async () => {
-    if (!identifier || (!customerName && !age && !gender)) return
+    if (!identifier || (!age && !gender && !income && !discoveryChannel)) return
 
     setSubmittingCustomerInfo(true)
     try {
@@ -144,9 +148,10 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(serial ? { serial } : { token }),
-          ...(customerName && { customerName }),
           ...(age && { age: parseInt(age) }),
           ...(gender && { gender }),
+          ...(income && { income }),
+          ...(discoveryChannel && { discoveryChannel: discoveryChannel === 'อื่นๆ' ? discoveryOther || 'อื่นๆ' : discoveryChannel }),
         }),
       })
 
@@ -515,6 +520,12 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
               label={locale === 'th' ? 'หมวดหมู่' : 'Category'}
               value={response.data.category}
             />
+            {response.data.lot && (
+              <InfoRow
+                label={locale === 'th' ? 'เลข Lot' : 'Lot No.'}
+                value={response.data.lot}
+              />
+            )}
             {response.data.expiryDate && (
               <InfoRow
                 label={dict.verify.expiryDate}
@@ -527,14 +538,20 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
               <div className="pt-4 mt-4 border-t border-[var(--color-beige)]">
                 <InfoRow
                   label={dict.verify.clinic}
-                  value={`${response.data.clinic.name}${
-                    response.data.clinic.branch ? ` - ${response.data.clinic.branch}` : ''
-                  }`}
+                  value={response.data.clinic.name}
                 />
+                {response.data.clinic.branch && (
+                  <div className="mt-2">
+                    <InfoRow
+                      label={locale === 'th' ? 'สาขา' : 'Branch'}
+                      value={response.data.clinic.branch}
+                    />
+                  </div>
+                )}
                 <div className="mt-2">
                   <InfoRow
-                    label={locale === 'th' ? 'จังหวัด' : 'Province'}
-                    value={response.data.clinic.province}
+                    label={locale === 'th' ? 'ที่อยู่' : 'Address'}
+                    value={response.data.clinic.address}
                   />
                 </div>
               </div>
@@ -574,13 +591,13 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
               {/* PACK Product - Quantity selector or next activation info */}
               {isPack && response.data?.maxActivations && response.data.maxActivations > 1 && (() => {
                 const remainingCount = (response.data?.maxActivations || 1) - (response.data?.activationCount || 0)
-                const showQtySelector = response.data!.maxActivations > 10
+                const showQtySelector = remainingCount > 1
 
                 return showQtySelector ? (
-                  /* Quantity selector for large packs (>10) */
+                  /* Quantity selector */
                   <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-[var(--color-gold)]/5 to-[var(--color-gold)]/10 border border-[var(--color-gold)]/20">
                     <p className="text-sm font-medium text-[var(--color-charcoal)] mb-3">
-                      {locale === 'th' ? 'เลือกจำนวนครั้งที่จะลงทะเบียน' : 'Choose number of activations'}
+                      {locale === 'th' ? 'เลือกจำนวนครั้งที่จะเปิดใช้งาน' : 'Choose number of activations'}
                     </p>
                     {/* Stepper */}
                     <div className="flex items-center justify-center gap-3 mb-3">
@@ -648,8 +665,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                       <div>
                         <p className="font-medium text-[var(--color-charcoal)]">
                           {locale === 'th'
-                            ? `ลงทะเบียนครั้งที่ ${(response.data?.activationCount || 0) + 1}`
-                            : `Activation #${(response.data?.activationCount || 0) + 1}`
+                            ? `เปิดใช้งาน ${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}`
+                            : `Activate ${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}`
                           }
                         </p>
                         <p className="text-xs text-[var(--color-foreground-muted)]">
@@ -703,7 +720,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                 {activating ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    {locale === 'th' ? 'กำลังลงทะเบียน...' : 'Registering...'}
+                    {locale === 'th' ? 'กำลังเปิดใช้งาน...' : 'Activating...'}
                   </>
                 ) : (
                   <>
@@ -712,8 +729,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                     </svg>
                     {isPack
                       ? (activateQty > 1
-                        ? (locale === 'th' ? `ลงทะเบียน ${activateQty} ครั้ง` : `Register ${activateQty} Uses`)
-                        : (locale === 'th' ? `ลงทะเบียนครั้งที่ ${(response.data?.activationCount || 0) + 1}` : `Register Use #${(response.data?.activationCount || 0) + 1}`))
+                        ? (locale === 'th' ? `เปิดใช้งาน ${activateQty} ครั้ง` : `Activate ${activateQty} Uses`)
+                        : (locale === 'th' ? `เปิดใช้งาน ${(response.data?.activationCount || 0) + 1}${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}` : `Activate #${(response.data?.activationCount || 0) + 1}${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}`))
                       : dict.activate.activateButton
                     }
                   </>
@@ -810,22 +827,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                   </div>
 
                   <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder={locale === 'th' ? 'ชื่อ-นามสกุล' : 'Full Name'}
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
-                    />
-
                     <div className="grid grid-cols-2 gap-3">
-                      <input
-                        type="number"
-                        placeholder={locale === 'th' ? 'อายุ' : 'Age'}
-                        value={age}
-                        onChange={(e) => setAge(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
-                      />
                       <select
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
@@ -834,22 +836,70 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                         <option value="">{locale === 'th' ? 'เพศ' : 'Gender'}</option>
                         <option value="M">{locale === 'th' ? 'ชาย' : 'Male'}</option>
                         <option value="F">{locale === 'th' ? 'หญิง' : 'Female'}</option>
-                        <option value="Other">{locale === 'th' ? 'อื่นๆ' : 'Other'}</option>
+                        <option value="Non-binary">{locale === 'th' ? 'นอนไบนารี' : 'Non-binary'}</option>
+                        <option value="Other">{locale === 'th' ? 'เพศอื่นๆ' : 'Other'}</option>
+                        <option value="Prefer not to say">{locale === 'th' ? 'ไม่ต้องการระบุ' : 'Prefer not to say'}</option>
                       </select>
+                      <input
+                        type="number"
+                        placeholder={locale === 'th' ? 'อายุ' : 'Age'}
+                        value={age}
+                        onChange={(e) => setAge(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
+                      />
                     </div>
+
+                    <select
+                      value={income}
+                      onChange={(e) => setIncome(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
+                    >
+                      <option value="">{locale === 'th' ? 'รายได้ต่อเดือน' : 'Monthly Income'}</option>
+                      <option value="ต่ำกว่า 10,000 บาท">{locale === 'th' ? 'ต่ำกว่า 10,000 บาท' : 'Below 10,000 THB'}</option>
+                      <option value="10,000-30,000">{locale === 'th' ? '10,000-30,000 บาท' : '10,000-30,000 THB'}</option>
+                      <option value="30,001-50,000">{locale === 'th' ? '30,001-50,000 บาท' : '30,001-50,000 THB'}</option>
+                      <option value="50,001-80,000">{locale === 'th' ? '50,001-80,000 บาท' : '50,001-80,000 THB'}</option>
+                      <option value="80,001-100,000">{locale === 'th' ? '80,001-100,000 บาท' : '80,001-100,000 THB'}</option>
+                      <option value="100,000 บาทขึ้นไป">{locale === 'th' ? '100,000 บาทขึ้นไป' : 'Above 100,000 THB'}</option>
+                    </select>
+
+                    <select
+                      value={discoveryChannel}
+                      onChange={(e) => setDiscoveryChannel(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
+                    >
+                      <option value="">{locale === 'th' ? 'ท่านเคยพบผลิตภัณฑ์นี้ครั้งแรกช่องทางใด' : 'How did you first discover this product?'}</option>
+                      <option value="Facebook">Facebook</option>
+                      <option value="IG">Instagram</option>
+                      <option value="Tiktok">TikTok</option>
+                      <option value="Clinic">{locale === 'th' ? 'คลินิก' : 'Clinic'}</option>
+                      <option value="Google Search">Google Search</option>
+                      <option value="ป้ายโฆษณาหรือสิ่งพิมพ์">{locale === 'th' ? 'ป้ายโฆษณาหรือสิ่งพิมพ์' : 'Ads / Print media'}</option>
+                      <option value="อื่นๆ">{locale === 'th' ? 'อื่นๆ โปรดระบุ' : 'Other (please specify)'}</option>
+                    </select>
+
+                    {discoveryChannel === 'อื่นๆ' && (
+                      <input
+                        type="text"
+                        placeholder={locale === 'th' ? 'โปรดระบุช่องทาง' : 'Please specify'}
+                        value={discoveryOther}
+                        onChange={(e) => setDiscoveryOther(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-[var(--color-beige)] focus:border-[var(--color-gold)] focus:ring-1 focus:ring-[var(--color-gold)] outline-none text-sm"
+                      />
+                    )}
                   </div>
 
                   <p className="text-xs text-[var(--color-foreground-muted)] text-center mb-4">
                     {locale === 'th'
-                      ? 'ข้อมูลนี้จะถูกบันทึกเพื่อการรับประกันเท่านั้น'
-                      : 'This information will only be used for warranty purposes'
+                      ? 'บริษัทฯ ขอเก็บข้อมูลเพื่อวัตถุประสงค์ในการทำกิจกรรมทางการตลาด และพัฒนาบริการให้ดียิ่งขึ้น'
+                      : 'We collect this information for marketing activities and service improvement purposes'
                     }
                   </p>
 
                   {/* Submit Button */}
                   <button
                     onClick={handleSubmitCustomerInfo}
-                    disabled={submittingCustomerInfo || (!customerName && !age && !gender)}
+                    disabled={submittingCustomerInfo || (!age && !gender && !income && !discoveryChannel)}
                     className="w-full py-3 px-4 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
                   >
                     {submittingCustomerInfo ? (

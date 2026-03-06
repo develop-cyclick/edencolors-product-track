@@ -22,7 +22,7 @@ async function handlePOST(request: NextRequest) {
         headers: [
           th ? 'ชื่อคลินิก' : 'Clinic Name',
           th ? 'สาขา' : 'Branch',
-          th ? 'จังหวัด' : 'Province',
+          th ? 'ที่อยู่' : 'Address',
           th ? 'ส่งออก' : 'Shipped',
           th ? 'เปิดใช้งาน' : 'Activated',
           th ? 'อัตรา (%)' : 'Rate (%)',

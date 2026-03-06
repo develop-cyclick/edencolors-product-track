@@ -26,7 +26,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     include: {
       warehouse: { select: { id: true, name: true } },
       shippingMethod: { select: { id: true, nameTh: true, nameEn: true } },
-      clinic: { select: { id: true, name: true, province: true, branchName: true } },
+      clinic: { select: { id: true, name: true, address: true, branchName: true } },
       createdBy: { select: { id: true, displayName: true, username: true } },
       approvedBy: { select: { id: true, displayName: true, username: true } },
       purchaseOrder: {

@@ -25,7 +25,7 @@ async function handleGET(request: NextRequest) {
       prisma.damagedClaim.findMany({
         where,
         include: {
-          clinic: { select: { id: true, name: true, province: true } },
+          clinic: { select: { id: true, name: true, address: true } },
           productMaster: { select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true } },
           createdBy: { select: { id: true, displayName: true } },
           approvedBy: { select: { id: true, displayName: true } },

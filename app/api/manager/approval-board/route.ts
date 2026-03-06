@@ -184,7 +184,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       include: {
         warehouse: { select: { id: true, name: true } },
         shippingMethod: { select: { id: true, nameTh: true } },
-        clinic: { select: { id: true, name: true, province: true, branchName: true } },
+        clinic: { select: { id: true, name: true, address: true, branchName: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
         lines: {
@@ -293,7 +293,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     claimItems = await prisma.damagedClaim.findMany({
       where: { status: filterClaimStatus },
       include: {
-        clinic: { select: { id: true, name: true, province: true } },
+        clinic: { select: { id: true, name: true, address: true } },
         productMaster: { select: { id: true, sku: true, nameTh: true, nameEn: true, modelSize: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },

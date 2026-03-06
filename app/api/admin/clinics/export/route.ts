@@ -14,8 +14,11 @@ export const GET = withAdmin(async (_request: NextRequest) => {
     const data = clinics.map((clinic) => ({
       'ชื่อคลินิก': clinic.name,
       'ชื่อบริษัท': clinic.companyName || '',
-      'จังหวัด': clinic.province,
+      'ที่อยู่': clinic.address,
       'สาขา': clinic.branchName || '',
+      'ชื่อออกบิล': clinic.invoiceName || '',
+      'ชื่อผู้ติดต่อ': clinic.contactName || '',
+      'เบอร์โทร': clinic.contactPhone || '',
       'สถานะ': clinic.isActive ? 'ใช้งาน' : 'ปิดใช้งาน',
     }))
 
@@ -27,8 +30,11 @@ export const GET = withAdmin(async (_request: NextRequest) => {
     worksheet['!cols'] = [
       { wch: 30 }, // ชื่อคลินิก
       { wch: 30 }, // ชื่อบริษัท
-      { wch: 15 }, // จังหวัด
+      { wch: 30 }, // ที่อยู่
       { wch: 20 }, // สาขา
+      { wch: 30 }, // ชื่อออกบิล
+      { wch: 20 }, // ชื่อผู้ติดต่อ
+      { wch: 15 }, // เบอร์โทร
       { wch: 12 }, // สถานะ
     ]
 

@@ -233,6 +233,7 @@ export async function GET(request: NextRequest) {
 
     // Check if clinic info should be shown
     const showClinicInfo = await getShowClinicInfoSetting()
+    const showBranchInfo = await getSettingBool('verify.showBranchInfo', true)
 
     // Build response data (only show necessary info to public)
     const responseData = {
@@ -242,6 +243,7 @@ export async function GET(request: NextRequest) {
       modelSize: productItem.modelSize,
       category: productItem.category.nameTh,
       imageUrl: productItem.productMaster?.imageUrl || null,
+      lot: productItem.lot || null,
       expiryDate: productItem.expDate ? formatDate(productItem.expDate) : null,
       status: productItem.status,
       // Activation settings
@@ -253,8 +255,10 @@ export async function GET(request: NextRequest) {
       ...(showClinicInfo && productItem.assignedClinic && ['SHIPPED', 'ACTIVATED'].includes(productItem.status) && {
         clinic: {
           name: productItem.assignedClinic.name,
-          province: productItem.assignedClinic.province,
-          branch: productItem.assignedClinic.branchName,
+          address: productItem.assignedClinic.address,
+          ...(showBranchInfo && productItem.assignedClinic.branchName && {
+            branch: productItem.assignedClinic.branchName,
+          }),
         },
       }),
       // Show activation info if activated
@@ -327,15 +331,22 @@ function formatDate(date: Date): string {
  * Get show clinic info setting
  */
 async function getShowClinicInfoSetting(): Promise<boolean> {
+  return getSettingBool('verify.showClinicInfo', true)
+}
+
+/**
+ * Get a boolean system setting by key
+ */
+async function getSettingBool(key: string, defaultValue: boolean): Promise<boolean> {
   try {
     const setting = await prisma.systemSetting.findUnique({
-      where: { key: 'verify.showClinicInfo' },
+      where: { key },
     })
     if (setting) {
       return JSON.parse(setting.value) === true
     }
-    return true // Default to showing clinic info
+    return defaultValue
   } catch {
-    return true // Default to showing clinic info on error
+    return defaultValue
   }
 }

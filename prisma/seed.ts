@@ -148,9 +148,9 @@ async function main() {
   // 7. Sample Clinics
   // ============================================
   const clinics = [
-    { name: 'ABC Clinic', province: 'กรุงเทพมหานคร', branchName: 'สาขาสยาม' },
-    { name: 'Beauty Center', province: 'ภูเก็ต', branchName: null },
-    { name: 'Skin Care Plus', province: 'เชียงใหม่', branchName: 'สาขานิมมาน' },
+    { name: 'ABC Clinic', address: 'กรุงเทพมหานคร', branchName: 'สาขาสยาม' },
+    { name: 'Beauty Center', address: 'ภูเก็ต', branchName: null },
+    { name: 'Skin Care Plus', address: 'เชียงใหม่', branchName: 'สาขานิมมาน' },
   ]
 
   for (const clinic of clinics) {

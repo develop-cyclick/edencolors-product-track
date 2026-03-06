@@ -29,6 +29,8 @@ interface BorrowTransaction {
   borrowerName: string;
   clinicName: string | null;
   clinicAddress: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
   taxInvoiceRef: string | null;
   reason: string | null;
   remarks: string | null;
@@ -37,6 +39,43 @@ interface BorrowTransaction {
   createdBy: { id: number; displayName: string; username: string };
   approvedBy: { id: number; displayName: string; username: string } | null;
   lines: BorrowLine[];
+}
+
+function formatSerialRanges(serials: string[]): string {
+  if (serials.length === 0) return "";
+  if (serials.length === 1) return serials[0];
+  const sorted = [...serials].sort();
+  const findNumericSuffix = (s: string) => {
+    let i = s.length - 1;
+    while (i >= 0 && /\d/.test(s[i])) i--;
+    return { prefix: s.slice(0, i + 1), num: s.slice(i + 1) };
+  };
+  const ranges: string[] = [];
+  let rangeStart = sorted[0];
+  let rangeEnd = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = findNumericSuffix(rangeEnd);
+    const curr = findNumericSuffix(sorted[i]);
+    if (prev.prefix === curr.prefix && curr.num.length === prev.num.length && parseInt(curr.num) === parseInt(prev.num) + 1) {
+      rangeEnd = sorted[i];
+    } else {
+      if (rangeStart === rangeEnd) {
+        ranges.push(rangeStart);
+      } else {
+        const endSuffix = findNumericSuffix(rangeEnd);
+        ranges.push(`${rangeStart}-${endSuffix.num}`);
+      }
+      rangeStart = sorted[i];
+      rangeEnd = sorted[i];
+    }
+  }
+  if (rangeStart === rangeEnd) {
+    ranges.push(rangeStart);
+  } else {
+    const endSuffix = findNumericSuffix(rangeEnd);
+    ranges.push(`${rangeStart}-${endSuffix.num}`);
+  }
+  return ranges.join(", ");
 }
 
 export default function BorrowDocumentPage() {
@@ -227,6 +266,24 @@ export default function BorrowDocumentPage() {
               </div>
             </div>
 
+            {/* Row: Contact info */}
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="whitespace-nowrap">ชื่อผู้ติดต่อ</span>
+                  <div className="flex-1 border-b border-gray-800 text-center px-2">
+                    <span>{transaction.contactName || ""}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="whitespace-nowrap">เบอร์โทร</span>
+                <div className="border-b border-gray-800 text-center min-w-[120px] px-2">
+                  <span>{transaction.contactPhone || ""}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Row 4: Tax invoice ref */}
             <div className="flex items-baseline gap-1">
               <span className="whitespace-nowrap">เลขที่ใบกำกับภาษี</span>
@@ -245,69 +302,93 @@ export default function BorrowDocumentPage() {
           </div>
 
           {/* Items Table */}
-          <div className="mb-4">
-            <table className="w-full border-collapse border border-gray-800 text-[10px]">
-              <thead>
-                <tr className="border border-gray-800">
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[30px]">
-                    ลำดับ
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold">
-                    รายการ
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[60px]">
-                    LOT.
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[70px]">
-                    EXP.
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[90px]">
-                    Number
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[40px]">
-                    จำนวน
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[40px]">
-                    หน่วย
-                  </th>
-                  <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[80px]">
-                    หมายเหตุ
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {transaction.lines.map((line, index) => (
-                  <tr key={line.id} className="border border-gray-800">
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {index + 1}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1">
-                      {line.itemName}
-                      {line.modelSize && ` (${line.modelSize})`}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.lot || ""}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {formatDate(line.expDate)}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center font-mono text-[9px]">
-                      {line.productItem.serial12}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.quantity}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1 text-center">
-                      {line.unit?.nameTh || ""}
-                    </td>
-                    <td className="border border-gray-800 px-1 py-1">
-                      {line.remarks || ""}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {(() => {
+            // Group lines by SKU + LOT + EXP
+            const groupedLines = (() => {
+              const groups = new Map<string, { lines: BorrowLine[]; totalQuantity: number }>();
+              transaction.lines.forEach((line) => {
+                const key = `${line.sku}|${line.lot || ''}|${line.expDate || ''}`;
+                if (!groups.has(key)) {
+                  groups.set(key, { lines: [], totalQuantity: 0 });
+                }
+                const group = groups.get(key)!;
+                group.lines.push(line);
+                group.totalQuantity += line.quantity;
+              });
+              return Array.from(groups.values());
+            })();
+
+            return (
+              <div className="mb-4">
+                <table className="w-full border-collapse border border-gray-800 text-[10px]">
+                  <thead>
+                    <tr className="border border-gray-800">
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[30px]">
+                        ลำดับ
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold">
+                        รายการ
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[60px]">
+                        LOT.
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[70px]">
+                        EXP.
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[90px]">
+                        Number
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[40px]">
+                        จำนวน
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[40px]">
+                        หน่วย
+                      </th>
+                      <th className="border border-gray-800 px-1 py-1 text-center font-bold w-[80px]">
+                        หมายเหตุ
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedLines.map((group, index) => {
+                      const firstLine = group.lines[0];
+                      const serialRanges = formatSerialRanges(group.lines.map(l => l.productItem.serial12));
+                      const uniqueRemarks = [...new Set(group.lines.map(l => l.remarks).filter(Boolean))];
+                      return (
+                        <tr key={`${firstLine.sku}-${firstLine.lot}-${firstLine.expDate}-${index}`} className="border border-gray-800">
+                          <td className="border border-gray-800 px-1 py-1 text-center">
+                            {index + 1}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1">
+                            {firstLine.itemName}
+                            {firstLine.modelSize && ` (${firstLine.modelSize})`}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1 text-center">
+                            {firstLine.lot || ""}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1 text-center">
+                            {formatDate(firstLine.expDate)}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1 text-center font-mono text-[9px]">
+                            {serialRanges}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1 text-center">
+                            {group.totalQuantity}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1 text-center">
+                            {firstLine.unit?.nameTh || ""}
+                          </td>
+                          <td className="border border-gray-800 px-1 py-1">
+                            {uniqueRemarks.join(", ")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* Signature Section */}
           <div className="space-y-4 flex gap-4 text-[11px] justify-end mt-20">
