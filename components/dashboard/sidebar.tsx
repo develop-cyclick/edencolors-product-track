@@ -334,7 +334,7 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
       {/* Logo */}
       {!isCollapsed && (
           <Link href={`/${locale}`} className="flex items-center mt-2 p-3 gap-2 sm:gap-3 flex-shrink-0">
-            <Image src="/Logo.webp" alt="Eden Colors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
+            <Image src="/Logo.webp" alt="Edencolors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
           </Link>
         )}
 

@@ -24,7 +24,7 @@ export default async function ActivatePage({ params, searchParams }: ActivatePag
               <span className="text-[var(--color-gold)] font-bold text-sm">E</span>
             </div>
             <span className="text-display text-lg font-semibold text-[var(--color-charcoal)]">
-              Eden Colors
+              Edencolors
             </span>
           </Link>
           <Link

@@ -45,7 +45,6 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
           lot: true,
           mfgDate: true,
           expDate: true,
-          inspectionStatus: true,
           remarks: true,
           unit: { select: { id: true, nameTh: true, nameEn: true } },
           grnHeader: {

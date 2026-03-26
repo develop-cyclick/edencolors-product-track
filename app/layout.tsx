@@ -25,7 +25,7 @@ const notoSansThai = Noto_Sans_Thai({
 })
 
 export const metadata: Metadata = {
-  title: 'Eden Colors - QR Authenticity System',
+  title: 'Edencolors - QR Authenticity System',
   description: 'ระบบตรวจสอบความแท้ของสินค้าด้วย QR Code',
   icons: {
     icon: '/favicon.ico',

@@ -5,7 +5,9 @@ import { successResponse, errorResponse, errors } from '@/lib/api-response'
 
 // Default settings values
 const DEFAULT_SETTINGS: Record<string, unknown> = {
-  'verify.showClinicInfo': true,
+  'verify.showClinicName': true,
+  'verify.showBranchInfo': true,
+  'verify.showClinicAddress': true,
 }
 
 // GET /api/admin/system-settings - Get all system settings

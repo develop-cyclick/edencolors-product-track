@@ -238,7 +238,7 @@ export async function generateDeliveryNotePDF(data: DeliveryNoteData): Promise<B
   doc.text(formatDate(data.shippedDate), 106, sigY)
 
   const sig2Y = sigY + 6
-  doc.text(`ผู้จัดสต็อกส่ง`, 15, sig2Y)
+  doc.text(`ชื่อพนักงานขาย`, 15, sig2Y)
   doc.line(40, sig2Y, 85, sig2Y)
   if (data.stockPreparedBy) {
     doc.text(data.stockPreparedBy, 41, sig2Y)

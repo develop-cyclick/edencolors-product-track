@@ -162,6 +162,14 @@ export default function LoginForm({ dict, locale }: LoginFormProps) {
             <div className="font-medium text-[var(--color-charcoal)]">Manager</div>
             <div className="text-[var(--color-foreground-muted)]">manager1</div>
           </button>
+          <button
+            type="button"
+            onClick={() => { setUsername('marketing'); setPassword('marketing123') }}
+            className="p-2 bg-[var(--color-off-white)] rounded-lg text-center hover:bg-[var(--color-beige)] hover:scale-105 transition-all cursor-pointer"
+          >
+            <div className="font-medium text-[var(--color-charcoal)]">Marketing</div>
+            <div className="text-[var(--color-foreground-muted)]">marketing</div>
+          </button>
         </div>
       </div>
     </form>

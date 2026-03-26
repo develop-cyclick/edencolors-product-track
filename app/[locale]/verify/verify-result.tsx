@@ -33,8 +33,8 @@ interface VerifyResponse {
     activationCount?: number
     canActivate?: boolean
     clinic?: {
-      name: string
-      address: string
+      name?: string
+      address?: string
       branch?: string
     }
     activatedAt?: string
@@ -247,7 +247,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
     if (isGenuine && !isActivated) {
       return {
         title: locale === 'th' ? 'ของแท้' : 'Genuine Product',
-        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จาก\nบริษัทอีเด็นคัลเลอร์(ประเทศไทย)' : 'This product is authentic from\nEden Colors (Thailand)',
+        subtitle: locale === 'th' ? 'สินค้านี้เป็นของแท้จาก\nบริษัทอีเด็นคัลเลอร์(ประเทศไทย)' : 'This product is authentic from\nEdencolors (Thailand)',
       }
     }
     // PACK product with activations remaining
@@ -534,26 +534,30 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
             )}
 
             {/* Clinic Info */}
-            {response.data.clinic && (
+            {response.data.clinic && (response.data.clinic.name || response.data.clinic.branch || response.data.clinic.address) && (
               <div className="pt-4 mt-4 border-t border-[var(--color-beige)]">
-                <InfoRow
-                  label={dict.verify.clinic}
-                  value={response.data.clinic.name}
-                />
+                {response.data.clinic.name && (
+                  <InfoRow
+                    label={dict.verify.clinic}
+                    value={response.data.clinic.name}
+                  />
+                )}
                 {response.data.clinic.branch && (
-                  <div className="mt-2">
+                  <div className={response.data.clinic.name ? 'mt-2' : ''}>
                     <InfoRow
                       label={locale === 'th' ? 'สาขา' : 'Branch'}
                       value={response.data.clinic.branch}
                     />
                   </div>
                 )}
-                <div className="mt-2">
-                  <InfoRow
-                    label={locale === 'th' ? 'ที่อยู่' : 'Address'}
-                    value={response.data.clinic.address}
-                  />
-                </div>
+                {response.data.clinic.address && (
+                  <div className={(response.data.clinic.name || response.data.clinic.branch) ? 'mt-2' : ''}>
+                    <InfoRow
+                      label={locale === 'th' ? 'ที่อยู่' : 'Address'}
+                      value={response.data.clinic.address}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

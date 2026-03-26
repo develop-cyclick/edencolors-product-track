@@ -5,6 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { QRScanner } from '@/components/ui/qr-scanner'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import ThaiDateInput from '@/components/thai-date-input'
 
 interface ProductMaster {
   id: number
@@ -56,7 +57,6 @@ interface LineItem {
   lot: string
   mfgDate: string
   expDate: string
-  inspectionStatus: string
   remarks: string
   usePreGen: boolean  // Toggle for using pre-generated QR
   preGeneratedItemIds: number[]  // Selected pre-gen item IDs
@@ -75,7 +75,6 @@ interface ReceiveMorePlanLine {
   lot: string | null
   mfgDate: string | null
   expDate: string | null
-  inspectionStatus: string
   remarks: string | null
 }
 
@@ -143,7 +142,6 @@ export default function NewGRNPage() {
       lot: '',
       mfgDate: '',
       expDate: '',
-      inspectionStatus: 'OK',
       remarks: '',
       usePreGen: true,
       preGeneratedItemIds: [],
@@ -257,8 +255,7 @@ export default function NewGRNPage() {
                     lot: line.productItem.lot || '',
                     mfgDate: line.productItem.mfgDate ? line.productItem.mfgDate.split('T')[0] : '',
                     expDate: line.productItem.expDate ? line.productItem.expDate.split('T')[0] : '',
-                    inspectionStatus: 'OK',
-                    remarks: '',
+                                  remarks: '',
                     usePreGen: isPreGenerated,
                     preGeneratedItemIds: isPreGenerated ? [line.productItem.id] : [],
                     scannedItems: isPreGenerated ? [{
@@ -286,8 +283,7 @@ export default function NewGRNPage() {
                   lot: '',
                   mfgDate: '',
                   expDate: '',
-                  inspectionStatus: 'OK',
-                  remarks: '',
+                              remarks: '',
                   usePreGen: true,
                   preGeneratedItemIds: [],
                   scannedItems: [],
@@ -370,7 +366,6 @@ export default function NewGRNPage() {
                     lot: pl.lot || '',
                     mfgDate: pl.mfgDate ? pl.mfgDate.split('T')[0] : '',
                     expDate: pl.expDate ? pl.expDate.split('T')[0] : '',
-                    inspectionStatus: pl.inspectionStatus || 'OK',
                     remarks: pl.remarks || '',
                     usePreGen: true,
                     preGeneratedItemIds: [],
@@ -408,8 +403,7 @@ export default function NewGRNPage() {
         lot: '',
         mfgDate: '',
         expDate: '',
-        inspectionStatus: 'OK',
-        remarks: '',
+          remarks: '',
         usePreGen: true,
         preGeneratedItemIds: [],
         scannedItems: [],
@@ -1017,7 +1011,6 @@ export default function NewGRNPage() {
                   lot: l.lot || null,
                   mfgDate: l.mfgDate || null,
                   expDate: l.expDate || null,
-                  inspectionStatus: l.inspectionStatus,
                   remarks: l.remarks || null,
                   preGeneratedItemIds: l.scannedItems
                     .filter(item => !item.isExisting)
@@ -1122,7 +1115,6 @@ export default function NewGRNPage() {
               lot: l.lot || null,
               mfgDate: l.mfgDate || null,
               expDate: l.expDate || null,
-              inspectionStatus: l.inspectionStatus,
               remarks: l.remarks || null,
               preGeneratedItemIds: l.usePreGen ? l.preGeneratedItemIds : undefined,
             })),
@@ -1250,7 +1242,6 @@ export default function NewGRNPage() {
               lot: l.lot || null,
               mfgDate: l.mfgDate || null,
               expDate: l.expDate || null,
-              inspectionStatus: l.inspectionStatus,
               remarks: l.remarks || null,
               preGeneratedItemIds: l.usePreGen ? l.preGeneratedItemIds : undefined,
             })),
@@ -1346,10 +1337,9 @@ export default function NewGRNPage() {
               <label className={labelClass}>
                 {locale === 'th' ? 'วันที่รับสินค้า' : 'Received Date'} <span className="text-red-500">*</span>
               </label>
-              <input
-                type="date"
+              <ThaiDateInput
                 value={receivedAt}
-                onChange={(e) => setReceivedAt(e.target.value)}
+                onChange={(v) => setReceivedAt(v)}
                 required
                 className={inputClass}
               />
@@ -1416,10 +1406,9 @@ export default function NewGRNPage() {
               <label className={labelClass}>
                 {locale === 'th' ? 'วันที่เอกสารส่งสินค้า' : 'Delivery Doc Date'}
               </label>
-              <input
-                type="date"
+              <ThaiDateInput
                 value={deliveryDocDate}
-                onChange={(e) => setDeliveryDocDate(e.target.value)}
+                onChange={(v) => setDeliveryDocDate(v)}
                 className={inputClass}
               />
             </div>
@@ -1841,46 +1830,20 @@ export default function NewGRNPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">MFG Date</label>
-                    <input
-                      type="date"
+                    <ThaiDateInput
                       value={line.mfgDate}
-                      onChange={(e) => updateLine(line.id, 'mfgDate', e.target.value)}
+                      onChange={(v) => updateLine(line.id, 'mfgDate', v)}
                       className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">EXP Date</label>
-                    <input
-                      type="date"
+                    <ThaiDateInput
                       value={line.expDate}
-                      onChange={(e) => updateLine(line.id, 'expDate', e.target.value)}
+                      onChange={(v) => updateLine(line.id, 'expDate', v)}
                       className="w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[var(--color-charcoal)] mb-1">
-                      {locale === 'th' ? 'สถานะตรวจ' : 'Inspection'}
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={line.inspectionStatus}
-                        onChange={(e) => updateLine(line.id, 'inspectionStatus', e.target.value)}
-                        className="appearance-none w-full px-3 py-2 text-sm bg-white border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)] focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all pr-8"
-                      >
-                        <option value="OK">OK - {locale === 'th' ? 'ถูกต้องครบถ้วน' : 'Complete'}</option>
-                        <option value="DAMAGED">{locale === 'th' ? 'เสียหาย' : 'Damaged'}</option>
-                        <option value="CLAIM">{locale === 'th' ? 'เคลม' : 'Claim'}</option>
-                        <option value="BROKEN">{locale === 'th' ? 'แตก' : 'Broken'}</option>
-                        <option value="INCOMPLETE">{locale === 'th' ? 'ไม่ครบ' : 'Incomplete'}</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-foreground-muted)]">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
                   </div>
 
                   <div className="lg:col-span-2">

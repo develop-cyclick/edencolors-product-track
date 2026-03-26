@@ -85,7 +85,6 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       'วันผลิต': line.mfgDate ? new Date(line.mfgDate).toLocaleDateString('th-TH') : '-',
       'วันหมดอายุ': line.expDate ? new Date(line.expDate).toLocaleDateString('th-TH') : '-',
       'หน่วย': line.unit?.nameTh || '-',
-      'สถานะตรวจสอบ': line.inspectionStatus,
       'หมายเหตุ': line.remarks || '-',
     }))
     const linesSheet = XLSX.utils.json_to_sheet(linesData)
@@ -100,7 +99,6 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       { wch: 12 }, // วันผลิต
       { wch: 12 }, // วันหมดอายุ
       { wch: 10 }, // หน่วย
-      { wch: 12 }, // สถานะตรวจสอบ
       { wch: 20 }, // หมายเหตุ
     ]
     XLSX.utils.book_append_sheet(workbook, linesSheet, 'รายการสินค้า')

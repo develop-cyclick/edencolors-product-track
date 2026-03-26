@@ -38,7 +38,7 @@ interface OutboundHeader {
   clinicEmail: string | null;
   clinicContactName: string | null;
   remarks: string | null;
-  purchaseOrder: { id: number; poNo: string } | null;
+  purchaseOrder: { id: number; poNo: string; billingName: string | null } | null;
   warehouse: { id: number; name: string };
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null;
   clinic: {
@@ -145,7 +145,13 @@ export default function OutboundDocumentPage() {
     return `${day}/${month}/${year}`;
   };
 
+  const [showWarning, setShowWarning] = useState(false);
+
   const handlePrint = () => {
+    if (outbound && outbound.status !== "APPROVED") {
+      setShowWarning(true);
+      return;
+    }
     window.print();
   };
 
@@ -267,7 +273,7 @@ export default function OutboundDocumentPage() {
                   <span className="text-[11px]">ลูกค้า</span>
                   <div className="flex-1 border-b border-gray-800 text-center">
                     <span className="text-[11px]">
-                      {outbound.clinic?.name || ""}
+                      {outbound.purchaseOrder?.billingName ||""} / {outbound.clinic?.name || ""}
                     </span>
                   </div>
                 </div>
@@ -494,20 +500,20 @@ export default function OutboundDocumentPage() {
          
 
           {/* Signatures */}
-          <div className="space-y-1.5 text-[11px] mt-18">
-            <div className="flex gap-10">
+          <div className="space-y-1.5  text-[10px] mt-14">
+            <div className="flex justify-center gap-10 items-end ">
               
             
-            <div className="flex gap-4">
-              <div className="flex items-baseline gap-1">
+            <div className="flex gap-4 items-end">
+              <div className="flex items-end gap-1">
                 <span>ส่งโดย</span>
-                <div className="border-b border-gray-800 text-center min-w-[150px]">
+                <div className="border-b border-gray-800 text-center max-w-[150px]">
                   <span>{outbound.shippingMethod?.nameTh || ""}</span>
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
                 <span>วันที่</span>
-                <div className="border-b border-gray-800 text-center min-w-[100px]">
+                <div className="border-b border-gray-800 text-center max-w-[100px]">
                   <span>
                     {formatDate(outbound.shippedAt || outbound.createdAt)}
                   </span>
@@ -516,8 +522,8 @@ export default function OutboundDocumentPage() {
             </div>
 
             <div className="flex gap-4">
-              <div className="flex items-baseline gap-1">
-                <span>ผู้จัดสต็อกส่ง</span>
+              <div className="flex items-end gap-1">
+                <span>ชื่อพนักงานขาย</span>
                 <div className="border-b border-gray-800 text-center min-w-[150px]">
                   <span>{outbound.salesPersonName || ""}</span>
                 </div>
@@ -550,6 +556,39 @@ export default function OutboundDocumentPage() {
           </div>
         </div>
       </div>
+
+      {/* Warning Modal */}
+      {showWarning && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--color-charcoal)]">
+                  {locale === "th" ? "ไม่สามารถพิมพ์เอกสารได้" : "Cannot print document"}
+                </h3>
+                <p className="text-sm text-[var(--color-foreground-muted)] mt-1">
+                  {locale === "th"
+                    ? "ใบส่งสินค้านี้ยังไม่ได้รับการอนุมัติ กรุณารอการอนุมัติก่อนพิมพ์เอกสาร"
+                    : "This outbound has not been approved yet. Please wait for approval before printing."}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowWarning(false)}
+                className="px-5 py-2 bg-[var(--color-gold)] text-white rounded-xl font-medium hover:bg-[var(--color-gold-dark)] transition-colors"
+              >
+                {locale === "th" ? "รับทราบ" : "OK"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Styles */}
       <style jsx global>{`

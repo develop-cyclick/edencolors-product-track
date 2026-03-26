@@ -149,6 +149,7 @@ export const POST = withRoles(['ADMIN', 'MANAGER', 'WAREHOUSE'], async (request:
         clinicPhone: body.clinicPhone || null,
         clinicEmail: body.clinicEmail || null,
         clinicContactName: body.clinicContactName || null,
+        billingName: body.billingName || null,
         createdById: user.userId,
         lines: {
           create: body.lines.map((line: { productMasterId: number; quantity: number }) => ({

@@ -503,7 +503,6 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
                 lot: line.lot,
                 mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
                 expDate: line.expDate ? new Date(line.expDate) : null,
-                inspectionStatus: line.inspectionStatus || 'OK',
                 remarks: line.remarks,
               },
             })
@@ -579,7 +578,6 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
                 lot: line.lot,
                 mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
                 expDate: line.expDate ? new Date(line.expDate) : null,
-                inspectionStatus: line.inspectionStatus || 'OK',
                 remarks: line.remarks,
               },
             })

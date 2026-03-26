@@ -190,7 +190,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               lot: planLine.lot,
               mfgDate: planLine.mfgDate,
               expDate: planLine.expDate,
-              inspectionStatus: planLine.inspectionStatus,
               remarks: planLine.remarks,
               receivingSessionId: session.id,
             })),
@@ -275,8 +274,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
                 lot: planLine.lot,
                 mfgDate: planLine.mfgDate,
                 expDate: planLine.expDate,
-                inspectionStatus: planLine.inspectionStatus,
-                remarks: planLine.remarks,
+                  remarks: planLine.remarks,
                 receivingSessionId: session.id,
               },
             })

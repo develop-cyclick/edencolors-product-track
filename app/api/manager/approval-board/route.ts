@@ -154,7 +154,6 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
               lot: true,
               mfgDate: true,
               expDate: true,
-              inspectionStatus: true,
               remarks: true,
               productItem: {
                 select: {

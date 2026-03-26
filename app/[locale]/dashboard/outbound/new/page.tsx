@@ -56,6 +56,7 @@ interface PurchaseOrder {
   clinicPhone: string | null
   clinicEmail: string | null
   clinicContactName: string | null
+  billingName: string | null
   lines: PurchaseOrderLine[]
   summary: {
     totalOrdered: number
@@ -411,6 +412,11 @@ export default function NewOutboundPage() {
       return
     }
 
+    if (!purchaseOrderId) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกใบ PO' : 'Please select a Purchase Order', variant: 'warning', icon: 'warning' })
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -670,6 +676,11 @@ export default function NewOutboundPage() {
                   </svg>
                 </div>
               </div>
+              {selectedPO?.billingName && (
+                <p className="text-xs text-[var(--color-gold-dark)] mt-1">
+                  {locale === 'th' ? 'ชื่อออกบิล' : 'Billing Name'}: {selectedPO.billingName}
+                </p>
+              )}
               {clinicId > 0 && purchaseOrders.length === 0 && (
                 <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
                   {locale === 'th' ? 'ไม่มี PO ที่รอส่งสำหรับคลินิกนี้' : 'No pending POs for this clinic'}
@@ -990,7 +1001,7 @@ export default function NewOutboundPage() {
           </button>
           <button
             type="submit"
-            disabled={loading || totalItems === 0}
+            disabled={loading || totalItems === 0 || !clinicId || !purchaseOrderId}
             className="flex items-center gap-2 px-6 py-3 text-sm font-medium bg-[var(--color-mint)] text-white rounded-xl shadow-[0_4px_14px_rgba(115,207,199,0.3)] hover:bg-[var(--color-mint-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(115,207,199,0.4)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
           >
             {loading ? (

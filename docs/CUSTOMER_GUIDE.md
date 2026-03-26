@@ -1,7 +1,7 @@
 # คู่มือการใช้งานสำหรับลูกค้า
 # Customer User Guide
 
-**Eden Colors - QR Authenticity System**
+**Edencolors - QR Authenticity System**
 
 ---
 
@@ -20,10 +20,10 @@
 ## 1. ภาพรวมระบบ / System Overview
 
 ### ภาษาไทย
-ระบบ QR Authenticity ช่วยให้คุณสามารถตรวจสอบความแท้ของสินค้า Eden Colors ได้ทันที เพียงสแกน QR Code บนบรรจุภัณฑ์ ระบบจะแสดงข้อมูลสินค้าและยืนยันว่าเป็นของแท้หรือไม่
+ระบบ QR Authenticity ช่วยให้คุณสามารถตรวจสอบความแท้ของสินค้า Edencolors ได้ทันที เพียงสแกน QR Code บนบรรจุภัณฑ์ ระบบจะแสดงข้อมูลสินค้าและยืนยันว่าเป็นของแท้หรือไม่
 
 ### English
-The QR Authenticity system allows you to instantly verify Eden Colors products. Simply scan the QR Code on the packaging, and the system will display product information and confirm whether it's genuine.
+The QR Authenticity system allows you to instantly verify Edencolors products. Simply scan the QR Code on the packaging, and the system will display product information and confirm whether it's genuine.
 
 ---
 
@@ -225,13 +225,13 @@ If your camera cannot read the QR, download a QR scanner app such as:
 ### Q1: สแกน QR แล้วขึ้น "ไม่พบในระบบ" หมายความว่าอย่างไร?
 **A:** อาจเกิดจากหลายสาเหตุ:
 - QR Code เสียหายหรืออ่านไม่ถูกต้อง - ลองสแกนใหม่
-- สินค้าไม่ได้ผลิตโดย Eden Colors - โปรดติดต่อร้านที่ซื้อ
+- สินค้าไม่ได้ผลิตโดย Edencolors - โปรดติดต่อร้านที่ซื้อ
 - สินค้าอาจเป็นของปลอม - โปรดติดต่อเรา
 
 ### Q1: What does "Not found in system" mean?
 **A:** This could be due to:
 - QR Code is damaged or misread - try scanning again
-- Product not made by Eden Colors - contact your seller
+- Product not made by Edencolors - contact your seller
 - Product may be counterfeit - please contact us
 
 ---
@@ -280,13 +280,13 @@ Data will not be shared with third parties without consent, in accordance with P
 **A:** หาก QR Code บนสินค้าเสียหาย คุณสามารถ:
 1. ติดต่อคลินิกที่ซื้อสินค้าเพื่อขอ Serial Number
 2. ตรวจสอบโดยพิมพ์ Serial Number 12 หลักบนเว็บไซต์
-3. ติดต่อฝ่ายลูกค้าสัมพันธ์ของ Eden Colors
+3. ติดต่อฝ่ายลูกค้าสัมพันธ์ของ Edencolors
 
 ### Q5: QR Code is damaged, what should I do?
 **A:** If the QR Code on the product is damaged:
 1. Contact the clinic where you purchased for the Serial Number
 2. Verify by entering the 12-digit Serial Number on our website
-3. Contact Eden Colors customer service
+3. Contact Edencolors customer service
 
 ---
 
@@ -318,7 +318,7 @@ Click the language button at the top right corner of the screen.
 
 ---
 
-**Eden Colors** - ความงามที่เชื่อมั่นได้ / Beauty You Can Trust
+**Edencolors** - ความงามที่เชื่อมั่นได้ / Beauty You Can Trust
 
 ---
 

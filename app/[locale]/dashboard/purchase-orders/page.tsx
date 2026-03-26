@@ -94,6 +94,7 @@ export default function PurchaseOrdersPage() {
   const [formClinicPhone, setFormClinicPhone] = useState('')
   const [formClinicEmail, setFormClinicEmail] = useState('')
   const [formClinicContactName, setFormClinicContactName] = useState('')
+  const [formBillingName, setFormBillingName] = useState('')
 
   // Clinic search dropdown
   const [clinicSearch, setClinicSearch] = useState('')
@@ -163,6 +164,7 @@ export default function PurchaseOrdersPage() {
     setFormClinicPhone('')
     setFormClinicEmail('')
     setFormClinicContactName('')
+    setFormBillingName('')
     setShowModal(true)
   }
 
@@ -191,6 +193,7 @@ export default function PurchaseOrdersPage() {
           setFormClinicPhone(poData.clinicPhone || '')
           setFormClinicEmail(poData.clinicEmail || '')
           setFormClinicContactName(poData.clinicContactName || '')
+          setFormBillingName(poData.billingName || '')
         }
       })
     setShowModal(true)
@@ -212,6 +215,7 @@ export default function PurchaseOrdersPage() {
     setFormClinicPhone('')
     setFormClinicEmail('')
     setFormClinicContactName('')
+    setFormBillingName('')
   }
 
   const addLine = () => {
@@ -258,6 +262,7 @@ export default function PurchaseOrdersPage() {
         clinicPhone: formClinicPhone || null,
         clinicEmail: formClinicEmail || null,
         clinicContactName: formClinicContactName || null,
+        billingName: formBillingName || null,
       }
 
       let res
@@ -679,6 +684,20 @@ export default function PurchaseOrdersPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Billing Name */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1.5">
+                  {locale === 'th' ? 'ชื่อออกบิล' : 'Billing Name'}
+                </label>
+                <input
+                  type="text"
+                  value={formBillingName}
+                  onChange={(e) => setFormBillingName(e.target.value)}
+                  className={inputClass}
+                  placeholder={locale === 'th' ? 'ชื่อออกบิล (ถ้ามี)' : 'Billing name (if any)'}
+                />
               </div>
 
               {/* Product Lines */}

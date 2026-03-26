@@ -4,6 +4,40 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+const handleExportGRN = async (
+  locale: string,
+  statusFilter: StatusFilter,
+  search: string,
+  setExporting: (v: boolean) => void,
+) => {
+  setExporting(true)
+  try {
+    const res = await fetch('/api/warehouse/grn/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        locale,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: search || undefined,
+      }),
+    })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `grn-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch {
+    console.error('Export failed')
+  } finally {
+    setExporting(false)
+  }
+}
+
 interface GRN {
   id: number
   grnNo: string
@@ -48,6 +82,7 @@ export default function GRNListPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetchGRNs()
@@ -102,15 +137,34 @@ export default function GRNListPage() {
             {locale === 'th' ? 'จัดการใบรับสินค้าเข้าคลัง (GRN)' : 'Manage goods received notes'}
           </p>
         </div>
-        <Link
-          href={`/${locale}/dashboard/grn/new`}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] transition-all duration-200"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          {locale === 'th' ? 'สร้างใบรับสินค้า' : 'Create GRN'}
-        </Link>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => handleExportGRN(locale, statusFilter, search, setExporting)}
+            disabled={exporting}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--color-charcoal)] text-white rounded-xl font-medium hover:bg-[var(--color-charcoal)]/90 disabled:opacity-50 transition-all duration-200"
+          >
+            {exporting ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+            {exporting
+              ? (locale === 'th' ? 'กำลังส่งออก...' : 'Exporting...')
+              : (locale === 'th' ? 'ส่งออก Excel' : 'Export Excel')
+            }
+          </button>
+          <Link
+            href={`/${locale}/dashboard/grn/new`}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] transition-all duration-200"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {locale === 'th' ? 'สร้างใบรับสินค้า' : 'Create GRN'}
+          </Link>
+        </div>
       </div>
 
       {/* Search & Filter */}

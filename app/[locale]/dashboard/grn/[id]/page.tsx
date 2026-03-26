@@ -31,7 +31,6 @@ interface GRNDetail {
     lot: string | null
     mfgDate: string | null
     expDate: string | null
-    inspectionStatus: string
     remarks: string | null
     unit: { id: number; nameTh: string }
     productItem: {
@@ -52,7 +51,6 @@ interface GRNDetail {
     productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
     unit: { id: number; nameTh: string; nameEn: string | null }
     lot: string | null
-    inspectionStatus: string
   }>
   receivingSessions?: Array<{
     id: number
@@ -790,7 +788,7 @@ export default function GRNDetailPage() {
                   <td className="px-5 py-4 text-sm text-[var(--color-foreground-muted)]">{index + 1}</td>
                   <td className="px-5 py-4">
                     <Link
-                      href={`/${locale}/dashboard/products/${displayItem.id}`}
+                      href={`/${locale}/dashboard/products/item/${displayItem.id}`}
                       className="font-mono text-sm font-medium text-[var(--color-gold)] hover:text-[var(--color-gold-dark)] transition-colors"
                     >
                       {displayItem.serial12}

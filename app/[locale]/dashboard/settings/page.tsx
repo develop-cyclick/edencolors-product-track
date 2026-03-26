@@ -16,8 +16,9 @@ interface MasterItem {
 }
 
 interface SystemSettings {
-  'verify.showClinicInfo': boolean
+  'verify.showClinicName': boolean
   'verify.showBranchInfo': boolean
+  'verify.showClinicAddress': boolean
 }
 
 export default function SettingsPage() {
@@ -35,8 +36,9 @@ export default function SettingsPage() {
 
   // System settings state
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-    'verify.showClinicInfo': true,
+    'verify.showClinicName': true,
     'verify.showBranchInfo': true,
+    'verify.showClinicAddress': true,
   })
   const [settingsLoading, setSettingsLoading] = useState(false)
 
@@ -346,29 +348,29 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Show Clinic Info Toggle */}
+                    {/* Show Clinic Name Toggle */}
                     <div className="flex items-center justify-between py-3 border-b border-[var(--color-beige)]">
                       <div>
                         <p className="text-sm font-medium text-[var(--color-charcoal)]">
-                          {locale === 'th' ? 'แสดงข้อมูลคลินิก' : 'Show Clinic Info'}
+                          {locale === 'th' ? 'แสดงชื่อคลินิก' : 'Show Clinic Name'}
                         </p>
                         <p className="text-xs text-[var(--color-foreground-muted)] mt-0.5">
                           {locale === 'th'
-                            ? 'แสดงชื่อคลินิกและที่อยู่บนหน้าตรวจสอบสินค้าสาธารณะ'
-                            : 'Display clinic name and address on public verification page'}
+                            ? 'แสดงชื่อคลินิกบนหน้าตรวจสอบสินค้า'
+                            : 'Display clinic name on product verification page'}
                         </p>
                       </div>
                       <button
-                        onClick={() => updateSystemSetting('verify.showClinicInfo', !systemSettings['verify.showClinicInfo'])}
+                        onClick={() => updateSystemSetting('verify.showClinicName', !systemSettings['verify.showClinicName'])}
                         className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
-                          systemSettings['verify.showClinicInfo']
+                          systemSettings['verify.showClinicName']
                             ? 'bg-[var(--color-gold)]'
                             : 'bg-gray-300'
                         }`}
                       >
                         <span
                           className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                            systemSettings['verify.showClinicInfo'] ? 'translate-x-6' : ''
+                            systemSettings['verify.showClinicName'] ? 'translate-x-6' : ''
                           }`}
                         />
                       </button>
@@ -382,8 +384,8 @@ export default function SettingsPage() {
                         </p>
                         <p className="text-xs text-[var(--color-foreground-muted)] mt-0.5">
                           {locale === 'th'
-                            ? 'แสดงชื่อสาขาบนหน้าตรวจสอบสินค้าสาธารณะ'
-                            : 'Display branch name on public verification page'}
+                            ? 'แสดงชื่อสาขาบนหน้าตรวจสอบสินค้า'
+                            : 'Display branch name on product verification page'}
                         </p>
                       </div>
                       <button
@@ -397,6 +399,34 @@ export default function SettingsPage() {
                         <span
                           className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
                             systemSettings['verify.showBranchInfo'] ? 'translate-x-6' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Show Clinic Address Toggle */}
+                    <div className="flex items-center justify-between py-3 border-b border-[var(--color-beige)]">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-charcoal)]">
+                          {locale === 'th' ? 'แสดงที่อยู่คลินิก' : 'Show Clinic Address'}
+                        </p>
+                        <p className="text-xs text-[var(--color-foreground-muted)] mt-0.5">
+                          {locale === 'th'
+                            ? 'แสดงที่อยู่คลินิกบนหน้าตรวจสอบสินค้า'
+                            : 'Display clinic address on product verification page'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => updateSystemSetting('verify.showClinicAddress', !systemSettings['verify.showClinicAddress'])}
+                        className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                          systemSettings['verify.showClinicAddress']
+                            ? 'bg-[var(--color-gold)]'
+                            : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                            systemSettings['verify.showClinicAddress'] ? 'translate-x-6' : ''
                           }`}
                         />
                       </button>

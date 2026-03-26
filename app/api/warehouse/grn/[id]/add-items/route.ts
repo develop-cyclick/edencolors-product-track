@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
-import type { InspectionStatus } from '@prisma/client'
 import type { JWTPayload } from '@/lib/auth'
 
 type RouteParams = Promise<{ id: string }>
@@ -14,7 +13,6 @@ interface AddItemsLineInput {
   lot?: string
   mfgDate?: string
   expDate?: string
-  inspectionStatus?: InspectionStatus
   remarks?: string
   preGeneratedItemIds: number[]
 }
@@ -166,7 +164,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               lot: line.lot,
               mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
               expDate: line.expDate ? new Date(line.expDate) : null,
-              inspectionStatus: line.inspectionStatus || 'OK',
               remarks: line.remarks,
             },
           })

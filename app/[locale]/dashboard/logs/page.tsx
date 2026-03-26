@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
+import ThaiDateInput from '@/components/thai-date-input'
 
 interface EventLog {
   id: number
@@ -236,10 +237,9 @@ export default function EventLogsPage() {
             <label className={labelClass}>
               {locale === 'th' ? 'ตั้งแต่' : 'From'}
             </label>
-            <input
-              type="date"
+            <ThaiDateInput
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(v) => setStartDate(v)}
               className={inputClass}
             />
           </div>
@@ -248,10 +248,9 @@ export default function EventLogsPage() {
             <label className={labelClass}>
               {locale === 'th' ? 'ถึง' : 'To'}
             </label>
-            <input
-              type="date"
+            <ThaiDateInput
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(v) => setEndDate(v)}
               className={inputClass}
             />
           </div>

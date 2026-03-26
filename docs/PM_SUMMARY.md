@@ -1,4 +1,4 @@
-# Eden Colors - QR Authenticity System
+# Edencolors - QR Authenticity System
 ## Project Summary for Project Manager
 
 **Document Version:** 1.0
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-ระบบ QR Authenticity & Activation สำหรับ Eden Colors เป็นระบบติดตามและยืนยันความแท้ของสินค้าความงาม (Filler, Botox, Skincare) ด้วยเทคโนโลยี QR Code ที่มีการเข้ารหัส JWE เพื่อป้องกันการปลอมแปลง
+ระบบ QR Authenticity & Activation สำหรับ Edencolors เป็นระบบติดตามและยืนยันความแท้ของสินค้าความงาม (Filler, Botox, Skincare) ด้วยเทคโนโลยี QR Code ที่มีการเข้ารหัส JWE เพื่อป้องกันการปลอมแปลง
 
 ### Key Highlights
 - **100% Features Complete** - ทุก Sprint ตาม PRD เสร็จสมบูรณ์
@@ -241,7 +241,7 @@ npm run db:seed  # Seed test data
 
 ## 13. Conclusion
 
-โปรเจค Eden Colors QR Authenticity System ได้พัฒนาเสร็จสมบูรณ์ตาม PRD requirements ทั้งหมด พร้อมสำหรับ:
+โปรเจค Edencolors QR Authenticity System ได้พัฒนาเสร็จสมบูรณ์ตาม PRD requirements ทั้งหมด พร้อมสำหรับ:
 
 1. **User Acceptance Testing (UAT)** - ทดสอบกับผู้ใช้จริง
 2. **Production Deployment** - Deploy ไปยัง production server

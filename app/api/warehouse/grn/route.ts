@@ -4,7 +4,6 @@ import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import { generateSerialNumber, generateGRNNumber } from '@/lib/serial-generator'
 import { createQRToken, hashToken } from '@/lib/qr-token'
-import type { InspectionStatus } from '@prisma/client'
 import type { JWTPayload } from '@/lib/auth'
 
 type HandlerContext = { user: JWTPayload }
@@ -17,7 +16,6 @@ interface GRNLineInput {
   lot?: string
   mfgDate?: string
   expDate?: string
-  inspectionStatus?: InspectionStatus
   remarks?: string
   preGeneratedItemIds?: number[]  // Optional: use pre-generated QR items instead of creating new
 }
@@ -157,7 +155,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         lot?: string | null
         mfgDate?: Date | null
         expDate?: Date | null
-        inspectionStatus: InspectionStatus
         remarks?: string | null
       }> = []
 
@@ -255,7 +252,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
               lot: line.lot || null,
               mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
               expDate: line.expDate ? new Date(line.expDate) : null,
-              inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
               remarks: line.remarks || null,
               receivingSessionId: receivingSession.id,
             })),
@@ -297,7 +293,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             lot: line.lot || null,
             mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
             expDate: line.expDate ? new Date(line.expDate) : null,
-            inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
             remarks: line.remarks || null,
           })
         } else {
@@ -362,7 +357,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
                 lot: line.lot,
                 mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
                 expDate: line.expDate ? new Date(line.expDate) : null,
-                inspectionStatus: line.inspectionStatus || 'OK',
                 remarks: line.remarks,
                 receivingSessionId: receivingSession.id,
               },
@@ -400,7 +394,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             lot: line.lot || null,
             mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
             expDate: line.expDate ? new Date(line.expDate) : null,
-            inspectionStatus: (line.inspectionStatus || 'OK') as InspectionStatus,
             remarks: line.remarks || null,
           })
         }

@@ -562,8 +562,6 @@ export interface MonthlySummary {
   month: string; // YYYY-MM format
   grnCount: number;
   itemsReceived: number;
-  itemsOk: number;
-  itemsDefective: number;
   poCount: number;
   poConfirmed: number;
   deliveriesCount: number;
@@ -603,9 +601,7 @@ export async function getMonthlySummary(
       SELECT
         DATE_TRUNC('month', gh.received_at)::date as month,
         COUNT(DISTINCT gh.id)::int as grn_count,
-        COUNT(DISTINCT pi.id)::int as items_received,
-        COUNT(DISTINCT pi.id) FILTER (WHERE gl.inspection_status = 'OK')::int as items_ok,
-        COUNT(DISTINCT pi.id) FILTER (WHERE gl.inspection_status IN ('DAMAGED', 'CLAIM', 'BROKEN'))::int as items_defective
+        COUNT(DISTINCT pi.id)::int as items_received
       FROM grn_headers gh
       JOIN grn_lines gl ON gh.id = gl.grn_header_id
       JOIN product_items pi ON gl.product_item_id = pi.id
@@ -662,8 +658,6 @@ export async function getMonthlySummary(
       TO_CHAR(ms.month, 'YYYY-MM') as month,
       COALESCE(grn.grn_count, 0) as "grnCount",
       COALESCE(grn.items_received, 0) as "itemsReceived",
-      COALESCE(grn.items_ok, 0) as "itemsOk",
-      COALESCE(grn.items_defective, 0) as "itemsDefective",
       COALESCE(po.po_count, 0) as "poCount",
       COALESCE(po.po_confirmed, 0) as "poConfirmed",
       COALESCE(out.deliveries_count, 0) as "deliveriesCount",

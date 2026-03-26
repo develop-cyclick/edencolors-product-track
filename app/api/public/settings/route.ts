@@ -3,12 +3,16 @@ import prisma from '@/lib/prisma'
 
 // Default settings values for public access
 const DEFAULT_SETTINGS: Record<string, unknown> = {
-  'verify.showClinicInfo': true,
+  'verify.showClinicName': true,
+  'verify.showBranchInfo': true,
+  'verify.showClinicAddress': true,
 }
 
 // Public settings keys that can be accessed without authentication
 const PUBLIC_SETTINGS_KEYS = [
-  'verify.showClinicInfo',
+  'verify.showClinicName',
+  'verify.showBranchInfo',
+  'verify.showClinicAddress',
 ]
 
 // GET /api/public/settings - Get public system settings

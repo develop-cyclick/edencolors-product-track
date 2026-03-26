@@ -201,10 +201,14 @@ export default function ProductMasterDetailPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="bg-[var(--color-off-white)] rounded-xl p-4 border border-[var(--color-beige)]">
+          <p className="text-sm text-[var(--color-charcoal)]">{locale === 'th' ? 'ทั้งหมด' : 'Total'}</p>
+          <p className="text-2xl font-bold text-[var(--color-charcoal)] mt-1">{productMaster.stats.total.toLocaleString()}</p>
+        </div>
         <div className="bg-[var(--color-mint)]/10 rounded-xl p-4 border border-[var(--color-mint)]/20">
           <p className="text-sm text-[var(--color-mint-dark)]">{locale === 'th' ? 'ในคลัง' : 'In Stock'}</p>
-          <p className="text-2xl font-bold text-[var(--color-mint-dark)] mt-1">{productMaster.stats.inStock}</p>
+          <p className="text-2xl font-bold text-[var(--color-mint-dark)] mt-1">{productMaster.stats.inStock.toLocaleString()}</p>
         </div>
         <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
           <p className="text-sm text-amber-600">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</p>

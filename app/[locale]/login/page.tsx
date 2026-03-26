@@ -32,14 +32,16 @@ export default async function LoginPage({ params }: LoginPageProps) {
         <div className="relative z-10 flex flex-col justify-center px-16 py-12">
          {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Image src="/Logo.webp" alt="Eden Colors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
+            <Image src="/Logo.webp" alt="Edencolors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
           </Link>
 
           {/* Heading */}
-          <h1 className="text-display text-4xl lg:text-5xl font-bold text-white leading-tight mb-6">
+          <h1 className="text-display text-4xl lg:text-5xl py-2 font-bold text-white leading-tight mb-6">
             {locale === 'th' ? (
               <>
+              <span className=' text-white'>
                 ระบบยืนยัน
+              </span>
                 <br />
                 <span className="text-[var(--color-gold)]">ความแท้ของสินค้า</span>
               </>
@@ -82,7 +84,7 @@ export default async function LoginPage({ params }: LoginPageProps) {
           {/* Mobile Logo */}
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <Image src="/logo-black3.png" alt="Eden Colors Logo" width={120} height={80} className="h-[50px] object-contain  w-auto mx-auto mb-10" />
+            <Image src="/logo-black3.png" alt="Edencolors Logo" width={120} height={80} className="h-[50px] object-contain  w-auto mx-auto mb-10" />
           </Link>
 
           {/* Login Card */}

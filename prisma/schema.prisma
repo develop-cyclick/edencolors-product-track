@@ -52,14 +52,6 @@ enum OutboundStatus {
   REJECTED      // ปฏิเสธ
 }
 
-enum InspectionStatus {
-  OK            // ถูกต้องครบถ้วน
-  DAMAGED       // เสียหาย
-  CLAIM         // เคลม
-  BROKEN        // แตก
-  INCOMPLETE    // ไม่ครบ
-}
-
 enum ActivationType {
   SINGLE        // Activate ได้ครั้งเดียว
   PACK          // Activate ได้หลายครั้ง (กำหนดจำนวน)
@@ -342,7 +334,6 @@ model GRNLine {
   lot               String?
   mfgDate           DateTime?        @map("mfg_date") @db.Date
   expDate           DateTime?        @map("exp_date") @db.Date
-  inspectionStatus  InspectionStatus @default(OK) @map("inspection_status")
   remarks              String?
   receivingSessionId   Int?             @map("receiving_session_id")
   createdAt            DateTime         @default(now()) @map("created_at")
@@ -365,7 +356,6 @@ model GRNPlanLine {
   lot              String?
   mfgDate          DateTime?        @map("mfg_date") @db.Date
   expDate          DateTime?        @map("exp_date") @db.Date
-  inspectionStatus InspectionStatus @default(OK) @map("inspection_status")
   remarks          String?
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
@@ -593,6 +583,7 @@ model PurchaseOrder {
   clinicPhone       String?   @map("clinic_phone")
   clinicEmail       String?   @map("clinic_email")
   clinicContactName String?   @map("clinic_contact_name")
+  billingName       String?   @map("billing_name") // ชื่อออกบิล
   createdById       Int       @map("created_by_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")

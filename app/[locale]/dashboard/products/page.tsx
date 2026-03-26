@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
@@ -66,6 +66,7 @@ export default function ProductMasterPage() {
     maxActivations: 1,
   })
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const [units, setUnits] = useState<{ id: number; nameTh: string; nameEn: string }[]>([])
 
@@ -276,7 +277,43 @@ export default function ProductMasterPage() {
     }
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch(`/api/admin/masters/products/export?locale=${locale}`)
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `products-overview-${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export error:', error)
+      await alert({ title: locale === 'th' ? 'ส่งออกล้มเหลว' : 'Export Failed', message: locale === 'th' ? 'ไม่สามารถส่งออก Excel ได้' : 'Failed to export Excel', variant: 'error', icon: 'error' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const isAdmin = userRole === 'ADMIN'
+
+  const overallStats = useMemo(() => {
+    return productMasters.reduce(
+      (acc, pm) => ({
+        total: acc.total + pm.stats.total,
+        inStock: acc.inStock + pm.stats.inStock,
+        pendingOut: acc.pendingOut + pm.stats.pendingOut,
+        shipped: acc.shipped + pm.stats.shipped,
+        activated: acc.activated + pm.stats.activated,
+        returned: acc.returned + pm.stats.returned,
+      }),
+      { total: 0, inStock: 0, pendingOut: 0, shipped: 0, activated: 0, returned: 0 }
+    )
+  }, [productMasters])
 
   return (
     <div className="space-y-6">
@@ -290,18 +327,66 @@ export default function ProductMasterPage() {
             {locale === 'th' ? 'จัดการข้อมูลหลักสินค้าในระบบ' : 'Manage product master data'}
           </p>
         </div>
-        {isAdmin && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] transition-all duration-200"
+            onClick={handleExport}
+            disabled={exporting || loading}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-[var(--color-charcoal)] border border-[var(--color-beige)] rounded-xl font-medium hover:bg-[var(--color-off-white)] hover:-translate-y-0.5 hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)] disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            {locale === 'th' ? 'เพิ่มสินค้าใหม่' : 'Add Product'}
+            {exporting ? (
+              <div className="w-5 h-5 border-2 border-[var(--color-gold)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )}
+            {exporting
+              ? (locale === 'th' ? 'กำลังส่งออก...' : 'Exporting...')
+              : (locale === 'th' ? 'ส่งออก Excel' : 'Export Excel')}
           </button>
-        )}
+          {isAdmin && (
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(201,163,90,0.35)] transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {locale === 'th' ? 'เพิ่มสินค้าใหม่' : 'Add Product'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Summary Stats Cards */}
+      {!loading && productMasters.length > 0 && (
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          <div className="bg-[var(--color-off-white)] rounded-xl p-4 border border-[var(--color-beige)]">
+            <p className="text-sm text-[var(--color-charcoal)]">{locale === 'th' ? 'ทั้งหมด' : 'Total'}</p>
+            <p className="text-2xl font-bold text-[var(--color-charcoal)] mt-1">{overallStats.total.toLocaleString()}</p>
+          </div>
+          <div className="bg-[var(--color-mint)]/10 rounded-xl p-4 border border-[var(--color-mint)]/20">
+            <p className="text-sm text-[var(--color-mint-dark)]">{locale === 'th' ? 'ในคลัง' : 'In Stock'}</p>
+            <p className="text-2xl font-bold text-[var(--color-mint-dark)] mt-1">{overallStats.inStock.toLocaleString()}</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <p className="text-sm text-amber-600">{locale === 'th' ? 'รอส่งออก' : 'Pending Out'}</p>
+            <p className="text-2xl font-bold text-amber-700 mt-1">{overallStats.pendingOut.toLocaleString()}</p>
+          </div>
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+            <p className="text-sm text-blue-600">{locale === 'th' ? 'ส่งออกแล้ว' : 'Shipped'}</p>
+            <p className="text-2xl font-bold text-blue-700 mt-1">{overallStats.shipped.toLocaleString()}</p>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+            <p className="text-sm text-purple-600">{locale === 'th' ? 'เปิดใช้แล้ว' : 'Activated'}</p>
+            <p className="text-2xl font-bold text-purple-700 mt-1">{overallStats.activated.toLocaleString()}</p>
+          </div>
+          <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+            <p className="text-sm text-red-600">{locale === 'th' ? 'รับคืน' : 'Returned'}</p>
+            <p className="text-2xl font-bold text-red-700 mt-1">{overallStats.returned.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-5">

@@ -288,7 +288,7 @@ export default async function LandingPage({ params }: PageProps) {
             <div className="flex items-center gap-3">
              
               <span className="text-white/70 text-sm">
-                © 2026 Eden Colors. All rights reserved.
+                © 2026 Edencolors. All rights reserved.
               </span>
             </div>
             <div className="flex items-center gap-6">

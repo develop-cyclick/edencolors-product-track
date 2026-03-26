@@ -36,7 +36,7 @@ export default function DashboardClientLayout({
 
         <div className="flex items-center gap-2">
           {/* Logo */}
-            <Image src="/Logo.webp" alt="Eden Colors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
+            <Image src="/Logo.webp" alt="Edencolors Logo" width={120} height={34} className="h-8 sm:h-10 w-auto" />
         </div>
 
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-gold)] to-[var(--color-gold-dark)] flex items-center justify-center shadow-lg">

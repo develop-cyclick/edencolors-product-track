@@ -245,6 +245,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
           clinicPhone: body.clinicPhone || null,
           clinicEmail: body.clinicEmail || null,
           clinicContactName: body.clinicContactName || null,
+          billingName: body.billingName || null,
         },
         include: {
           clinic: true,

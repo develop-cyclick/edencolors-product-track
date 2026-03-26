@@ -33,6 +33,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         select: {
           id: true,
           poNo: true,
+          billingName: true,
           status: true,
           lines: {
             select: {
@@ -88,6 +89,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     poSummary = {
       id: po.id,
       poNo: po.poNo,
+      billingName: po.billingName,
       status: po.status,
       totalOrdered,
       totalShipped,

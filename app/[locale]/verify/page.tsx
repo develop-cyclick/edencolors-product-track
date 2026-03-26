@@ -30,7 +30,7 @@ export default async function VerifyPage({
           >
             <Image
               src="/Logo.webp"
-              alt="Eden Colors Logo"
+              alt="Edencolors Logo"
               width={120}
               height={34}
               className="h-8 sm:h-10 w-auto"
@@ -72,7 +72,7 @@ export default async function VerifyPage({
           </p>*/}
           <Image
             src="/logo-black3.png"
-            alt="Eden Colors Logo"
+            alt="Edencolors Logo"
             width={120}
             height={80}
             className="h-[40px] w-auto mx-auto object-contain  mt-4"

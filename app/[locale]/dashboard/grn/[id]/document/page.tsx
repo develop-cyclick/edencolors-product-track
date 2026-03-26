@@ -29,7 +29,6 @@ interface GRNDetail {
     lot: string | null
     mfgDate: string | null
     expDate: string | null
-    inspectionStatus: string
     remarks: string | null
     unit: { id: number; nameTh: string }
     productItem: {
@@ -142,7 +141,7 @@ export default function GRNDocumentPage() {
           <div className="border-b-2 border-gray-800 pb-4 mb-6">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">EDEN COLORS</h1>
+                <h1 className="text-2xl font-bold text-gray-800">Edencolors</h1>
                 <p className="text-sm text-gray-600 mt-1">Medical Aesthetic Products</p>
               </div>
               <div className="text-right">
@@ -212,7 +211,6 @@ export default function GRNDocumentPage() {
                   <th className="border border-gray-300 px-3 py-2 text-center">EXP</th>
                   <th className="border border-gray-300 px-3 py-2 text-center w-16">จำนวน</th>
                   <th className="border border-gray-300 px-3 py-2 text-center">หน่วย</th>
-                  <th className="border border-gray-300 px-3 py-2 text-center">ตรวจสอบ</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,11 +227,6 @@ export default function GRNDocumentPage() {
                     <td className="border border-gray-300 px-3 py-2 text-center text-xs">{formatDateShort(line.expDate)}</td>
                     <td className="border border-gray-300 px-3 py-2 text-center">{line.quantity}</td>
                     <td className="border border-gray-300 px-3 py-2 text-center">{line.unit?.nameTh || '-'}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-center">
-                      <span className={line.inspectionStatus === 'ผ่าน' ? 'text-green-600' : 'text-gray-600'}>
-                        {line.inspectionStatus}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -242,7 +235,6 @@ export default function GRNDocumentPage() {
                   <td colSpan={6} className="border border-gray-300 px-3 py-2 text-right">รวมทั้งสิ้น:</td>
                   <td className="border border-gray-300 px-3 py-2 text-center">{grn.lines.length}</td>
                   <td className="border border-gray-300 px-3 py-2 text-center">รายการ</td>
-                  <td className="border border-gray-300 px-3 py-2"></td>
                 </tr>
               </tfoot>
             </table>
@@ -289,7 +281,7 @@ export default function GRNDocumentPage() {
 
           {/* Footer */}
           <div className="mt-8 pt-4 border-t text-center text-xs text-gray-400">
-            <p>เอกสารนี้ออกโดยระบบ Eden Colors Inventory Management System</p>
+            <p>เอกสารนี้ออกโดยระบบ Edencolors Inventory Management System</p>
             <p>พิมพ์เมื่อ: {new Date().toLocaleString('th-TH')}</p>
           </div>
         </div>

@@ -231,9 +231,13 @@ export async function GET(request: NextRequest) {
     // Get the latest activation
     const latestActivation = productItem.activations?.[0]
 
-    // Check if clinic info should be shown
-    const showClinicInfo = await getShowClinicInfoSetting()
+    // Check which clinic fields should be shown
+    const showClinicName = await getSettingBool('verify.showClinicName', true)
     const showBranchInfo = await getSettingBool('verify.showBranchInfo', true)
+    const showClinicAddress = await getSettingBool('verify.showClinicAddress', true)
+
+    const anyClinicInfoVisible = showClinicName || showBranchInfo || showClinicAddress
+    const clinic = productItem.assignedClinic
 
     // Build response data (only show necessary info to public)
     const responseData = {
@@ -251,14 +255,12 @@ export async function GET(request: NextRequest) {
       maxActivations,
       activationCount,
       canActivate,
-      // Show clinic info only if setting enabled and shipped/activated
-      ...(showClinicInfo && productItem.assignedClinic && ['SHIPPED', 'ACTIVATED'].includes(productItem.status) && {
+      // Show clinic info only for enabled fields and shipped/activated
+      ...(anyClinicInfoVisible && clinic && ['SHIPPED', 'ACTIVATED'].includes(productItem.status) && {
         clinic: {
-          name: productItem.assignedClinic.name,
-          address: productItem.assignedClinic.address,
-          ...(showBranchInfo && productItem.assignedClinic.branchName && {
-            branch: productItem.assignedClinic.branchName,
-          }),
+          ...(showClinicName && { name: clinic.name }),
+          ...(showBranchInfo && clinic.branchName && { branch: clinic.branchName }),
+          ...(showClinicAddress && { address: clinic.address }),
         },
       }),
       // Show activation info if activated
@@ -325,13 +327,6 @@ function formatDate(date: Date): string {
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear().toString().slice(-2)
   return `${day}/${month}/${year}`
-}
-
-/**
- * Get show clinic info setting
- */
-async function getShowClinicInfoSetting(): Promise<boolean> {
-  return getSettingBool('verify.showClinicInfo', true)
 }
 
 /**

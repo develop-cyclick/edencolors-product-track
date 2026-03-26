@@ -32,7 +32,6 @@ interface ProductDetail {
     lot: string | null
     mfgDate: string | null
     expDate: string | null
-    inspectionStatus: string
     remarks: string | null
     unit: { id: number; nameTh: string; nameEn: string }
     grnHeader: {
