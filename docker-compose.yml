@@ -1,6 +1,21 @@
 version: '3.8'
 
 services:
+  # Next.js App
+  app:
+    build: .
+    container_name: edencolors-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
