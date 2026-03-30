@@ -54,7 +54,17 @@
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__evaluate_script",
       "mcp__chrome-devtools__new_page",
-      "mcp__chrome-devtools__select_page"
+      "mcp__chrome-devtools__select_page",
+      "Bash(python3:*)",
+      "Bash(py:*)",
+      "Bash(pip install:*)",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_wait_for",
+      "Bash(python:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python:*)"
     ]
   }
 }

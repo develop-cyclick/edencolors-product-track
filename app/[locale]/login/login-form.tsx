@@ -133,7 +133,7 @@ export default function LoginForm({ dict, locale }: LoginFormProps) {
       </button>
 
       {/* Demo Accounts Hint */}
-      <div className="pt-4 border-t border-[var(--color-beige)]">
+      {/* <div className="pt-4 border-t border-[var(--color-beige)]">
         <p className="text-xs text-center text-[var(--color-foreground-muted)] mb-3">
           {locale === 'th' ? 'บัญชีทดสอบ (กดเพื่อใส่รหัส):' : 'Test accounts (click to fill):'}
         </p>
@@ -171,7 +171,7 @@ export default function LoginForm({ dict, locale }: LoginFormProps) {
             <div className="text-[var(--color-foreground-muted)]">marketing</div>
           </button>
         </div>
-      </div>
+      </div> */}
     </form>
   )
 }

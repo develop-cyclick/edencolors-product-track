@@ -54,3 +54,10 @@ certificates
 /public/uploads/claims/*
 !/public/uploads/products/.gitkeep
 !/public/uploads/claims/.gitkeep
+.claude/settings.local.json
+.playwright-mcp/console-2026-03-30T03-40-14-641Z.log
+/.playwright-mcp
+/docs
+คู่มือการใช้งานเว็บไซต์ สหศรีอุตสาหกรรม.docx
+คู่มือการใช้งานเว็บไซต์ สหศรีอุตสาหกรรม.pdf
+.claude/settings.local.json
