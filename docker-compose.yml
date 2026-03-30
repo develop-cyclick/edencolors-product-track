@@ -4,7 +4,7 @@ services:
   # Next.js App
   app:
     build: .
-    container_name: edencolors-app
+    container_name: edencolors
     restart: unless-stopped
     ports:
       - "3000:3000"
