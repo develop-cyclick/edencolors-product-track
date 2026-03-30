@@ -3,7 +3,10 @@ version: '3.8'
 services:
   # Next.js App
   app:
-  image: sunthornrk/edencolors:latest
+    image: sunthornrk/edencolors:latest
+    container_name: edencolors
+    ports:
+      - "3000:3000"
 
   # PostgreSQL Database
   postgres:
