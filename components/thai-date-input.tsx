@@ -20,7 +20,7 @@ export default function ThaiDateInput({ value, onChange, className, required }: 
   return (
     <div className="relative">
       <div
-        className={`${className} pointer-events-none flex items-center`}
+        className={`${className} pointer-events-none absolute inset-0 flex items-center `}
       >
         {value ? (
           <span>{formatThaiDate(value)}</span>
@@ -33,7 +33,7 @@ export default function ThaiDateInput({ value, onChange, className, required }: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+        className={`${className} relative z-10 cursor-pointer w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
       />
     </div>
   );
