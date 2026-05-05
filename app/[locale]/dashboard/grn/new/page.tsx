@@ -131,6 +131,37 @@ export default function NewGRNPage() {
   const [deliveryDocDate, setDeliveryDocDate] = useState('')
   const [remarks, setRemarks] = useState('')
 
+  // Receiving condition checkpoints
+  const [tempControl, setTempControl] = useState<string>('')
+  const [packageCondition, setPackageCondition] = useState<string>('')
+  const [transportCondition, setTransportCondition] = useState<string>('')
+
+  const tempControlOptions = [
+    { value: 'COLD_2_8', labelTh: 'อุณหภูมิอยู่ในช่วงที่กำหนด 2-8 °C', labelEn: 'Temperature within 2-8 °C' },
+    { value: 'ROOM_15_25', labelTh: 'อุณหภูมิอยู่ในช่วงที่กำหนด 15-25°C', labelEn: 'Temperature within 15-25 °C' },
+    { value: 'OUT_OF_RANGE', labelTh: 'อุณหภูมิไม่อยู่ในช่วงที่กำหนด', labelEn: 'Temperature out of range' },
+  ]
+  const packageConditionOptions = [
+    { value: 'NORMAL', labelTh: 'กล่องบรรจุภัณฑ์อยู่ในสภาพปกติ', labelEn: 'Package box in normal condition' },
+    { value: 'DAMAGED', labelTh: 'กล่องบรรจุภัณฑ์ชำรุดเสียหาย', labelEn: 'Package box damaged' },
+  ]
+  const transportConditionOptions = [
+    { value: 'CLEAN', labelTh: 'สะอาด ไม่มีสิ่งปนเปื้อน', labelEn: 'Clean, no contamination' },
+    { value: 'DIRTY', labelTh: 'ไม่สะอาด มีสิ่งปนเปื้อน', labelEn: 'Not clean, contaminated' },
+  ]
+
+  const buildRemarksWithConditions = () => {
+    const parts: string[] = []
+    const tempLabel = tempControlOptions.find((o) => o.value === tempControl)?.labelTh
+    const pkgLabel = packageConditionOptions.find((o) => o.value === packageCondition)?.labelTh
+    const transLabel = transportConditionOptions.find((o) => o.value === transportCondition)?.labelTh
+    if (tempLabel) parts.push(`[การควบคุมอุณหภูมิ] ${tempLabel}`)
+    if (pkgLabel) parts.push(`[กล่องบรรจุภัณฑ์] ${pkgLabel}`)
+    if (transLabel) parts.push(`[สภาพรถขนส่ง] ${transLabel}`)
+    if (remarks) parts.push(remarks)
+    return parts.length > 0 ? parts.join('\n') : null
+  }
+
   const [lines, setLines] = useState<LineItem[]>([
     {
       id: crypto.randomUUID(),
@@ -867,7 +898,7 @@ export default function NewGRNPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             receivedAt: receivedAt,
-            remarks: remarks || null,
+            remarks: buildRemarksWithConditions(),
             lines: lines
               .filter(l => l.planLineId && (l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1))
               .map(l => ({
@@ -1231,7 +1262,7 @@ export default function NewGRNPage() {
           supplierPhone: supplierPhone || null,
           supplierContact: supplierContact || null,
           deliveryDocDate: deliveryDocDate || null,
-          remarks: remarks || null,
+          remarks: buildRemarksWithConditions(),
           lines: lines
             .filter((l) => l.usePreGen ? l.preGeneratedItemIds.length > 0 : l.quantity >= 1)
             .map((l) => ({
@@ -1462,6 +1493,119 @@ export default function NewGRNPage() {
             </div>
           </div>
         </div>
+
+        {/* Receiving Conditions Section */}
+        {!isEditMode && (
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6 mb-6">
+            <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-1">
+              {locale === 'th' ? 'เงื่อนไขการรับสินค้า' : 'Receiving Conditions'}
+            </h2>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-5">
+              {locale === 'th' ? 'เลือกสภาพการรับสินค้าเข้าคลัง' : 'Select the receiving conditions'}
+            </p>
+
+            <div className="space-y-6">
+              {/* 1) Temperature Control */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  
+                  <h3 className="text-base font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'การควบคุมอุณหภูมิ' : 'Temperature Control'}
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {tempControlOptions.map((opt) => {
+                    const active = tempControl === opt.value
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-start gap-2 p-3 border rounded-xl cursor-pointer transition-all ${active ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/10' : 'border-[var(--color-beige)] bg-[var(--color-off-white)] hover:border-[var(--color-gold)]/50'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tempControl"
+                          value={opt.value}
+                          checked={active}
+                          onChange={() => setTempControl(opt.value)}
+                          className="mt-0.5 w-4 h-4 text-[var(--color-gold)] focus:ring-[var(--color-gold)]"
+                        />
+                        <span className="text-sm text-[var(--color-charcoal)]">
+                          {locale === 'th' ? opt.labelTh : opt.labelEn}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 2) Package Condition */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  
+                  <h3 className="text-base font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'กล่องบรรจุภัณฑ์' : 'Package Box'}
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {packageConditionOptions.map((opt) => {
+                    const active = packageCondition === opt.value
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-start gap-2 p-3 border rounded-xl cursor-pointer transition-all ${active ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/10' : 'border-[var(--color-beige)] bg-[var(--color-off-white)] hover:border-[var(--color-gold)]/50'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="packageCondition"
+                          value={opt.value}
+                          checked={active}
+                          onChange={() => setPackageCondition(opt.value)}
+                          className="mt-0.5 w-4 h-4 text-[var(--color-gold)] focus:ring-[var(--color-gold)]"
+                        />
+                        <span className="text-sm text-[var(--color-charcoal)]">
+                          {locale === 'th' ? opt.labelTh : opt.labelEn}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 3) Transport Vehicle Condition */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  
+                  <h3 className="text-base font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'สภาพรถขนส่ง' : 'Transport Vehicle Condition'}
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {transportConditionOptions.map((opt) => {
+                    const active = transportCondition === opt.value
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-start gap-2 p-3 border rounded-xl cursor-pointer transition-all ${active ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/10' : 'border-[var(--color-beige)] bg-[var(--color-off-white)] hover:border-[var(--color-gold)]/50'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="transportCondition"
+                          value={opt.value}
+                          checked={active}
+                          onChange={() => setTransportCondition(opt.value)}
+                          className="mt-0.5 w-4 h-4 text-[var(--color-gold)] focus:ring-[var(--color-gold)]"
+                        />
+                        <span className="text-sm text-[var(--color-charcoal)]">
+                          {locale === 'th' ? opt.labelTh : opt.labelEn}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Lines Section */}
         <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6 mb-6">
