@@ -17,6 +17,7 @@ interface GRNLineInput {
   mfgDate?: string
   expDate?: string
   remarks?: string
+  discrepancyReason?: string | null  // Required at API when totalQty > quantity (Reconcile)
   preGeneratedItemIds?: number[]  // Optional: use pre-generated QR items instead of creating new
 }
 
@@ -156,7 +157,21 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         mfgDate?: Date | null
         expDate?: Date | null
         remarks?: string | null
+        discrepancyReason?: string | null
       }> = []
+
+      // Validate discrepancyReason is provided when there's a Reconcile balance
+      for (const line of body.lines) {
+        const effectiveQty = line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0
+          ? line.preGeneratedItemIds.length
+          : line.quantity
+        const totalQty = line.totalQty ?? effectiveQty
+        if (totalQty > effectiveQty) {
+          if (!line.discrepancyReason || !line.discrepancyReason.trim()) {
+            throw new Error(`Discrepancy reason required for line with productMasterId=${line.productMasterId} (totalQty=${totalQty}, receivedQty=${effectiveQty})`)
+          }
+        }
+      }
 
       for (const line of body.lines) {
         // Fetch ProductMaster data
@@ -294,6 +309,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
             expDate: line.expDate ? new Date(line.expDate) : null,
             remarks: line.remarks || null,
+            discrepancyReason: totalQty > effectiveQty ? (line.discrepancyReason || null) : null,
           })
         } else {
           // Normal flow: create new product items
@@ -395,6 +411,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
             expDate: line.expDate ? new Date(line.expDate) : null,
             remarks: line.remarks || null,
+            discrepancyReason: totalQty > effectiveQty ? (line.discrepancyReason || null) : null,
           })
         }
       }

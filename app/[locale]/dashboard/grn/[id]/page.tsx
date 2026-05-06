@@ -51,6 +51,7 @@ interface GRNDetail {
     productMaster: { id: number; sku: string; nameTh: string; nameEn: string | null; modelSize: string | null }
     unit: { id: number; nameTh: string; nameEn: string | null }
     lot: string | null
+    discrepancyReason: string | null
   }>
   receivingSessions?: Array<{
     id: number
@@ -387,9 +388,9 @@ export default function GRNDetailPage() {
             )}
             {grn.planLines && grn.planLines.length > 0 && (
               grn.receivingStatus === 'PARTIAL' ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                  {locale === 'th' ? 'รับบางส่วน' : 'Partial'}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  {locale === 'th' ? 'ยอดติด Reconcile' : 'Reconcile Pending'}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
@@ -413,16 +414,16 @@ export default function GRNDetailPage() {
               {locale === 'th' ? 'แก้ไข' : 'Edit'}
             </Link>
           )}
-          {/* Receive More Button - Only when approved + partial */}
+          {/* Receive More Button - Only when approved + partial (Reconcile) */}
           {grn.approvedAt && grn.receivingStatus === 'PARTIAL' && (
             <Link
               href={`/${locale}/dashboard/grn/new?receiveMoreId=${id}`}
-              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(249,115,22,0.25)] hover:bg-orange-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(249,115,22,0.35)] transition-all duration-200"
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(217,119,6,0.25)] hover:bg-amber-600 hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(217,119,6,0.35)] transition-all duration-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              {locale === 'th' ? 'รับสินค้าเพิ่ม' : 'Receive More'}
+              {locale === 'th' ? 'รับสินค้าเพิ่ม (เคลียร์ Reconcile)' : 'Receive More (Resolve Reconcile)'}
             </Link>
           )}
           {/* View Document Button */}
@@ -572,15 +573,79 @@ export default function GRNDetailPage() {
               <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่' : 'Address'}</dt>
               <dd className="font-medium text-[var(--color-charcoal)] mt-0.5">{grn.supplierAddress || '-'}</dd>
             </div>
-            {grn.remarks && (
-              <div className="col-span-2">
-                <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</dt>
-                <dd className="font-medium text-[var(--color-charcoal)] mt-0.5">{grn.remarks}</dd>
-              </div>
-            )}
+            {grn.remarks && (() => {
+              // Parse condition tags ([label] value) out of the joined remarks string
+              const lines = grn.remarks.split('\n').map(l => l.trim()).filter(Boolean)
+              const conditions: { label: string; value: string }[] = []
+              const others: string[] = []
+              for (const line of lines) {
+                const m = line.match(/^\[(.+?)\]\s*(.*)$/)
+                if (m) conditions.push({ label: m[1], value: m[2] })
+                else others.push(line)
+              }
+              return (
+                <div className="col-span-2 space-y-2">
+                  {conditions.length > 0 && (
+                    <div>
+                      <dt className="text-[var(--color-foreground-muted)] mb-1.5">
+                        {locale === 'th' ? 'เงื่อนไขการรับสินค้า' : 'Receiving Conditions'}
+                      </dt>
+                      <div className="flex flex-wrap gap-1.5">
+                        {conditions.map((c, idx) => (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-mint)]/10 border border-[var(--color-mint)]/30 text-xs"
+                          >
+                            <span className="text-[var(--color-mint-dark)]">✓</span>
+                            <span className="text-[var(--color-foreground-muted)]">{c.label}:</span>
+                            <span className="font-medium text-[var(--color-charcoal)]">{c.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {others.length > 0 && (
+                    <div>
+                      <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</dt>
+                      <dd className="font-medium text-[var(--color-charcoal)] mt-0.5 whitespace-pre-line">{others.join('\n')}</dd>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </dl>
         </div>
       </div>
+
+      {/* Reconcile Banner - only when PARTIAL */}
+      {grn.receivingStatus === 'PARTIAL' && grn.planLines && grn.planLines.length > 0 && (() => {
+        const reconcileLines = grn.planLines.filter(pl => pl.totalQty > pl.receivedQty)
+        const totalDiff = reconcileLines.reduce((s, pl) => s + (pl.totalQty - pl.receivedQty), 0)
+        if (totalDiff === 0) return null
+        return (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-200/70 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-amber-900">
+                  {locale === 'th'
+                    ? `ยอดติด Reconcile — รวม ${totalDiff} ชิ้น (${reconcileLines.length} รายการ)`
+                    : `Reconcile Pending — ${totalDiff} units across ${reconcileLines.length} line(s)`}
+                </h3>
+                <p className="text-xs text-amber-800 mt-1">
+                  {locale === 'th'
+                    ? `Supplier: ${grn.supplierName || '-'}${grn.poNo ? ` • PO: ${grn.poNo}` : ''} — โปรดติดตามสินค้าที่ขาดจาก Supplier`
+                    : `Supplier: ${grn.supplierName || '-'}${grn.poNo ? ` • PO: ${grn.poNo}` : ''} — please follow up with the supplier`}
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Plan Summary - only show if planLines exist */}
       {grn.planLines && grn.planLines.length > 0 && (
@@ -605,7 +670,10 @@ export default function GRNDetailPage() {
                     {locale === 'th' ? 'รับแล้ว' : 'Received'}
                   </th>
                   <th className="px-5 py-3 text-center text-sm font-semibold text-[var(--color-charcoal)]">
-                    {locale === 'th' ? 'คงเหลือ' : 'Remaining'}
+                    {locale === 'th' ? 'ยอดติด Reconcile' : 'Reconcile'}
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    {locale === 'th' ? 'เหตุผลส่วนต่าง' : 'Discrepancy Reason'}
                   </th>
                   <th className="px-5 py-3 text-left text-sm font-semibold text-[var(--color-charcoal)]" style={{ minWidth: 120 }}>
                     {locale === 'th' ? 'ความคืบหน้า' : 'Progress'}
@@ -626,15 +694,22 @@ export default function GRNDetailPage() {
                       <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-charcoal)]">{pl.totalQty}</td>
                       <td className="px-5 py-3 text-sm text-center font-medium text-[var(--color-mint-dark)]">{pl.receivedQty}</td>
                       <td className="px-5 py-3 text-sm text-center font-medium">
-                        <span className={remaining > 0 ? 'text-orange-600' : 'text-[var(--color-mint-dark)]'}>
+                        <span className={remaining > 0 ? 'text-amber-700' : 'text-[var(--color-mint-dark)]'}>
                           {remaining}
                         </span>
+                      </td>
+                      <td className="px-5 py-3 text-sm">
+                        {remaining > 0 && pl.discrepancyReason ? (
+                          <span className="text-amber-800">{pl.discrepancyReason}</span>
+                        ) : (
+                          <span className="text-[var(--color-foreground-muted)]">-</span>
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 bg-[var(--color-beige)] rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-[var(--color-mint)]' : 'bg-orange-400'}`}
+                              className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-[var(--color-mint)]' : 'bg-amber-400'}`}
                               style={{ width: `${Math.min(pct, 100)}%` }}
                             />
                           </div>
@@ -724,14 +799,14 @@ export default function GRNDetailPage() {
                 )
               })}
 
-              {/* Pending indicator for partial */}
+              {/* Pending indicator for Reconcile */}
               {grn.receivingStatus === 'PARTIAL' && grn.planLines && (
                 <div className="relative pl-12">
-                  <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-orange-400 bg-white" />
-                  <div className="text-sm text-orange-600 font-medium">
+                  <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-amber-400 bg-white" />
+                  <div className="text-sm text-amber-700 font-medium">
                     {locale === 'th'
-                      ? `รอรับเพิ่ม — คงเหลือ ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} รายการ`
-                      : `Pending — ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} remaining`
+                      ? `ยอดติด Reconcile — รอรับเพิ่ม ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} ชิ้น`
+                      : `Reconcile Pending — ${grn.planLines.reduce((sum, pl) => sum + (pl.totalQty - pl.receivedQty), 0)} units remaining`
                     }
                   </div>
                 </div>

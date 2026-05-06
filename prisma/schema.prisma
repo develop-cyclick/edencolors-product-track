@@ -187,6 +187,7 @@ model User {
   outboundsApproved       OutboundHeader[]      @relation("OutboundApprovedBy")
   purchaseOrdersCreated   PurchaseOrder[]       @relation("POCreatedBy")
   preGeneratedBatches     PreGeneratedBatch[]   @relation("PreGenBatchCreatedBy")
+  preGenBatchPrintLogs    PreGeneratedBatchPrintLog[] @relation("PreGenBatchPrintLogUser")
   eventLogs               EventLog[]
   borrowsCreated          BorrowTransaction[]   @relation("BorrowCreatedBy")
   borrowsApproved         BorrowTransaction[]   @relation("BorrowApprovedBy")
@@ -357,6 +358,7 @@ model GRNPlanLine {
   mfgDate          DateTime?        @map("mfg_date") @db.Date
   expDate          DateTime?        @map("exp_date") @db.Date
   remarks          String?
+  discrepancyReason String?         @map("discrepancy_reason")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -530,6 +532,8 @@ model PreGeneratedBatch {
   batchNo         String        @unique @map("batch_no") // PG-2026-000001
   quantity        Int
   linkedCount     Int           @default(0) @map("linked_count")
+  printCount      Int           @default(0) @map("print_count")
+  lastPrintedAt   DateTime?     @map("last_printed_at")
   productMasterId Int           @map("product_master_id")
   createdById     Int           @map("created_by_id")
   remarks         String?
@@ -538,9 +542,26 @@ model PreGeneratedBatch {
   productMaster ProductMaster   @relation(fields: [productMasterId], references: [id])
   createdBy     User            @relation("PreGenBatchCreatedBy", fields: [createdById], references: [id])
   productItems  ProductItem[]
+  printLogs     PreGeneratedBatchPrintLog[]
 
   @@index([batchNo])
   @@map("pre_generated_batches")
+}
+
+model PreGeneratedBatchPrintLog {
+  id        Int      @id @default(autoincrement())
+  batchId   Int      @map("batch_id")
+  userId    Int      @map("user_id")
+  layout    String   // 'grid' | 'individual'
+  isReprint Boolean  @default(false) @map("is_reprint")
+  reason    String?  // Required at API layer when isReprint=true
+  createdAt DateTime @default(now()) @map("created_at")
+
+  batch PreGeneratedBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User              @relation("PreGenBatchPrintLogUser", fields: [userId], references: [id])
+
+  @@index([batchId])
+  @@map("pre_generated_batch_print_logs")
 }
 
 // ============================================

@@ -36,6 +36,18 @@ interface PreGenBatch {
   createdBy: { id: number; displayName: string }
   remarks: string | null
   createdAt: string
+  printCount?: number
+  lastPrintedAt?: string | null
+}
+
+interface PrintLogEntry {
+  id: number
+  userId: number
+  userName: string
+  layout: string
+  isReprint: boolean
+  reason: string | null
+  createdAt: string
 }
 
 interface CreateResult {
@@ -58,9 +70,12 @@ export default function PreGeneratePage() {
   const [quantity, setQuantity] = useState(10)
   const [remarks, setRemarks] = useState('')
   const [createResult, setCreateResult] = useState<CreateResult | null>(null)
-  const [selectedBatch, setSelectedBatch] = useState<{ batch: PreGenBatch; items: PreGenItem[] } | null>(null)
+  const [selectedBatch, setSelectedBatch] = useState<{ batch: PreGenBatch; items: PreGenItem[]; printLogs: PrintLogEntry[]; printCount: number; lastPrintedAt: string | null } | null>(null)
   const [loadingBatch, setLoadingBatch] = useState(false)
-  const [downloading, setDownloading] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  // Reprint reason modal state
+  const [reasonModal, setReasonModal] = useState<{ batchId: number; productItemIds: number[]; batchNo: string; printCount: number } | null>(null)
+  const [reprintReason, setReprintReason] = useState('')
 
   useEffect(() => {
     fetchBatches()
@@ -149,7 +164,13 @@ export default function PreGeneratePage() {
       const res = await fetch(`/api/warehouse/pre-generate/${batch.id}`)
       const data = await res.json()
       if (data.success) {
-        setSelectedBatch({ batch, items: data.data.items })
+        setSelectedBatch({
+          batch,
+          items: data.data.items,
+          printLogs: data.data.printLogs || [],
+          printCount: data.data.printCount || 0,
+          lastPrintedAt: data.data.lastPrintedAt || null,
+        })
       }
     } catch (error) {
       console.error('Failed to fetch batch detail:', error)
@@ -158,38 +179,102 @@ export default function PreGeneratePage() {
     }
   }
 
-  const downloadLabels = async (productItemIds: number[], batchNo: string) => {
-    setDownloading(true)
+  // Send the print request, receive PDF, open hidden iframe and trigger print dialog
+  const sendPrintRequest = async (batchId: number, productItemIds: number[], reason?: string) => {
+    setPrinting(true)
     try {
       const res = await fetch('/api/warehouse/labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds, layout: 'grid' }),
+        body: JSON.stringify({
+          productItemIds,
+          layout: 'grid',
+          batchId,
+          reason: reason || undefined,
+        }),
       })
 
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `labels-${batchNo}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
-      } else {
+      if (!res.ok) {
         let errMsg = locale === 'th' ? 'ไม่สามารถสร้าง Labels ได้' : 'Failed to generate labels'
         try {
           const errData = await res.json()
           if (errData.error) errMsg += `: ${errData.error}`
         } catch { /* ignore parse error */ }
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: errMsg, variant: 'error', icon: 'error' })
+        return
+      }
+
+      const blob = await res.blob()
+      const pdfBlob = new Blob([blob], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(pdfBlob)
+
+      // Mount a hidden iframe and call print() once it has loaded the PDF
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+      iframe.src = url
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus()
+          iframe.contentWindow?.print()
+        } catch (err) {
+          console.error('Print failed:', err)
+        }
+      }
+      document.body.appendChild(iframe)
+
+      // Clean up iframe + object URL after print dialog likely closed
+      window.setTimeout(() => {
+        document.body.removeChild(iframe)
+        window.URL.revokeObjectURL(url)
+      }, 60000)
+
+      // Refresh batches and batch detail to update print count
+      fetchBatches()
+      if (selectedBatch && selectedBatch.batch.id === batchId) {
+        const refreshed = await fetch(`/api/warehouse/pre-generate/${batchId}`)
+        const refreshedData = await refreshed.json()
+        if (refreshedData.success) {
+          setSelectedBatch({
+            batch: selectedBatch.batch,
+            items: refreshedData.data.items,
+            printLogs: refreshedData.data.printLogs || [],
+            printCount: refreshedData.data.printCount || 0,
+            lastPrintedAt: refreshedData.data.lastPrintedAt || null,
+          })
+        }
       }
     } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Labels ได้' : 'Failed to download labels', variant: 'error', icon: 'error' })
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถปริ้น Labels ได้' : 'Failed to print labels', variant: 'error', icon: 'error' })
     } finally {
-      setDownloading(false)
+      setPrinting(false)
     }
+  }
+
+  // Entry point: check current printCount; if >0 prompt for reason, otherwise print directly
+  const printLabels = async (batchId: number, productItemIds: number[], batchNo: string, currentPrintCount: number) => {
+    if (currentPrintCount > 0) {
+      setReasonModal({ batchId, productItemIds, batchNo, printCount: currentPrintCount })
+      setReprintReason('')
+      return
+    }
+    await sendPrintRequest(batchId, productItemIds)
+  }
+
+  const submitReprintReason = async () => {
+    if (!reasonModal) return
+    if (!reprintReason.trim()) {
+      await alert({ title: locale === 'th' ? 'กรุณาระบุเหตุผล' : 'Reason required', message: locale === 'th' ? 'กรุณาระบุเหตุผลที่ต้องปริ้นซ้ำ' : 'Please provide a reason for reprinting', variant: 'warning', icon: 'warning' })
+      return
+    }
+    const { batchId, productItemIds } = reasonModal
+    setReasonModal(null)
+    await sendPrintRequest(batchId, productItemIds, reprintReason.trim())
+    setReprintReason('')
   }
 
   const formatDate = (dateStr: string) => {
@@ -489,21 +574,21 @@ export default function PreGeneratePage() {
                   {locale === 'th' ? 'ปิด' : 'Close'}
                 </button>
                 <button
-                  onClick={() => downloadLabels(createResult.items.map(i => i.productItemId), createResult.batchNo)}
-                  disabled={downloading}
+                  onClick={() => printLabels(createResult.id, createResult.items.map(i => i.productItemId), createResult.batchNo, 0)}
+                  disabled={printing}
                   className="flex-1 px-4 py-3 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                 >
-                  {downloading ? (
+                  {printing ? (
                     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                   ) : (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   )}
-                  {locale === 'th' ? 'ดาวน์โหลด Labels (PDF)' : 'Download Labels (PDF)'}
+                  {locale === 'th' ? 'ปริ้น Labels' : 'Print Labels'}
                 </button>
               </div>
             </div>
@@ -536,7 +621,7 @@ export default function PreGeneratePage() {
               </div>
             </div>
 
-            <div className="p-6 max-h-[50vh] overflow-y-auto">
+            <div className="p-6 max-h-[50vh] overflow-y-auto space-y-5">
               {loadingBatch ? (
                 <div className="text-center py-8">
                   <div className="w-8 h-8 mx-auto mb-2 relative">
@@ -545,36 +630,86 @@ export default function PreGeneratePage() {
                   </div>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[var(--color-off-white)]">
-                      <th className="px-3 py-2 text-left font-medium">#</th>
-                      <th className="px-3 py-2 text-left font-medium">Serial Number</th>
-                      <th className="px-3 py-2 text-center font-medium">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-beige)]">
-                    {selectedBatch.items.map((item, index) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-[var(--color-foreground-muted)]">{index + 1}</td>
-                        <td className="px-3 py-2 font-mono text-[var(--color-gold)]">{item.serial12}</td>
-                        <td className="px-3 py-2 text-center">
-                          {item.isLinked ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
-                              {locale === 'th' ? 'ใช้แล้ว' : 'Used'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              {locale === 'th' ? 'พร้อมใช้' : 'Available'}
-                            </span>
-                          )}
-                        </td>
+                <>
+                  {/* Print stats + history */}
+                  <div className={`rounded-xl p-4 border ${selectedBatch.printCount > 0 ? 'bg-amber-50 border-amber-300' : 'bg-[var(--color-off-white)] border-[var(--color-beige)]'}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <svg className={`w-4 h-4 ${selectedBatch.printCount > 0 ? 'text-amber-700' : 'text-[var(--color-foreground-muted)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        <span className={`text-sm font-semibold ${selectedBatch.printCount > 0 ? 'text-amber-900' : 'text-[var(--color-charcoal)]'}`}>
+                          {locale === 'th' ? `ปริ้นไปแล้ว ${selectedBatch.printCount} ครั้ง` : `Printed ${selectedBatch.printCount} time(s)`}
+                        </span>
+                      </div>
+                      {selectedBatch.lastPrintedAt && (
+                        <span className="text-xs text-[var(--color-foreground-muted)]">
+                          {locale === 'th' ? 'ล่าสุด' : 'Last'}: {formatDate(selectedBatch.lastPrintedAt)}
+                        </span>
+                      )}
+                    </div>
+                    {selectedBatch.printLogs.length > 0 && (
+                      <details className="mt-3">
+                        <summary className="text-xs font-medium cursor-pointer text-[var(--color-charcoal)] hover:text-[var(--color-gold)]">
+                          {locale === 'th' ? `ประวัติการปริ้น (${selectedBatch.printLogs.length})` : `Print History (${selectedBatch.printLogs.length})`}
+                        </summary>
+                        <div className="mt-2 border border-[var(--color-beige)] rounded-lg bg-white divide-y divide-[var(--color-beige)] max-h-40 overflow-y-auto">
+                          {selectedBatch.printLogs.map((log) => (
+                            <div key={log.id} className="px-3 py-2 text-xs">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-[var(--color-charcoal)]">
+                                  {log.userName}
+                                  {log.isReprint && (
+                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">
+                                      {locale === 'th' ? 'ปริ้นซ้ำ' : 'REPRINT'}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-[var(--color-foreground-muted)]">{formatDate(log.createdAt)}</span>
+                              </div>
+                              {log.reason && (
+                                <div className="mt-1 text-[var(--color-foreground-muted)]">
+                                  {locale === 'th' ? 'เหตุผล' : 'Reason'}: {log.reason}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[var(--color-off-white)]">
+                        <th className="px-3 py-2 text-left font-medium">#</th>
+                        <th className="px-3 py-2 text-left font-medium">Serial Number</th>
+                        <th className="px-3 py-2 text-center font-medium">{locale === 'th' ? 'สถานะ' : 'Status'}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-beige)]">
+                      {selectedBatch.items.map((item, index) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2 text-[var(--color-foreground-muted)]">{index + 1}</td>
+                          <td className="px-3 py-2 font-mono text-[var(--color-gold)]">{item.serial12}</td>
+                          <td className="px-3 py-2 text-center">
+                            {item.isLinked ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-mint)]" />
+                                {locale === 'th' ? 'ใช้แล้ว' : 'Used'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                {locale === 'th' ? 'พร้อมใช้' : 'Available'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
               )}
             </div>
 
@@ -590,26 +725,91 @@ export default function PreGeneratePage() {
                   onClick={async () => {
                     const availableItems = selectedBatch.items.filter(i => !i.isLinked)
                     if (availableItems.length > 0) {
-                      downloadLabels(availableItems.map(i => i.id), selectedBatch.batch.batchNo)
+                      printLabels(selectedBatch.batch.id, availableItems.map(i => i.id), selectedBatch.batch.batchNo, selectedBatch.printCount)
                     } else {
                       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่มีรายการที่พร้อมใช้' : 'No available items', variant: 'warning', icon: 'warning' })
                     }
                   }}
-                  disabled={downloading || selectedBatch.items.filter(i => !i.isLinked).length === 0}
+                  disabled={printing || selectedBatch.items.filter(i => !i.isLinked).length === 0}
                   className="flex-1 px-4 py-3 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                 >
-                  {downloading ? (
+                  {printing ? (
                     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                   ) : (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   )}
-                  {locale === 'th' ? 'พิมพ์ที่ยังไม่ใช้' : 'Print Available'}
+                  {locale === 'th' ? 'ปริ้นที่ยังไม่ใช้' : 'Print Available'}
                   {' '}({selectedBatch.items.filter(i => !i.isLinked).length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reprint Reason Modal */}
+      {reasonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-lg)] max-w-md w-full overflow-hidden animate-scaleIn">
+            <div className="p-5 border-b border-amber-200 bg-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-200/70 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-display text-base font-semibold text-amber-900">
+                    {locale === 'th' ? 'กำลังปริ้นซ้ำ' : 'Reprint Detected'}
+                  </h3>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    {locale === 'th'
+                      ? `Batch ${reasonModal.batchNo} ถูกปริ้นไปแล้ว ${reasonModal.printCount} ครั้ง`
+                      : `Batch ${reasonModal.batchNo} has been printed ${reasonModal.printCount} time(s)`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <label className="block text-sm font-medium text-[var(--color-charcoal)]">
+                {locale === 'th' ? 'เหตุผลที่ต้องปริ้นซ้ำ' : 'Reason for reprinting'}
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <textarea
+                value={reprintReason}
+                onChange={(e) => setReprintReason(e.target.value)}
+                rows={3}
+                placeholder={locale === 'th'
+                  ? 'เช่น สติกเกอร์ชำรุด / พิมพ์ผิด / ต้องการปริ้นเพิ่ม'
+                  : 'e.g. Damaged stickers / printer error / additional copies needed'}
+                className="w-full px-3 py-2 text-sm bg-amber-50/50 border border-amber-300 rounded-lg focus:outline-none focus:border-amber-500 focus:shadow-[0_0_0_3px_rgba(217,119,6,0.15)] transition-all resize-none placeholder:text-amber-400"
+                autoFocus
+              />
+            </div>
+
+            <div className="p-5 border-t border-[var(--color-beige)] bg-[var(--color-off-white)]">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setReasonModal(null); setReprintReason('') }}
+                  disabled={printing}
+                  className="flex-1 px-4 py-2.5 text-[var(--color-charcoal)] border border-[var(--color-beige)] bg-white rounded-xl hover:bg-[var(--color-off-white)] disabled:opacity-50 transition-colors"
+                >
+                  {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+                </button>
+                <button
+                  onClick={submitReprintReason}
+                  disabled={printing || !reprintReason.trim()}
+                  className="flex-1 px-4 py-2.5 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                >
+                  {printing
+                    ? (locale === 'th' ? 'กำลังปริ้น...' : 'Printing...')
+                    : (locale === 'th' ? 'ยืนยันปริ้นซ้ำ' : 'Confirm Reprint')}
                 </button>
               </div>
             </div>

@@ -384,6 +384,11 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         where: { grnHeaderId: grnId },
       })
 
+      // Delete existing plan lines so we can recreate from edit payload
+      await tx.gRNPlanLine.deleteMany({
+        where: { grnHeaderId: grnId },
+      })
+
       // Delete product items
       await tx.productItem.deleteMany({
         where: { id: { in: productItemIds } },
@@ -420,6 +425,19 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
 
       // 3. Create new lines with product items and QR tokens (same as POST logic)
       const createdLines = []
+
+      // Validate discrepancyReason is provided when there's a Reconcile balance
+      for (const line of body.lines) {
+        const effectiveQty = line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0
+          ? line.preGeneratedItemIds.length
+          : line.quantity
+        const totalQty = line.totalQty ?? effectiveQty
+        if (totalQty > effectiveQty) {
+          if (!line.discrepancyReason || !line.discrepancyReason.trim()) {
+            throw new Error(`Discrepancy reason required for line with productMasterId=${line.productMasterId}`)
+          }
+        }
+      }
 
       for (const line of body.lines) {
         // Fetch ProductMaster data
@@ -602,13 +620,49 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
         }
       }
 
-      return { linesCreated: createdLines.length }
+      // 4. Recreate plan lines from edit payload
+      let isPartial = false
+      for (const line of body.lines) {
+        const effectiveQty = line.preGeneratedItemIds && line.preGeneratedItemIds.length > 0
+          ? line.preGeneratedItemIds.length
+          : line.quantity
+        const totalQty = line.totalQty ?? effectiveQty
+        if (totalQty > effectiveQty) isPartial = true
+
+        const productMaster = await tx.productMaster.findUnique({
+          where: { id: line.productMasterId },
+        })
+
+        await tx.gRNPlanLine.create({
+          data: {
+            grnHeaderId: grnId,
+            productMasterId: line.productMasterId,
+            totalQty,
+            receivedQty: effectiveQty,
+            unitId: line.unitId || productMaster?.defaultUnitId || 1,
+            lot: line.lot || null,
+            mfgDate: line.mfgDate ? new Date(line.mfgDate) : null,
+            expDate: line.expDate ? new Date(line.expDate) : null,
+            remarks: line.remarks || null,
+            discrepancyReason: totalQty > effectiveQty ? (line.discrepancyReason || null) : null,
+          },
+        })
+      }
+
+      // Update receivingStatus
+      await tx.gRNHeader.update({
+        where: { id: grnId },
+        data: { receivingStatus: isPartial ? 'PARTIAL' : 'COMPLETE' },
+      })
+
+      return { linesCreated: createdLines.length, isPartial }
     })
 
     return successResponse({
       id: grnId,
       grnNo: existingGrn.grnNo,
       linesCreated: result.linesCreated,
+      receivingStatus: result.isPartial ? 'PARTIAL' : 'COMPLETE',
       statusReset: wasRejected,
     })
   } catch (error) {

@@ -330,6 +330,17 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       })
       const isComplete = updatedPlanLines.every(pl => pl.receivedQty >= pl.totalQty)
 
+      // Clear discrepancyReason on plan lines that are now fully received (Reconcile resolved)
+      const resolvedPlanLineIds = updatedPlanLines
+        .filter(pl => pl.receivedQty >= pl.totalQty && pl.discrepancyReason)
+        .map(pl => pl.id)
+      if (resolvedPlanLineIds.length > 0) {
+        await tx.gRNPlanLine.updateMany({
+          where: { id: { in: resolvedPlanLineIds } },
+          data: { discrepancyReason: null },
+        })
+      }
+
       await tx.gRNHeader.update({
         where: { id: grnId },
         data: { receivingStatus: isComplete ? 'COMPLETE' : 'PARTIAL' },

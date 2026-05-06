@@ -7,13 +7,17 @@ import { generateQRCodeURL } from '@/lib/qr-token'
 // POST /api/warehouse/labels
 // Generate PDF labels for specified product items
 // layout: 'individual' (4x6 inch per label) or 'grid' (A4 with 8 columns)
-export const POST = withWarehouse(async (request: NextRequest) => {
+// When `batchId` is provided, this is treated as a Print action: print count is incremented
+// and a print log entry is created. If the batch already has printCount > 0, a `reason` is required.
+export const POST = withWarehouse(async (request: NextRequest, { user }) => {
   try {
     const body = await request.json()
-    const { productItemIds, grnId, layout = 'individual' } = body as {
+    const { productItemIds, grnId, layout = 'individual', batchId, reason } = body as {
       productItemIds?: number[]
       grnId?: number
       layout?: 'individual' | 'grid'
+      batchId?: number
+      reason?: string
     }
 
     // Either productItemIds or grnId must be provided
@@ -22,6 +26,28 @@ export const POST = withWarehouse(async (request: NextRequest) => {
         { success: false, error: 'Either productItemIds or grnId is required' },
         { status: 400 }
       )
+    }
+
+    // Validate reprint reason when batchId is provided and the batch has been printed before
+    let isReprint = false
+    if (batchId) {
+      const batch = await prisma.preGeneratedBatch.findUnique({
+        where: { id: batchId },
+        select: { id: true, printCount: true },
+      })
+      if (!batch) {
+        return NextResponse.json(
+          { success: false, error: 'Pre-generated batch not found' },
+          { status: 404 }
+        )
+      }
+      isReprint = batch.printCount > 0
+      if (isReprint && (!reason || !reason.trim())) {
+        return NextResponse.json(
+          { success: false, error: 'Reprint reason is required' },
+          { status: 400 }
+        )
+      }
     }
 
     // If grnId is provided, get all product items from that GRN
@@ -141,7 +167,30 @@ export const POST = withWarehouse(async (request: NextRequest) => {
       ? `labels-grid-${Date.now()}.pdf`
       : `labels-${Date.now()}.pdf`
 
+    // Track the print: increment count + write print log
+    if (batchId) {
+      await prisma.$transaction([
+        prisma.preGeneratedBatch.update({
+          where: { id: batchId },
+          data: {
+            printCount: { increment: 1 },
+            lastPrintedAt: new Date(),
+          },
+        }),
+        prisma.preGeneratedBatchPrintLog.create({
+          data: {
+            batchId,
+            userId: user.userId,
+            layout,
+            isReprint,
+            reason: reason || null,
+          },
+        }),
+      ])
+    }
+
     // Return PDF as response (convert Buffer to Uint8Array for NextResponse)
+    // The client decides whether to print or download from the resulting blob.
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {

@@ -30,6 +30,10 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
         },
         orderBy: { createdAt: 'asc' },
       },
+      printLogs: {
+        include: { user: { select: { id: true, displayName: true } } },
+        orderBy: { createdAt: 'desc' },
+      },
     },
   })
 
@@ -51,6 +55,8 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
     quantity: batch.quantity,
     linkedCount,
     availableCount,
+    printCount: batch.printCount,
+    lastPrintedAt: batch.lastPrintedAt,
     productMaster: batch.productMaster,
     createdBy: batch.createdBy,
     remarks: batch.remarks,
@@ -62,6 +68,15 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
       isLinked: item.status !== 'PENDING_LINK',
       qrToken: item.qrTokens[0]?.token || null,
       createdAt: item.createdAt,
+    })),
+    printLogs: batch.printLogs.map((log) => ({
+      id: log.id,
+      userId: log.userId,
+      userName: log.user.displayName,
+      layout: log.layout,
+      isReprint: log.isReprint,
+      reason: log.reason,
+      createdAt: log.createdAt,
     })),
   })
 }
