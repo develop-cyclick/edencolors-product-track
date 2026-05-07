@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-IMAGE="sunthornrk/edencolors"
+IMAGE="sunthornrk/edencolors-track"
 TAG="${1:-latest}"
-SERVER="${DEPLOY_SERVER:-your-user@your-server-ip}"
-REMOTE_DIR="${REMOTE_DIR:-/root/edencolors}"
+SERVER="${DEPLOY_SERVER:-deploy@your-server-ip}"
+REMOTE_DIR="${REMOTE_DIR:-/home/deploy/edencolors-track}"
 
 echo "==> Building image ($IMAGE:$TAG)..."
 docker build --platform linux/amd64 -t $IMAGE:$TAG .

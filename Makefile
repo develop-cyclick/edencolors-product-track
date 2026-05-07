@@ -1,7 +1,7 @@
 # EdenColors — Makefile
 # Usage: make <command>
 
-IMAGE=sunthornrk/edencolors
+IMAGE=sunthornrk/edencolors-track
 TAG?=latest
 
 # ─── Development ────────────────────────────────────────────

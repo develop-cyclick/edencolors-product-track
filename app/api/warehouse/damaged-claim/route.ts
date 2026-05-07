@@ -5,8 +5,7 @@ import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
 import { generateClaimNumber } from '@/lib/serial-generator'
 import { notifyManagers } from '@/lib/push-notification'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
+import { uploadToR2, buildR2Key } from '@/lib/r2'
 
 type HandlerContext = { user: JWTPayload }
 
@@ -82,9 +81,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     const attachments: Array<{ fileUrl: string; fileName: string; fileType: string; fileSize: number }> = []
 
     if (files.length > 0) {
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'claims')
-      await mkdir(uploadDir, { recursive: true })
-
       for (const file of files) {
         if (!(file instanceof File) || file.size === 0) continue
         if (file.size > 10 * 1024 * 1024) {
@@ -97,13 +93,12 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           return errorResponse('Allowed file types: jpg, png, webp, pdf, doc, docx, xls, xlsx, csv, txt')
         }
 
-        const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const filepath = path.join(uploadDir, filename)
         const buffer = Buffer.from(await file.arrayBuffer())
-        await writeFile(filepath, buffer)
+        const key = buildR2Key('claims', file.name)
+        const fileUrl = await uploadToR2(key, buffer, file.type)
 
         attachments.push({
-          fileUrl: `/uploads/claims/${filename}`,
+          fileUrl,
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,

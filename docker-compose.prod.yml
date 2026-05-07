@@ -1,9 +1,10 @@
 services:
   app:
-    image: sunthornrk/edencolors:latest
+    image: sunthornrk/edencolors-track:latest
+    container_name: edencolors-track-app
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     env_file:
       - .env.production
     depends_on:
@@ -14,21 +15,23 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: edencolors-track-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: edencolors
+      POSTGRES_USER: edencolors_track
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: edencolors
+      POSTGRES_DB: edencolors_track
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U edencolors"]
+      test: ["CMD-SHELL", "pg_isready -U edencolors_track"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
+    container_name: edencolors-track-redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -40,11 +43,14 @@ services:
 
   nginx:
     image: nginx:alpine
+    container_name: edencolors-track-nginx
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - app
 
