@@ -64,7 +64,14 @@
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_wait_for",
       "Bash(python:*)",
-      "Bash(PYTHONIOENCODING=utf-8 python:*)"
+      "Bash(PYTHONIOENCODING=utf-8 python:*)",
+      "Bash(PGPASSWORD='d64787bb20434db4731a59baa7e0fd260c0ee235743a63c66d5be07a1f914785' psql -h localhost -U edencolors -d edencolors -c \"SELECT 1;\")",
+      "Bash(PGPASSWORD='edencolors123' psql -h localhost -U edencolors -d edencolors -c \"SELECT 1;\")",
+      "Bash(npx prisma *)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes npx prisma migrate reset --force --skip-seed)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
