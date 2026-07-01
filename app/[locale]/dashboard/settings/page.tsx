@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
 
-type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display'
+type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display' | 'label'
 
 interface MasterItem {
   id: number
@@ -19,6 +19,38 @@ interface SystemSettings {
   'verify.showClinicName': boolean
   'verify.showBranchInfo': boolean
   'verify.showClinicAddress': boolean
+  'label.widthMm': number
+  'label.heightMm': number
+}
+
+// Mirror of grid layout constants in lib/pdf-label.ts — used for preview only.
+const LABEL_A4_WIDTH_MM = 210
+const LABEL_A4_HEIGHT_MM = 297
+const LABEL_GRID_MARGIN_MM = 5
+const LABEL_GRID_GAP_MM = 2
+const LABEL_WIDTH_MIN_MM = 10
+const LABEL_WIDTH_MAX_MM = 100
+const LABEL_HEIGHT_MIN_MM = 10
+const LABEL_HEIGHT_MAX_MM = 140
+// QR auto-fit reserves this much height (mm) for the serial-number strip.
+const LABEL_SERIAL_TEXT_MM = 6
+const LABEL_QR_MIN_MM = 10
+
+function calcLabelColumns(widthMm: number): number {
+  const usable = LABEL_A4_WIDTH_MM - LABEL_GRID_MARGIN_MM * 2
+  return Math.max(1, Math.floor((usable + LABEL_GRID_GAP_MM) / (widthMm + LABEL_GRID_GAP_MM)))
+}
+
+function calcLabelRows(heightMm: number): number {
+  const usable = LABEL_A4_HEIGHT_MM - LABEL_GRID_MARGIN_MM * 2
+  return Math.max(1, Math.floor((usable + LABEL_GRID_GAP_MM) / (heightMm + LABEL_GRID_GAP_MM)))
+}
+
+// Approx QR square (mm) that auto-fits a width×height box (banner ~28% of width
+// on top + serial strip at bottom). Mirrors lib/pdf-label.ts logic for preview.
+function calcFitQrMm(widthMm: number, heightMm: number): number {
+  const bannerHeight = widthMm * 0.28
+  return Math.max(LABEL_QR_MIN_MM, Math.min(widthMm, heightMm - bannerHeight - LABEL_SERIAL_TEXT_MM))
 }
 
 export default function SettingsPage() {
@@ -39,8 +71,13 @@ export default function SettingsPage() {
     'verify.showClinicName': true,
     'verify.showBranchInfo': true,
     'verify.showClinicAddress': true,
+    'label.widthMm': 20,
+    'label.heightMm': 34,
   })
   const [settingsLoading, setSettingsLoading] = useState(false)
+  const [widthDraft, setWidthDraft] = useState<string>('20')
+  const [heightDraft, setHeightDraft] = useState<string>('34')
+  const [sizeSaving, setSizeSaving] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -57,17 +94,23 @@ export default function SettingsPage() {
     { key: 'shipping', labelTh: 'วิธีการจัดส่ง', labelEn: 'Shipping Methods', endpoint: '/api/admin/masters/shipping-methods' },
     { key: 'warehouses', labelTh: 'คลังสินค้า', labelEn: 'Warehouses', endpoint: '/api/admin/masters/warehouses' },
     { key: 'display', labelTh: 'การแสดงผล', labelEn: 'Display', endpoint: '' },
+    { key: 'label', labelTh: 'ฉลาก QR', labelEn: 'QR Label', endpoint: '' },
   ]
 
   const currentTab = tabs.find((t) => t.key === activeTab)!
 
   useEffect(() => {
-    if (activeTab === 'display') {
+    if (activeTab === 'display' || activeTab === 'label') {
       fetchSystemSettings()
     } else {
       fetchItems()
     }
   }, [activeTab])
+
+  useEffect(() => {
+    setWidthDraft(String(systemSettings['label.widthMm']))
+    setHeightDraft(String(systemSettings['label.heightMm']))
+  }, [systemSettings])
 
   const fetchSystemSettings = async () => {
     setSettingsLoading(true)
@@ -81,6 +124,55 @@ export default function SettingsPage() {
       console.error('Failed to fetch system settings:', error)
     } finally {
       setSettingsLoading(false)
+    }
+  }
+
+  const saveLabelSize = async () => {
+    const width = Number(widthDraft)
+    const height = Number(heightDraft)
+    const widthOk = Number.isFinite(width) && width >= LABEL_WIDTH_MIN_MM && width <= LABEL_WIDTH_MAX_MM
+    const heightOk = Number.isFinite(height) && height >= LABEL_HEIGHT_MIN_MM && height <= LABEL_HEIGHT_MAX_MM
+    if (!widthOk || !heightOk) {
+      await alert({
+        title: locale === 'th' ? 'ค่าไม่ถูกต้อง' : 'Invalid value',
+        message: locale === 'th'
+          ? `กว้าง ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm และ ยาว ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm`
+          : `Width ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm and height ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm`,
+        variant: 'warning',
+        icon: 'warning',
+      })
+      return
+    }
+    setSizeSaving(true)
+    try {
+      const patch = async (key: string, value: number) => {
+        const res = await fetch('/api/admin/system-settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value }),
+        })
+        const data = await res.json()
+        if (!data.success) throw new Error(data.error || key)
+      }
+      await patch('label.widthMm', width)
+      await patch('label.heightMm', height)
+      setSystemSettings((prev) => ({ ...prev, 'label.widthMm': width, 'label.heightMm': height }))
+      await alert({
+        title: locale === 'th' ? 'สำเร็จ' : 'Saved',
+        message: locale === 'th' ? 'บันทึกขนาดฉลากแล้ว' : 'Label size saved',
+        variant: 'success',
+        icon: 'success',
+      })
+    } catch (error) {
+      console.error('Failed to save label size:', error)
+      await alert({
+        title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error',
+        message: error instanceof Error ? `Error: ${error.message}` : 'Failed to save label size',
+        variant: 'error',
+        icon: 'error',
+      })
+    } finally {
+      setSizeSaving(false)
     }
   }
 
@@ -331,8 +423,120 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="p-6">
-          {/* Display Settings Tab */}
-          {activeTab === 'display' ? (
+          {activeTab === 'label' ? (
+            <div className="space-y-6">
+              <div className="bg-[var(--color-off-white)] rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-[var(--color-charcoal)] mb-1">
+                  {locale === 'th' ? 'ขนาดฉลาก QR (กว้าง × ยาว)' : 'QR Label Size (Width × Height)'}
+                </h3>
+                <p className="text-xs text-[var(--color-foreground-muted)] mb-4">
+                  {locale === 'th'
+                    ? `กำหนดขนาดของฉลากแต่ละดวง (กรอบเส้นปะ) บนตาราง A4 — กว้าง ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm, ยาว ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm · QR จะปรับขนาดให้พอดีกรอบอัตโนมัติ — มีผลกับหน้า pre-generate, reprint, GRN, และ outbound`
+                    : `Sets the size of each label (the dashed cut box) on the A4 grid — width ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm, height ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm. The QR auto-fits the box. Affects pre-generate, reprint, GRN, and outbound pages.`}
+                </p>
+
+                {settingsLoading ? (
+                  <div className="py-4 text-center">
+                    <div className="w-6 h-6 mx-auto relative">
+                      <div className="absolute inset-0 rounded-full border-2 border-[var(--color-beige)]" />
+                      <div className="absolute inset-0 rounded-full border-2 border-[var(--color-gold)] border-t-transparent animate-spin" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 max-w-[10rem]">
+                        <label className={labelClass}>
+                          {locale === 'th' ? 'กว้าง (mm)' : 'Width (mm)'}
+                        </label>
+                        <input
+                          type="number"
+                          min={LABEL_WIDTH_MIN_MM}
+                          max={LABEL_WIDTH_MAX_MM}
+                          step={1}
+                          value={widthDraft}
+                          onChange={(e) => setWidthDraft(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="flex-1 max-w-[10rem]">
+                        <label className={labelClass}>
+                          {locale === 'th' ? 'ยาว (mm)' : 'Height (mm)'}
+                        </label>
+                        <input
+                          type="number"
+                          min={LABEL_HEIGHT_MIN_MM}
+                          max={LABEL_HEIGHT_MAX_MM}
+                          step={1}
+                          value={heightDraft}
+                          onChange={(e) => setHeightDraft(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={saveLabelSize}
+                        disabled={
+                          sizeSaving ||
+                          (widthDraft === String(systemSettings['label.widthMm']) &&
+                            heightDraft === String(systemSettings['label.heightMm']))
+                        }
+                        className="px-6 py-2.5 bg-[var(--color-gold)] text-white rounded-xl font-medium shadow-[0_4px_14px_rgba(201,163,90,0.25)] hover:bg-[var(--color-gold-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        {sizeSaving
+                          ? (locale === 'th' ? 'กำลังบันทึก...' : 'Saving...')
+                          : (locale === 'th' ? 'บันทึก' : 'Save')}
+                      </button>
+                    </div>
+
+                    {(() => {
+                      const w = Number(widthDraft)
+                      const h = Number(heightDraft)
+                      const widthOk = Number.isFinite(w) && w >= LABEL_WIDTH_MIN_MM && w <= LABEL_WIDTH_MAX_MM
+                      const heightOk = Number.isFinite(h) && h >= LABEL_HEIGHT_MIN_MM && h <= LABEL_HEIGHT_MAX_MM
+                      const valid = widthOk && heightOk
+                      const cols = valid ? calcLabelColumns(w) : 0
+                      const rows = valid ? calcLabelRows(h) : 0
+                      const qr = valid ? calcFitQrMm(w, h) : 0
+                      const qrSmall = valid && qr < 12
+                      return (
+                        <div className="rounded-lg border border-[var(--color-beige)] bg-white p-3 text-xs">
+                          <div className="font-semibold text-[var(--color-charcoal)] mb-1">
+                            {locale === 'th' ? 'ตัวอย่าง' : 'Preview'}
+                          </div>
+                          {valid ? (
+                            <div className="text-[var(--color-foreground-muted)]">
+                              {locale === 'th'
+                                ? `ฉลาก ${w}×${h} mm → ${cols} คอลัมน์ × ${rows} แถว = ${cols * rows} ดวง/แผ่น A4 · QR ~${qr.toFixed(0)} mm`
+                                : `Label ${w}×${h} mm → ${cols} cols × ${rows} rows = ${cols * rows} per A4 sheet · QR ~${qr.toFixed(0)} mm`}
+                            </div>
+                          ) : (
+                            <div className="text-red-600">
+                              {locale === 'th'
+                                ? `กว้างต้อง ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm และ ยาว ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm`
+                                : `Width must be ${LABEL_WIDTH_MIN_MM}–${LABEL_WIDTH_MAX_MM} mm and height ${LABEL_HEIGHT_MIN_MM}–${LABEL_HEIGHT_MAX_MM} mm`}
+                            </div>
+                          )}
+                          {qrSmall && (
+                            <div className="text-amber-600 mt-1">
+                              {locale === 'th'
+                                ? '⚠️ กรอบเล็ก QR อาจสแกนยาก — แนะนำเพิ่มขนาดให้ QR ≥ 12 mm'
+                                : '⚠️ Box is small; the QR may be hard to scan — increase size so QR ≥ 12 mm'}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-[var(--color-foreground-muted)] mt-1">
+                            {locale === 'th'
+                              ? `ค่าปัจจุบัน: ${systemSettings['label.widthMm']}×${systemSettings['label.heightMm']} mm`
+                              : `Current: ${systemSettings['label.widthMm']}×${systemSettings['label.heightMm']} mm`}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : activeTab === 'display' ? (
             <div className="space-y-6">
               <div className="bg-[var(--color-off-white)] rounded-xl p-4">
                 <h3 className="text-sm font-semibold text-[var(--color-charcoal)] mb-4">

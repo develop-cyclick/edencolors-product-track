@@ -19,9 +19,23 @@ const MARGIN_MM = 6
 const QR_SIZE_MM = 60
 
 // Grid layout settings
-const GRID_COLUMNS = 8
 const GRID_MARGIN_MM = 5
 const GRID_GAP_MM = 2
+// Default label (sticker) dimensions for grid layout = the dashed cut box.
+// Overridable per call via opts.widthMm / opts.heightMm; the QR auto-fits inside.
+const GRID_LABEL_WIDTH_DEFAULT_MM = 20
+const GRID_LABEL_WIDTH_MIN_MM = 10
+const GRID_LABEL_WIDTH_MAX_MM = 100
+const GRID_LABEL_HEIGHT_DEFAULT_MM = 34
+const GRID_LABEL_HEIGHT_MIN_MM = 10
+const GRID_LABEL_HEIGHT_MAX_MM = 140
+// Smallest QR square (mm) to stay scannable, and the vertical strip (mm)
+// reserved at the bottom of the box for the serial number.
+const GRID_QR_MIN_MM = 10
+const GRID_SERIAL_TEXT_MM = 6
+// Gap (mm) from the bottom of the QR down to the serial-number baseline,
+// so the serial sits right under the QR rather than at the box bottom.
+const GRID_SERIAL_GAP_MM = 3
 
 // Banner image cache
 let bannerImageBase64: string | null = null
@@ -199,11 +213,18 @@ export async function generateSingleLabelPDF(label: LabelData): Promise<Buffer> 
 }
 
 /**
- * Generate a PDF with QR codes in a grid layout on A4 paper
- * 8 columns, multiple rows per page
- * Each cell includes: banner image on top, QR code, and serial number
+ * Generate a PDF with QR codes in a grid layout on A4 paper.
+ * Each cell (the dashed cut box) is sized to `opts.widthMm` x `opts.heightMm`
+ * — the physical sticker size. The QR code auto-fits inside the box, leaving
+ * room for the banner on top and the serial number at the bottom. Column and
+ * row counts are derived from the page so the sticker keeps its physical size.
+ *
+ * Each cell includes: banner image on top, QR code, and serial number.
  */
-export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer> {
+export async function generateGridLabelPDF(
+  labels: LabelData[],
+  opts: { widthMm?: number; heightMm?: number } = {}
+): Promise<Buffer> {
   // Create PDF with A4 page size
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -223,21 +244,40 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
   // Load banner image
   const bannerImage = loadBannerImage()
 
-  // Calculate cell dimensions
-  const usableWidth = A4_WIDTH_MM - (GRID_MARGIN_MM * 2)
-  const cellWidth = (usableWidth - (GRID_GAP_MM * (GRID_COLUMNS - 1))) / GRID_COLUMNS
+  // Resolve and clamp the label (sticker) box = the dashed cut box.
+  const cellWidth = Math.max(
+    GRID_LABEL_WIDTH_MIN_MM,
+    Math.min(GRID_LABEL_WIDTH_MAX_MM, opts.widthMm ?? GRID_LABEL_WIDTH_DEFAULT_MM)
+  )
+  const cellHeight = Math.max(
+    GRID_LABEL_HEIGHT_MIN_MM,
+    Math.min(GRID_LABEL_HEIGHT_MAX_MM, opts.heightMm ?? GRID_LABEL_HEIGHT_DEFAULT_MM)
+  )
 
   // Banner dimensions (aspect ratio ~3.5:1 based on the original image)
   const bannerHeight = bannerImage ? cellWidth * 0.28 : 0
 
-  // QR size adjusted to fit with banner
-  const qrSize = cellWidth - 2 // Slightly smaller than cell for padding
-  const cellHeight = bannerHeight + qrSize + 8 // Banner + QR + space for serial number
+  // QR auto-fits the box: largest square that fits the width and the height
+  // left after the banner (top) and the serial-number strip (bottom).
+  const qrSize = Math.max(
+    GRID_QR_MIN_MM,
+    Math.min(cellWidth, cellHeight - bannerHeight - GRID_SERIAL_TEXT_MM)
+  )
+
+  // Derive columns from page width: cols * cellWidth + (cols-1) * gap + 2*margin <= A4 width
+  const usableWidth = A4_WIDTH_MM - (GRID_MARGIN_MM * 2)
+  const gridColumns = Math.max(
+    1,
+    Math.floor((usableWidth + GRID_GAP_MM) / (cellWidth + GRID_GAP_MM))
+  )
 
   // Calculate rows per page
   const usableHeight = A4_HEIGHT_MM - (GRID_MARGIN_MM * 2)
-  const rowsPerPage = Math.floor((usableHeight + GRID_GAP_MM) / (cellHeight + GRID_GAP_MM))
-  const itemsPerPage = GRID_COLUMNS * rowsPerPage
+  const rowsPerPage = Math.max(
+    1,
+    Math.floor((usableHeight + GRID_GAP_MM) / (cellHeight + GRID_GAP_MM))
+  )
+  const itemsPerPage = gridColumns * rowsPerPage
 
   // Generate all QR codes first
   // Using 'M' error correction - easier to scan than 'H'
@@ -262,8 +302,8 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
     }
 
     // Calculate position
-    const col = indexOnPage % GRID_COLUMNS
-    const row = Math.floor(indexOnPage / GRID_COLUMNS)
+    const col = indexOnPage % gridColumns
+    const row = Math.floor(indexOnPage / gridColumns)
 
     const x = GRID_MARGIN_MM + col * (cellWidth + GRID_GAP_MM)
     const y = GRID_MARGIN_MM + row * (cellHeight + GRID_GAP_MM)
@@ -274,26 +314,27 @@ export async function generateGridLabelPDF(labels: LabelData[]): Promise<Buffer>
     doc.rect(x, y, cellWidth, cellHeight)
     doc.setLineDashPattern([], 0)
 
-    let currentY = y
-
     // Draw banner image on top if available
     if (bannerImage) {
-      doc.addImage(bannerImage, 'JPEG', x, currentY, cellWidth, bannerHeight)
-      currentY += bannerHeight
+      doc.addImage(bannerImage, 'JPEG', x, y, cellWidth, bannerHeight)
     }
 
-    // Draw QR code - centered in cell, below banner
+    // Draw QR code - centered horizontally, and centered within the vertical
+    // space between the banner and the serial-number strip at the bottom.
+    const qrAreaTop = y + bannerHeight
+    const qrAreaHeight = cellHeight - bannerHeight - GRID_SERIAL_TEXT_MM
     const qrX = x + (cellWidth - qrSize) / 2
-    doc.addImage(qrDataUrls[i], 'PNG', qrX, currentY, qrSize, qrSize)
-    currentY += qrSize
+    const qrY = qrAreaTop + Math.max(0, (qrAreaHeight - qrSize) / 2)
+    doc.addImage(qrDataUrls[i], 'PNG', qrX, qrY, qrSize, qrSize)
 
-    // Draw serial number below QR - reduced from 5pt for longer serial
+    // Draw serial number right under the QR (clamped to stay inside the box)
     doc.setFontSize(4)
     doc.setFont(fontFamily, 'bold')
     doc.setTextColor(0, 0, 0)
 
     const serial = labels[i].serialNumber
-    doc.text(serial, x + cellWidth / 2, currentY + 4, { align: 'center' })
+    const serialY = Math.min(qrY + qrSize + GRID_SERIAL_GAP_MM, y + cellHeight - 1)
+    doc.text(serial, x + cellWidth / 2, serialY, { align: 'center' })
   }
 
   // Add page info in footer

@@ -8,6 +8,38 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   'verify.showClinicName': true,
   'verify.showBranchInfo': true,
   'verify.showClinicAddress': true,
+  'label.widthMm': 20,
+  'label.heightMm': 34,
+}
+
+// Per-key validation. Return string error to reject, or null to accept.
+function validateSetting(key: string, value: unknown): string | null {
+  // Back-compat: legacy single QR-size knob, superseded by width/height.
+  if (key === 'label.qrSizeMm') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 'label.qrSizeMm must be a number'
+    }
+    if (value < 10 || value > 40) {
+      return 'label.qrSizeMm must be between 10 and 40 mm'
+    }
+  }
+  if (key === 'label.widthMm') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 'label.widthMm must be a number'
+    }
+    if (value < 10 || value > 100) {
+      return 'label.widthMm must be between 10 and 100 mm'
+    }
+  }
+  if (key === 'label.heightMm') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 'label.heightMm must be a number'
+    }
+    if (value < 10 || value > 140) {
+      return 'label.heightMm must be between 10 and 140 mm'
+    }
+  }
+  return null
 }
 
 // GET /api/admin/system-settings - Get all system settings
@@ -44,6 +76,11 @@ export const PATCH = withAdmin(async (request: NextRequest) => {
 
     if (value === undefined) {
       return errorResponse('Setting value is required', 400)
+    }
+
+    const validationError = validateSetting(key, value)
+    if (validationError) {
+      return errorResponse(validationError, 400)
     }
 
     // Upsert the setting

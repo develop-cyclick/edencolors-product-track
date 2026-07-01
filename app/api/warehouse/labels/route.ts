@@ -159,9 +159,13 @@ export const POST = withWarehouse(async (request: NextRequest, { user }) => {
     )
 
     // Generate PDF based on layout
-    const pdfBuffer = layout === 'grid'
-      ? await generateGridLabelPDF(labels)
-      : await generateLabelPDF(labels)
+    let pdfBuffer: Buffer
+    if (layout === 'grid') {
+      const { widthMm, heightMm } = await getLabelDimensions()
+      pdfBuffer = await generateGridLabelPDF(labels, { widthMm, heightMm })
+    } else {
+      pdfBuffer = await generateLabelPDF(labels)
+    }
 
     const filename = layout === 'grid'
       ? `labels-grid-${Date.now()}.pdf`
@@ -214,4 +218,33 @@ function formatDate(date: Date): string {
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear().toString().slice(-2)
   return `${day}/${month}/${year}`
+}
+
+// Read grid label (sticker) dimensions (mm) from system_settings, each clamped
+// to its valid range. Width default 20 (10–100), height default 34 (10–140).
+async function getLabelDimensions(): Promise<{ widthMm: number; heightMm: number }> {
+  const readClamped = async (
+    key: string,
+    def: number,
+    min: number,
+    max: number,
+  ): Promise<number> => {
+    try {
+      const row = await prisma.systemSetting.findUnique({
+        where: { key },
+        select: { value: true },
+      })
+      if (!row) return def
+      const parsed = Number(JSON.parse(row.value))
+      if (!Number.isFinite(parsed)) return def
+      return Math.max(min, Math.min(max, parsed))
+    } catch {
+      return def
+    }
+  }
+  const [widthMm, heightMm] = await Promise.all([
+    readClamped('label.widthMm', 20, 10, 100),
+    readClamped('label.heightMm', 34, 10, 140),
+  ])
+  return { widthMm, heightMm }
 }
