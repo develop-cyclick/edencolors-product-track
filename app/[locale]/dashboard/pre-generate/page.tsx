@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { useAlert } from '@/components/ui/confirm-modal'
+import { useAlert, useConfirm } from '@/components/ui/confirm-modal'
+import { buildLabelBlob, printBlob } from '@/lib/client/label-print'
 
 interface PreGenItem {
   id: number
@@ -61,10 +62,13 @@ export default function PreGeneratePage() {
   const params = useParams()
   const locale = params.locale as string
   const alert = useAlert()
+  const confirm = useConfirm()
 
   const [batches, setBatches] = useState<PreGenBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [productMasters, setProductMasters] = useState<ProductMasterOption[]>([])
   const [selectedProductMasterId, setSelectedProductMasterId] = useState<number | ''>('')
   const [quantity, setQuantity] = useState(10)
@@ -73,6 +77,8 @@ export default function PreGeneratePage() {
   const [selectedBatch, setSelectedBatch] = useState<{ batch: PreGenBatch; items: PreGenItem[]; printLogs: PrintLogEntry[]; printCount: number; lastPrintedAt: string | null } | null>(null)
   const [loadingBatch, setLoadingBatch] = useState(false)
   const [printing, setPrinting] = useState(false)
+  // Progress of client-side QR/PDF generation (null when idle)
+  const [printProgress, setPrintProgress] = useState<{ done: number; total: number } | null>(null)
   // Reprint reason modal state
   const [reasonModal, setReasonModal] = useState<{ batchId: number; productItemIds: number[]; batchNo: string; printCount: number } | null>(null)
   const [reprintReason, setReprintReason] = useState('')
@@ -80,7 +86,20 @@ export default function PreGeneratePage() {
   useEffect(() => {
     fetchBatches()
     fetchProductMasters()
+    fetchUserRole()
   }, [])
+
+  const fetchUserRole = async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const data = await res.json()
+      if (data.success && data.data?.user) {
+        setUserRole(data.data.user.role)
+      }
+    } catch (error) {
+      console.error('Failed to fetch user role:', error)
+    }
+  }
 
   const fetchProductMasters = async () => {
     try {
@@ -179,59 +198,63 @@ export default function PreGeneratePage() {
     }
   }
 
-  // Send the print request, receive PDF, open hidden iframe and trigger print dialog
+  // Delete an unused batch (ADMIN only, no linked items). The API removes the
+  // batch, its pre-generated items, and their QR tokens.
+  const handleDeleteBatch = async (batch: PreGenBatch) => {
+    const ok = await confirm({
+      title: locale === 'th' ? 'ลบ Batch' : 'Delete Batch',
+      message: locale === 'th'
+        ? `ยืนยันลบ Batch ${batch.batchNo} (${batch.quantity} รายการ)?\nลบได้เฉพาะ Batch ที่ยังไม่ถูกใช้งาน และไม่สามารถกู้คืนได้`
+        : `Delete batch ${batch.batchNo} (${batch.quantity} items)?\nOnly unused batches can be deleted. This cannot be undone.`,
+      confirmText: locale === 'th' ? 'ลบ' : 'Delete',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'danger',
+      icon: 'delete',
+    })
+    if (!ok) return
+
+    setDeletingId(batch.id)
+    try {
+      const res = await fetch(`/api/warehouse/pre-generate/${batch.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        if (selectedBatch?.batch.id === batch.id) setSelectedBatch(null)
+        await alert({
+          title: locale === 'th' ? 'ลบสำเร็จ' : 'Deleted',
+          message: locale === 'th' ? `ลบ Batch ${batch.batchNo} เรียบร้อยแล้ว` : `Batch ${batch.batchNo} deleted successfully`,
+          variant: 'success', icon: 'success',
+        })
+        fetchBatches()
+      } else {
+        await alert({
+          title: locale === 'th' ? 'ลบไม่สำเร็จ' : 'Error',
+          message: data.error || (locale === 'th' ? 'ไม่สามารถลบ Batch ได้' : 'Failed to delete batch'),
+          variant: 'error', icon: 'error',
+        })
+      }
+    } catch {
+      await alert({
+        title: locale === 'th' ? 'ลบไม่สำเร็จ' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถลบ Batch ได้' : 'Failed to delete batch',
+        variant: 'error', icon: 'error',
+      })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  // Fetch the item list, render the QR/PDF in the browser, then print via a
+  // hidden iframe. The server only returns JSON + records the print log — the
+  // heavy QR rasterization + PDF assembly run on the user's machine.
   const sendPrintRequest = async (batchId: number, productItemIds: number[], reason?: string) => {
     setPrinting(true)
+    setPrintProgress({ done: 0, total: productItemIds.length })
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productItemIds,
-          layout: 'grid',
-          batchId,
-          reason: reason || undefined,
-        }),
-      })
-
-      if (!res.ok) {
-        let errMsg = locale === 'th' ? 'ไม่สามารถสร้าง Labels ได้' : 'Failed to generate labels'
-        try {
-          const errData = await res.json()
-          if (errData.error) errMsg += `: ${errData.error}`
-        } catch { /* ignore parse error */ }
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: errMsg, variant: 'error', icon: 'error' })
-        return
-      }
-
-      const blob = await res.blob()
-      const pdfBlob = new Blob([blob], { type: 'application/pdf' })
-      const url = window.URL.createObjectURL(pdfBlob)
-
-      // Mount a hidden iframe and call print() once it has loaded the PDF
-      const iframe = document.createElement('iframe')
-      iframe.style.position = 'fixed'
-      iframe.style.right = '0'
-      iframe.style.bottom = '0'
-      iframe.style.width = '0'
-      iframe.style.height = '0'
-      iframe.style.border = '0'
-      iframe.src = url
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus()
-          iframe.contentWindow?.print()
-        } catch (err) {
-          console.error('Print failed:', err)
-        }
-      }
-      document.body.appendChild(iframe)
-
-      // Clean up iframe + object URL after print dialog likely closed
-      window.setTimeout(() => {
-        document.body.removeChild(iframe)
-        window.URL.revokeObjectURL(url)
-      }, 60000)
+      const blob = await buildLabelBlob(
+        { productItemIds, layout: 'grid', batchId, reason: reason || undefined },
+        (done, total) => setPrintProgress({ done, total }),
+      )
+      printBlob(blob)
 
       // Refresh batches and batch detail to update print count
       fetchBatches()
@@ -248,10 +271,13 @@ export default function PreGeneratePage() {
           })
         }
       }
-    } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถปริ้น Labels ได้' : 'Failed to print labels', variant: 'error', icon: 'error' })
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : ''
+      const base = locale === 'th' ? 'ไม่สามารถปริ้น Labels ได้' : 'Failed to print labels'
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: detail ? `${base}: ${detail}` : base, variant: 'error', icon: 'error' })
     } finally {
       setPrinting(false)
+      setPrintProgress(null)
     }
   }
 
@@ -287,6 +313,13 @@ export default function PreGeneratePage() {
       minute: '2-digit',
     })
   }
+
+  // Label shown on print buttons while the browser is generating the PDF.
+  const printingLabel = printProgress
+    ? (locale === 'th'
+        ? `กำลังสร้าง... ${Math.round((printProgress.done / Math.max(1, printProgress.total)) * 100)}%`
+        : `Generating... ${Math.round((printProgress.done / Math.max(1, printProgress.total)) * 100)}%`)
+    : (locale === 'th' ? 'กำลังปริ้น...' : 'Printing...')
 
   return (
     <div className="space-y-6">
@@ -446,6 +479,25 @@ export default function PreGeneratePage() {
                       </svg>
                       {locale === 'th' ? 'ดู' : 'View'}
                     </button>
+                    {userRole === 'ADMIN' && batch.linkedCount === 0 && (
+                      <button
+                        onClick={() => handleDeleteBatch(batch)}
+                        disabled={deletingId === batch.id}
+                        className="flex items-center justify-center gap-2 px-4 py-2 text-sm border border-red-200 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingId === batch.id ? (
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                        {locale === 'th' ? 'ลบ' : 'Delete'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -503,16 +555,38 @@ export default function PreGeneratePage() {
                         {formatDate(batch.createdAt)}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <button
-                          onClick={() => viewBatchDetail(batch)}
-                          className="inline-flex items-center gap-2 px-4 py-2 text-sm border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)] transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          {locale === 'th' ? 'ดูรายละเอียด' : 'View Detail'}
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => viewBatchDetail(batch)}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm border border-[var(--color-beige)] rounded-lg hover:bg-[var(--color-off-white)] transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            {locale === 'th' ? 'ดูรายละเอียด' : 'View Detail'}
+                          </button>
+                          {userRole === 'ADMIN' && batch.linkedCount === 0 && (
+                            <button
+                              onClick={() => handleDeleteBatch(batch)}
+                              disabled={deletingId === batch.id}
+                              title={locale === 'th' ? 'ลบ Batch' : 'Delete batch'}
+                              className="inline-flex items-center gap-2 px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            >
+                              {deletingId === batch.id ? (
+                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              )}
+                              {locale === 'th' ? 'ลบ' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -588,7 +662,7 @@ export default function PreGeneratePage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   )}
-                  {locale === 'th' ? 'ปริ้น Labels' : 'Print Labels'}
+                  {printing ? printingLabel : (locale === 'th' ? 'ปริ้น Labels' : 'Print Labels')}
                 </button>
               </div>
             </div>
@@ -743,8 +817,12 @@ export default function PreGeneratePage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                   )}
-                  {locale === 'th' ? 'ปริ้นที่ยังไม่ใช้' : 'Print Available'}
-                  {' '}({selectedBatch.items.filter(i => !i.isLinked).length})
+                  {printing ? printingLabel : (
+                    <>
+                      {locale === 'th' ? 'ปริ้นที่ยังไม่ใช้' : 'Print Available'}
+                      {' '}({selectedBatch.items.filter(i => !i.isLinked).length})
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -808,7 +886,7 @@ export default function PreGeneratePage() {
                   className="flex-1 px-4 py-2.5 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 disabled:opacity-50 transition-colors"
                 >
                   {printing
-                    ? (locale === 'th' ? 'กำลังปริ้น...' : 'Printing...')
+                    ? printingLabel
                     : (locale === 'th' ? 'ยืนยันปริ้นซ้ำ' : 'Confirm Reprint')}
                 </button>
               </div>

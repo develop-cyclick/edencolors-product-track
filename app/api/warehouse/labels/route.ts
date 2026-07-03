@@ -12,12 +12,16 @@ import { generateQRCodeURL } from '@/lib/qr-token'
 export const POST = withWarehouse(async (request: NextRequest, { user }) => {
   try {
     const body = await request.json()
-    const { productItemIds, grnId, layout = 'individual', batchId, reason } = body as {
+    const { productItemIds, grnId, layout = 'individual', batchId, reason, format } = body as {
       productItemIds?: number[]
       grnId?: number
       layout?: 'individual' | 'grid'
       batchId?: number
       reason?: string
+      // 'json' => return the item list + dimensions so the browser renders the
+      // PDF itself (offloads QR/PDF work from the server). Default/absent =>
+      // render the PDF server-side and return it as a blob (back-compat).
+      format?: 'json' | 'pdf'
     }
 
     // Either productItemIds or grnId must be provided
@@ -158,10 +162,26 @@ export const POST = withWarehouse(async (request: NextRequest, { user }) => {
       })
     )
 
-    // Generate PDF based on layout
+    const { widthMm, heightMm } = await getLabelDimensions()
+
+    // JSON mode: hand the lightweight item list to the browser, which renders
+    // the QR images + PDF itself. The server does no rasterization here.
+    if (format === 'json') {
+      if (batchId) {
+        await recordPrint(batchId, user.userId, layout, isReprint, reason)
+      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          items: labels,
+          dimensions: { widthMm, heightMm },
+        },
+      })
+    }
+
+    // Generate PDF based on layout (server-side; back-compat / fallback)
     let pdfBuffer: Buffer
     if (layout === 'grid') {
-      const { widthMm, heightMm } = await getLabelDimensions()
       pdfBuffer = await generateGridLabelPDF(labels, { widthMm, heightMm })
     } else {
       pdfBuffer = await generateLabelPDF(labels)
@@ -173,24 +193,7 @@ export const POST = withWarehouse(async (request: NextRequest, { user }) => {
 
     // Track the print: increment count + write print log
     if (batchId) {
-      await prisma.$transaction([
-        prisma.preGeneratedBatch.update({
-          where: { id: batchId },
-          data: {
-            printCount: { increment: 1 },
-            lastPrintedAt: new Date(),
-          },
-        }),
-        prisma.preGeneratedBatchPrintLog.create({
-          data: {
-            batchId,
-            userId: user.userId,
-            layout,
-            isReprint,
-            reason: reason || null,
-          },
-        }),
-      ])
+      await recordPrint(batchId, user.userId, layout, isReprint, reason)
     }
 
     // Return PDF as response (convert Buffer to Uint8Array for NextResponse)
@@ -211,6 +214,35 @@ export const POST = withWarehouse(async (request: NextRequest, { user }) => {
     )
   }
 })
+
+// Track a print action: increment the batch print count + write an audit log.
+// Called for both the JSON (browser-rendered) and PDF (server-rendered) paths.
+async function recordPrint(
+  batchId: number,
+  userId: number,
+  layout: 'individual' | 'grid',
+  isReprint: boolean,
+  reason?: string,
+): Promise<void> {
+  await prisma.$transaction([
+    prisma.preGeneratedBatch.update({
+      where: { id: batchId },
+      data: {
+        printCount: { increment: 1 },
+        lastPrintedAt: new Date(),
+      },
+    }),
+    prisma.preGeneratedBatchPrintLog.create({
+      data: {
+        batchId,
+        userId,
+        layout,
+        isReprint,
+        reason: reason || null,
+      },
+    }),
+  ])
+}
 
 function formatDate(date: Date): string {
   const d = new Date(date)

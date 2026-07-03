@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { buildLabelBlob, downloadBlob } from '@/lib/client/label-print'
 
 interface OutboundLine {
   id: number
@@ -212,29 +213,12 @@ export default function OutboundDetailPage() {
   const handlePrintSingleLabel = async (productItemId: number, serial: string) => {
     setPrintingItemId(productItemId)
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds: [productItemId], layout: 'grid' }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate label'}`, variant: 'error', icon: 'error' })
-        return
-      }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `label-${serial}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
+      const blob = await buildLabelBlob({ productItemIds: [productItemId], layout: 'grid' })
+      downloadBlob(blob, `label-${serial}.pdf`)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : ''
+      const base = locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF'
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: detail ? `${base}: ${detail}` : base, variant: 'error', icon: 'error' })
     } finally {
       setPrintingItemId(null)
     }

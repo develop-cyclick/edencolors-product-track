@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { buildLabelBlob, downloadBlob } from '@/lib/client/label-print'
 
 interface GRNDetail {
   id: number
@@ -156,33 +157,15 @@ export default function GRNDetailPage() {
   const handlePrintLabels = async () => {
     setPrinting(true)
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grnId: parseInt(id) }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate labels'}`, variant: 'error', icon: 'error' })
-        return
-      }
-
-      // Download the PDF
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `labels-${grn?.grnNo || id}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      const blob = await buildLabelBlob({ grnId: parseInt(id), layout: 'individual' })
+      downloadBlob(blob, `labels-${grn?.grnNo || id}.pdf`)
 
       // Show print guidance
       setShowPrintGuide(true)
-    } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : ''
+      const base = locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF'
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: detail ? `${base}: ${detail}` : base, variant: 'error', icon: 'error' })
     } finally {
       setPrinting(false)
     }
@@ -191,30 +174,12 @@ export default function GRNDetailPage() {
   const handlePrintGridLabels = async () => {
     setPrintingGrid(true)
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grnId: parseInt(id), layout: 'grid' }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate labels'}`, variant: 'error', icon: 'error' })
-        return
-      }
-
-      // Download the PDF
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `labels-grid-${grn?.grnNo || id}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
+      const blob = await buildLabelBlob({ grnId: parseInt(id), layout: 'grid' })
+      downloadBlob(blob, `labels-grid-${grn?.grnNo || id}.pdf`)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : ''
+      const base = locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF'
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: detail ? `${base}: ${detail}` : base, variant: 'error', icon: 'error' })
     } finally {
       setPrintingGrid(false)
     }
@@ -223,30 +188,12 @@ export default function GRNDetailPage() {
   const handlePrintSingleLabel = async (productItemId: number, serial: string) => {
     setPrintingItemId(productItemId)
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds: [productItemId], layout: 'grid' }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error || 'Failed to generate label'}`, variant: 'error', icon: 'error' })
-        return
-      }
-
-      // Download the PDF
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `label-${serial}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch {
-      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF', variant: 'error', icon: 'error' })
+      const blob = await buildLabelBlob({ productItemIds: [productItemId], layout: 'grid' })
+      downloadBlob(blob, `label-${serial}.pdf`)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : ''
+      const base = locale === 'th' ? 'เกิดข้อผิดพลาดในการสร้าง PDF' : 'Failed to generate PDF'
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: detail ? `${base}: ${detail}` : base, variant: 'error', icon: 'error' })
     } finally {
       setPrintingItemId(null)
     }

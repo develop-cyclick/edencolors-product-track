@@ -1,47 +1,20 @@
-import jsPDF from 'jspdf'
 import QRCode from 'qrcode'
-import { loadSarabunFont } from './fonts/sarabun-font'
 import fs from 'fs'
 import path from 'path'
+import { loadSarabunFont } from './fonts/sarabun-font'
+import {
+  drawGridLabelPDF,
+  drawIndividualLabelPDF,
+  type LabelData,
+} from './pdf-label-core'
 
-// 4x6 inch label dimensions in mm
-const LABEL_WIDTH_MM = 101.6  // 4 inches
-const LABEL_HEIGHT_MM = 152.4 // 6 inches
-
-// A4 dimensions in mm
-const A4_WIDTH_MM = 210
-const A4_HEIGHT_MM = 297
-
-// Safe margins in mm
-const MARGIN_MM = 6
-
-// QR code size in mm (for individual labels)
-const QR_SIZE_MM = 60
-
-// Grid layout settings
-const GRID_MARGIN_MM = 5
-const GRID_GAP_MM = 2
-// Default label (sticker) dimensions for grid layout = the dashed cut box.
-// Overridable per call via opts.widthMm / opts.heightMm; the QR auto-fits inside.
-const GRID_LABEL_WIDTH_DEFAULT_MM = 20
-const GRID_LABEL_WIDTH_MIN_MM = 10
-const GRID_LABEL_WIDTH_MAX_MM = 100
-const GRID_LABEL_HEIGHT_DEFAULT_MM = 34
-const GRID_LABEL_HEIGHT_MIN_MM = 10
-const GRID_LABEL_HEIGHT_MAX_MM = 140
-// Smallest QR square (mm) to stay scannable, and the vertical strip (mm)
-// reserved at the bottom of the box for the serial number.
-const GRID_QR_MIN_MM = 10
-const GRID_SERIAL_TEXT_MM = 6
-// Gap (mm) from the bottom of the QR down to the serial-number baseline,
-// so the serial sits right under the QR rather than at the box bottom.
-const GRID_SERIAL_GAP_MM = 3
+export type { LabelData }
 
 // Banner image cache
 let bannerImageBase64: string | null = null
 
 /**
- * Load the banner image as base64 from public folder
+ * Load the banner image as base64 from public folder (server-side, via fs).
  */
 function loadBannerImage(): string | null {
   if (bannerImageBase64) return bannerImageBase64
@@ -59,154 +32,31 @@ function loadBannerImage(): string | null {
   return null
 }
 
-interface LabelData {
-  serialNumber: string
-  qrCodeUrl: string
-  productName?: string
-  sku?: string
-  lot?: string
-  mfgDate?: string
-  expDate?: string
-}
-
 /**
- * Generate a PDF with 4x6 inch labels for QR codes
- * Each page contains one serial with its QR code
+ * Generate a PDF with 4x6 inch labels for QR codes (one label per page).
+ * Server-side wrapper: renders QR images, loads assets via fs, returns a Buffer.
  */
 export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
-  // Create PDF with custom page size (4x6 inches in mm)
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: [LABEL_WIDTH_MM, LABEL_HEIGHT_MM],
+  const qrDataUrls = await Promise.all(
+    labels.map((label) =>
+      QRCode.toDataURL(label.qrCodeUrl, {
+        width: 400,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      }),
+    ),
+  )
+
+  const doc = drawIndividualLabelPDF(labels, qrDataUrls, {
+    bannerDataUrl: loadBannerImage(),
+    registerFont: loadSarabunFont,
   })
 
-  // Use helvetica for now - custom Thai fonts have issues with jsPDF 4.x
-  // TODO: Fix Thai font support with proper font embedding
-  const fontFamily = 'helvetica'
-
-  // Try to load Thai font (may fail silently in jsPDF 4.x)
-  try {
-    loadSarabunFont(doc)
-  } catch {
-    // Ignore font loading errors, use helvetica fallback
-  }
-
-  // Load banner image
-  const bannerImage = loadBannerImage()
-
-  // Banner dimensions for 4x6 label (aspect ratio ~3.5:1)
-  const bannerWidth = LABEL_WIDTH_MM - (MARGIN_MM * 2)
-  const bannerHeight = bannerImage ? bannerWidth * 0.28 : 0
-
-  for (let i = 0; i < labels.length; i++) {
-    const label = labels[i]
-
-    if (i > 0) {
-      doc.addPage([LABEL_WIDTH_MM, LABEL_HEIGHT_MM], 'portrait')
-    }
-
-    // Generate QR code as data URL
-    // Using 'M' error correction (15% recovery) - good balance between reliability and scan-ability
-    // 'H' (30%) makes QR too dense and hard to scan with phone cameras
-    const qrDataUrl = await QRCode.toDataURL(label.qrCodeUrl, {
-      width: 400,
-      margin: 1,  // Minimal margin - the physical label provides enough border
-      errorCorrectionLevel: 'M', // Medium - easier to scan than 'H'
-    })
-
-    const centerX = LABEL_WIDTH_MM / 2
-
-    // Calculate positions
-    let yPos = MARGIN_MM
-
-    // Draw banner image on top if available
-    if (bannerImage) {
-      doc.addImage(bannerImage, 'JPEG', MARGIN_MM, yPos, bannerWidth, bannerHeight)
-      yPos += bannerHeight + 4
-    } else {
-      // Fallback: Company/Brand Header (text only)
-      yPos += 10
-      doc.setFontSize(14)
-      doc.setFont(fontFamily, 'bold')
-      doc.text('QR Authenticity', centerX, yPos, { align: 'center' })
-      yPos += 8
-    }
-
-    // QR Code - centered
-    const qrX = (LABEL_WIDTH_MM - QR_SIZE_MM) / 2
-    doc.addImage(qrDataUrl, 'PNG', qrX, yPos, QR_SIZE_MM, QR_SIZE_MM)
-    yPos += QR_SIZE_MM + 8
-
-    // Serial Number (prominent) - reduced from 18pt for longer 19-char serial
-    doc.setFontSize(14)
-    doc.setFont(fontFamily, 'bold')
-    doc.text(formatSerial(label.serialNumber), centerX, yPos, { align: 'center' })
-    yPos += 8
-
-    // Scan instruction
-    doc.setFontSize(9)
-    doc.setFont(fontFamily, 'normal')
-    doc.text('Scan QR to verify authenticity', centerX, yPos, { align: 'center' })
-    yPos += 6
-
-    // Product info section (smaller text)
-    if (label.productName || label.sku || label.lot || label.expDate) {
-      yPos += 4
-
-      doc.setFontSize(8)
-      doc.setFont(fontFamily, 'normal')
-
-      if (label.sku) {
-        doc.text(`SKU: ${label.sku}`, MARGIN_MM, yPos)
-        yPos += 4
-      }
-
-      // Lot and Exp on same line if both present
-      if (label.lot || label.expDate) {
-        const lotExpText = [
-          label.lot ? `Lot: ${label.lot}` : null,
-          label.expDate ? `Exp: ${label.expDate}` : null,
-        ]
-          .filter(Boolean)
-          .join('  |  ')
-
-        doc.text(lotExpText, MARGIN_MM, yPos)
-        yPos += 4
-      }
-    }
-
-    // Footer note
-    doc.setFontSize(7)
-    doc.setTextColor(128, 128, 128)
-    doc.setFont(fontFamily, 'normal')
-    doc.text('Print at actual size (100%)', centerX, LABEL_HEIGHT_MM - MARGIN_MM, { align: 'center' })
-    doc.setTextColor(0, 0, 0)
-  }
-
-  // Return as Buffer
-  const arrayBuffer = doc.output('arraybuffer')
-  return Buffer.from(arrayBuffer)
+  return Buffer.from(doc.output('arraybuffer'))
 }
 
 /**
- * Format serial number with dashes for readability
- * New 19-char format: PCBBN01000000000001 -> PCBBN01-000000-000001
- * (7-char prefix, 6-digit, 6-digit)
- */
-function formatSerial(serial: string): string {
-  // New 19-char format: prefix(7) + running(12)
-  if (serial.length === 19) {
-    const prefix = serial.slice(0, 7)
-    const running = serial.slice(7)
-    return `${prefix}-${running.slice(0, 6)}-${running.slice(6, 12)}`
-  }
-
-  return serial
-}
-
-/**
- * Generate a single label PDF for one product
+ * Generate a single label PDF for one product.
  */
 export async function generateSingleLabelPDF(label: LabelData): Promise<Buffer> {
   return generateLabelPDF([label])
@@ -214,148 +64,28 @@ export async function generateSingleLabelPDF(label: LabelData): Promise<Buffer> 
 
 /**
  * Generate a PDF with QR codes in a grid layout on A4 paper.
- * Each cell (the dashed cut box) is sized to `opts.widthMm` x `opts.heightMm`
- * — the physical sticker size. The QR code auto-fits inside the box, leaving
- * room for the banner on top and the serial number at the bottom. Column and
- * row counts are derived from the page so the sticker keeps its physical size.
- *
- * Each cell includes: banner image on top, QR code, and serial number.
+ * Server-side wrapper: renders QR images, loads assets via fs, returns a Buffer.
+ * See lib/pdf-label-core.ts for the layout logic (shared with the browser).
  */
 export async function generateGridLabelPDF(
   labels: LabelData[],
-  opts: { widthMm?: number; heightMm?: number } = {}
+  opts: { widthMm?: number; heightMm?: number } = {},
 ): Promise<Buffer> {
-  // Create PDF with A4 page size
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
+  const qrDataUrls = await Promise.all(
+    labels.map((label) =>
+      QRCode.toDataURL(label.qrCodeUrl, {
+        width: 250,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      }),
+    ),
+  )
+
+  const doc = drawGridLabelPDF(labels, qrDataUrls, {
+    ...opts,
+    bannerDataUrl: loadBannerImage(),
+    registerFont: loadSarabunFont,
   })
 
-  const fontFamily = 'helvetica'
-
-  // Try to load Thai font
-  try {
-    loadSarabunFont(doc)
-  } catch {
-    // Ignore font loading errors
-  }
-
-  // Load banner image
-  const bannerImage = loadBannerImage()
-
-  // Resolve and clamp the label (sticker) box = the dashed cut box.
-  const cellWidth = Math.max(
-    GRID_LABEL_WIDTH_MIN_MM,
-    Math.min(GRID_LABEL_WIDTH_MAX_MM, opts.widthMm ?? GRID_LABEL_WIDTH_DEFAULT_MM)
-  )
-  const cellHeight = Math.max(
-    GRID_LABEL_HEIGHT_MIN_MM,
-    Math.min(GRID_LABEL_HEIGHT_MAX_MM, opts.heightMm ?? GRID_LABEL_HEIGHT_DEFAULT_MM)
-  )
-
-  // Banner dimensions (aspect ratio ~3.5:1 based on the original image)
-  const bannerHeight = bannerImage ? cellWidth * 0.28 : 0
-
-  // QR auto-fits the box: largest square that fits the width and the height
-  // left after the banner (top) and the serial-number strip (bottom).
-  const qrSize = Math.max(
-    GRID_QR_MIN_MM,
-    Math.min(cellWidth, cellHeight - bannerHeight - GRID_SERIAL_TEXT_MM)
-  )
-
-  // Derive columns from page width: cols * cellWidth + (cols-1) * gap + 2*margin <= A4 width
-  const usableWidth = A4_WIDTH_MM - (GRID_MARGIN_MM * 2)
-  const gridColumns = Math.max(
-    1,
-    Math.floor((usableWidth + GRID_GAP_MM) / (cellWidth + GRID_GAP_MM))
-  )
-
-  // Calculate rows per page
-  const usableHeight = A4_HEIGHT_MM - (GRID_MARGIN_MM * 2)
-  const rowsPerPage = Math.max(
-    1,
-    Math.floor((usableHeight + GRID_GAP_MM) / (cellHeight + GRID_GAP_MM))
-  )
-  const itemsPerPage = gridColumns * rowsPerPage
-
-  // Generate all QR codes first
-  // Using 'M' error correction - easier to scan than 'H'
-  const qrDataUrls: string[] = []
-  for (const label of labels) {
-    const qrDataUrl = await QRCode.toDataURL(label.qrCodeUrl, {
-      width: 250,
-      margin: 1,  // Minimal margin for grid layout
-      errorCorrectionLevel: 'M', // Medium - better scan-ability
-    })
-    qrDataUrls.push(qrDataUrl)
-  }
-
-  // Draw labels
-  for (let i = 0; i < labels.length; i++) {
-    const pageIndex = Math.floor(i / itemsPerPage)
-    const indexOnPage = i % itemsPerPage
-
-    // Add new page if needed
-    if (i > 0 && indexOnPage === 0) {
-      doc.addPage('a4', 'portrait')
-    }
-
-    // Calculate position
-    const col = indexOnPage % gridColumns
-    const row = Math.floor(indexOnPage / gridColumns)
-
-    const x = GRID_MARGIN_MM + col * (cellWidth + GRID_GAP_MM)
-    const y = GRID_MARGIN_MM + row * (cellHeight + GRID_GAP_MM)
-
-    // Draw cell border (light gray, dashed for cutting guide)
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.rect(x, y, cellWidth, cellHeight)
-    doc.setLineDashPattern([], 0)
-
-    // Draw banner image on top if available
-    if (bannerImage) {
-      doc.addImage(bannerImage, 'JPEG', x, y, cellWidth, bannerHeight)
-    }
-
-    // Draw QR code - centered horizontally, and centered within the vertical
-    // space between the banner and the serial-number strip at the bottom.
-    const qrAreaTop = y + bannerHeight
-    const qrAreaHeight = cellHeight - bannerHeight - GRID_SERIAL_TEXT_MM
-    const qrX = x + (cellWidth - qrSize) / 2
-    const qrY = qrAreaTop + Math.max(0, (qrAreaHeight - qrSize) / 2)
-    doc.addImage(qrDataUrls[i], 'PNG', qrX, qrY, qrSize, qrSize)
-
-    // Draw serial number right under the QR (clamped to stay inside the box)
-    doc.setFontSize(4)
-    doc.setFont(fontFamily, 'bold')
-    doc.setTextColor(0, 0, 0)
-
-    const serial = labels[i].serialNumber
-    const serialY = Math.min(qrY + qrSize + GRID_SERIAL_GAP_MM, y + cellHeight - 1)
-    doc.text(serial, x + cellWidth / 2, serialY, { align: 'center' })
-  }
-
-  // Add page info in footer
-  const totalPages = Math.ceil(labels.length / itemsPerPage)
-  for (let p = 0; p < totalPages; p++) {
-    doc.setPage(p + 1)
-    doc.setFontSize(6)
-    doc.setFont(fontFamily, 'normal')
-    doc.setTextColor(150, 150, 150)
-
-    const startItem = p * itemsPerPage + 1
-    const endItem = Math.min((p + 1) * itemsPerPage, labels.length)
-    doc.text(
-      `Page ${p + 1}/${totalPages} | Items ${startItem}-${endItem} of ${labels.length}`,
-      A4_WIDTH_MM / 2,
-      A4_HEIGHT_MM - 3,
-      { align: 'center' }
-    )
-  }
-
-  // Return as Buffer
-  const arrayBuffer = doc.output('arraybuffer')
-  return Buffer.from(arrayBuffer)
+  return Buffer.from(doc.output('arraybuffer'))
 }

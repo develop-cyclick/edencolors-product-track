@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useAlert } from '@/components/ui/confirm-modal'
+import { buildLabelBlob, downloadBlob } from '@/lib/client/label-print'
 
 interface TokenHistory {
   version: number
@@ -119,25 +120,8 @@ export default function ReprintPage() {
     if (!reprintResult) return
 
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds: [reprintResult.productItemId], layout: 'grid' }),
-      })
-
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `label-${reprintResult.serial12}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
-      } else {
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Label ได้' : 'Failed to generate label', variant: 'error', icon: 'error' })
-      }
+      const blob = await buildLabelBlob({ productItemIds: [reprintResult.productItemId], layout: 'grid' })
+      downloadBlob(blob, `label-${reprintResult.serial12}.pdf`)
     } catch {
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Label ได้' : 'Failed to download label', variant: 'error', icon: 'error' })
     }
@@ -191,24 +175,8 @@ export default function ReprintPage() {
 
   const downloadBatchLabels = async (itemIds: number[]) => {
     try {
-      const res = await fetch('/api/warehouse/labels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productItemIds: itemIds, layout: 'grid' }),
-      })
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `labels-reprint-${new Date().toISOString().split('T')[0]}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
-      } else {
-        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถสร้าง Label ได้' : 'Failed to generate labels', variant: 'error', icon: 'error' })
-      }
+      const blob = await buildLabelBlob({ productItemIds: itemIds, layout: 'grid' })
+      downloadBlob(blob, `labels-reprint-${new Date().toISOString().split('T')[0]}.pdf`)
     } catch {
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถดาวน์โหลด Label ได้' : 'Failed to download labels', variant: 'error', icon: 'error' })
     }
