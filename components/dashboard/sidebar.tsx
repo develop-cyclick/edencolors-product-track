@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { pageKeyFromPath } from '@/lib/permissions'
 
 interface NavItem {
   label: string
@@ -18,11 +19,12 @@ interface SidebarProps {
   locale: string
   userRole: string
   userName: string
+  allowedPages?: string[]
   isMobileOpen?: boolean
   onMobileClose?: () => void
 }
 
-export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMobileClose }: SidebarProps) {
+export default function Sidebar({ locale, userRole, userName, allowedPages, isMobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -307,7 +309,13 @@ export default function Sidebar({ locale, userRole, userName, isMobileOpen, onMo
     },
   ]
 
-  const filteredItems = navItems.filter((item) => item.roles.includes(userRole))
+  // Filter by the admin-configured page-access matrix (allowedPages, derived
+  // from each item's href). Falls back to the hardcoded roles if not provided.
+  const filteredItems = navItems.filter((item) =>
+    allowedPages
+      ? allowedPages.includes(pageKeyFromPath(item.href))
+      : item.roles.includes(userRole)
+  )
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })

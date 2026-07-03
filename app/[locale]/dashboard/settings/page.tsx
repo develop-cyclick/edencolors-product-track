@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { GRID, computeGridGeometry } from '@/lib/pdf-label-core'
 
-type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display' | 'label'
+type TabType = 'categories' | 'units' | 'shipping' | 'warehouses' | 'display' | 'label' | 'permissions'
 
 interface MasterItem {
   id: number
@@ -23,34 +24,25 @@ interface SystemSettings {
   'label.heightMm': number
 }
 
-// Mirror of grid layout constants in lib/pdf-label.ts — used for preview only.
-const LABEL_A4_WIDTH_MM = 210
-const LABEL_A4_HEIGHT_MM = 297
-const LABEL_GRID_MARGIN_MM = 5
-const LABEL_GRID_GAP_MM = 2
-const LABEL_WIDTH_MIN_MM = 10
-const LABEL_WIDTH_MAX_MM = 100
-const LABEL_HEIGHT_MIN_MM = 10
-const LABEL_HEIGHT_MAX_MM = 140
-// QR auto-fit reserves this much height (mm) for the serial-number strip.
-const LABEL_SERIAL_TEXT_MM = 6
-const LABEL_QR_MIN_MM = 10
+// Label sticker size bounds + grid preview helpers. Sourced from
+// lib/pdf-label-core.ts so the preview never drifts from the actual PDF output.
+const LABEL_WIDTH_MIN_MM = GRID.W_MIN
+const LABEL_WIDTH_MAX_MM = GRID.W_MAX
+const LABEL_HEIGHT_MIN_MM = GRID.H_MIN
+const LABEL_HEIGHT_MAX_MM = GRID.H_MAX
 
 function calcLabelColumns(widthMm: number): number {
-  const usable = LABEL_A4_WIDTH_MM - LABEL_GRID_MARGIN_MM * 2
-  return Math.max(1, Math.floor((usable + LABEL_GRID_GAP_MM) / (widthMm + LABEL_GRID_GAP_MM)))
+  return computeGridGeometry(widthMm, GRID.H_DEF).gridColumns
 }
 
 function calcLabelRows(heightMm: number): number {
-  const usable = LABEL_A4_HEIGHT_MM - LABEL_GRID_MARGIN_MM * 2
-  return Math.max(1, Math.floor((usable + LABEL_GRID_GAP_MM) / (heightMm + LABEL_GRID_GAP_MM)))
+  return computeGridGeometry(GRID.W_DEF, heightMm).rowsPerPage
 }
 
-// Approx QR square (mm) that auto-fits a width×height box (banner ~28% of width
-// on top + serial strip at bottom). Mirrors lib/pdf-label.ts logic for preview.
+// QR square (mm) that auto-fits a width×height box (banner on top + serial strip
+// at bottom). Delegates to the shared core so it matches the generated PDF.
 function calcFitQrMm(widthMm: number, heightMm: number): number {
-  const bannerHeight = widthMm * 0.28
-  return Math.max(LABEL_QR_MIN_MM, Math.min(widthMm, heightMm - bannerHeight - LABEL_SERIAL_TEXT_MM))
+  return computeGridGeometry(widthMm, heightMm).qrSize
 }
 
 export default function SettingsPage() {
@@ -79,6 +71,13 @@ export default function SettingsPage() {
   const [heightDraft, setHeightDraft] = useState<string>('34')
   const [sizeSaving, setSizeSaving] = useState(false)
 
+  // Permissions matrix state
+  const [permPages, setPermPages] = useState<{ key: string; labelTh: string; labelEn: string; locked?: boolean }[]>([])
+  const [permRoles, setPermRoles] = useState<string[]>([])
+  const [permMatrix, setPermMatrix] = useState<Record<string, string[]>>({})
+  const [permLoading, setPermLoading] = useState(false)
+  const [permSaving, setPermSaving] = useState(false)
+
   // Form state
   const [formData, setFormData] = useState({
     nameTh: '',
@@ -95,12 +94,15 @@ export default function SettingsPage() {
     { key: 'warehouses', labelTh: 'คลังสินค้า', labelEn: 'Warehouses', endpoint: '/api/admin/masters/warehouses' },
     { key: 'display', labelTh: 'การแสดงผล', labelEn: 'Display', endpoint: '' },
     { key: 'label', labelTh: 'ฉลาก QR', labelEn: 'QR Label', endpoint: '' },
+    { key: 'permissions', labelTh: 'สิทธิ์การใช้งาน', labelEn: 'Permissions', endpoint: '' },
   ]
 
   const currentTab = tabs.find((t) => t.key === activeTab)!
 
   useEffect(() => {
-    if (activeTab === 'display' || activeTab === 'label') {
+    if (activeTab === 'permissions') {
+      fetchPermissions()
+    } else if (activeTab === 'display' || activeTab === 'label') {
       fetchSystemSettings()
     } else {
       fetchItems()
@@ -111,6 +113,82 @@ export default function SettingsPage() {
     setWidthDraft(String(systemSettings['label.widthMm']))
     setHeightDraft(String(systemSettings['label.heightMm']))
   }, [systemSettings])
+
+  const fetchPermissions = async () => {
+    setPermLoading(true)
+    try {
+      const res = await fetch('/api/admin/permissions')
+      const data = await res.json()
+      if (data.success) {
+        setPermPages(data.data.pages)
+        setPermRoles(data.data.roles)
+        setPermMatrix(data.data.matrix)
+      }
+    } catch (error) {
+      console.error('Failed to fetch permissions:', error)
+    } finally {
+      setPermLoading(false)
+    }
+  }
+
+  const isPermChecked = (pageKey: string, role: string) => (permMatrix[pageKey] || []).includes(role)
+
+  // ADMIN is always allowed; `locked` pages (dashboard root) are always all-roles.
+  const isPermLocked = (pageKey: string, role: string) => {
+    if (role === 'ADMIN') return true
+    return !!permPages.find((p) => p.key === pageKey)?.locked
+  }
+
+  const togglePerm = (pageKey: string, role: string) => {
+    if (isPermLocked(pageKey, role)) return
+    setPermMatrix((prev) => {
+      const current = prev[pageKey] || []
+      const next = current.includes(role) ? current.filter((r) => r !== role) : [...current, role]
+      return { ...prev, [pageKey]: next }
+    })
+  }
+
+  const savePermissions = async () => {
+    const ok = await confirm({
+      title: locale === 'th' ? 'บันทึกสิทธิ์การใช้งาน' : 'Save Permissions',
+      message: locale === 'th'
+        ? 'ยืนยันบันทึกสิทธิ์การเข้าถึงหน้าของแต่ละ role? มีผลทันทีหลังบันทึก'
+        : 'Confirm saving page-access permissions for each role? Takes effect immediately.',
+      confirmText: locale === 'th' ? 'บันทึก' : 'Save',
+      cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
+      variant: 'info', icon: 'question',
+    })
+    if (!ok) return
+    setPermSaving(true)
+    try {
+      const res = await fetch('/api/admin/permissions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matrix: permMatrix }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPermMatrix(data.data.matrix)
+        await alert({
+          title: locale === 'th' ? 'บันทึกสำเร็จ' : 'Saved',
+          message: locale === 'th' ? 'บันทึกสิทธิ์เรียบร้อยแล้ว' : 'Permissions saved successfully',
+          variant: 'success', icon: 'success',
+        })
+      } else {
+        await alert({
+          title: locale === 'th' ? 'บันทึกไม่สำเร็จ' : 'Error',
+          message: data.error || 'Error', variant: 'error', icon: 'error',
+        })
+      }
+    } catch {
+      await alert({
+        title: locale === 'th' ? 'บันทึกไม่สำเร็จ' : 'Error',
+        message: locale === 'th' ? 'ไม่สามารถบันทึกได้' : 'Failed to save', variant: 'error', icon: 'error',
+      })
+    } finally {
+      setPermSaving(false)
+    }
+  }
 
   const fetchSystemSettings = async () => {
     setSettingsLoading(true)
@@ -423,7 +501,82 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="p-6">
-          {activeTab === 'label' ? (
+          {activeTab === 'permissions' ? (
+            <div className="space-y-4">
+              <div className="bg-[var(--color-off-white)] rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-[var(--color-charcoal)] mb-1">
+                  {locale === 'th' ? 'สิทธิ์การเข้าถึงหน้าตาม Role' : 'Page Access by Role'}
+                </h3>
+                <p className="text-xs text-[var(--color-foreground-muted)]">
+                  {locale === 'th'
+                    ? 'กำหนดว่า role ไหนเข้าถึงหน้าไหนได้ (มีผลทั้งการแสดงเมนูและการกันเข้าหน้าจริง) — ADMIN มีสิทธิ์ทุกหน้าเสมอ'
+                    : 'Configure which role can access which page (controls both menu visibility and route access). ADMIN always has access to every page.'}
+                </p>
+              </div>
+
+              {permLoading ? (
+                <div className="py-8 text-center">
+                  <div className="w-6 h-6 mx-auto relative">
+                    <div className="absolute inset-0 rounded-full border-2 border-[var(--color-beige)]" />
+                    <div className="absolute inset-0 rounded-full border-2 border-[var(--color-gold)] border-t-transparent animate-spin" />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto border border-[var(--color-beige)] rounded-xl">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                          <th className="px-4 py-3 text-left font-semibold text-[var(--color-charcoal)]">
+                            {locale === 'th' ? 'หน้า' : 'Page'}
+                          </th>
+                          {permRoles.map((role) => (
+                            <th key={role} className="px-4 py-3 text-center font-semibold text-[var(--color-charcoal)]">
+                              {role}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--color-beige)]">
+                        {permPages.map((page) => (
+                          <tr key={page.key} className="hover:bg-[var(--color-off-white)]/50">
+                            <td className="px-4 py-3 text-[var(--color-charcoal)]">
+                              {locale === 'th' ? page.labelTh : page.labelEn}
+                              {page.locked && (
+                                <span className="ml-2 text-[10px] text-[var(--color-foreground-muted)]">
+                                  ({locale === 'th' ? 'ทุก role' : 'all roles'})
+                                </span>
+                              )}
+                            </td>
+                            {permRoles.map((role) => (
+                              <td key={role} className="px-4 py-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isPermChecked(page.key, role)}
+                                  disabled={isPermLocked(page.key, role)}
+                                  onChange={() => togglePerm(page.key, role)}
+                                  className="w-4 h-4 accent-[var(--color-gold)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={savePermissions}
+                      disabled={permSaving}
+                      className="px-5 py-2.5 bg-[var(--color-gold)] text-white font-medium rounded-xl hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-colors"
+                    >
+                      {permSaving ? (locale === 'th' ? 'กำลังบันทึก...' : 'Saving...') : (locale === 'th' ? 'บันทึก' : 'Save')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : activeTab === 'label' ? (
             <div className="space-y-6">
               <div className="bg-[var(--color-off-white)] rounded-xl p-4">
                 <h3 className="text-sm font-semibold text-[var(--color-charcoal)] mb-1">

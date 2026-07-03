@@ -14,14 +14,21 @@ const authRoutes = ['/api/auth/login']
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Expose the current path to server components. The dashboard layout reads
+  // `x-pathname` to enforce the admin-configured role → page access matrix
+  // (Next.js does not otherwise pass the pathname to a layout).
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', pathname)
+  const nextWithPath = () => NextResponse.next({ request: { headers: requestHeaders } })
+
   // Allow auth routes
   if (authRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next()
+    return nextWithPath()
   }
 
   // Allow public routes
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next()
+    return nextWithPath()
   }
 
   // Allow static files and API health
@@ -30,7 +37,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/health') ||
     pathname.includes('.')
   ) {
-    return NextResponse.next()
+    return nextWithPath()
   }
 
   // Check authentication for protected routes
@@ -63,7 +70,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  return nextWithPath()
 }
 
 export const config = {

@@ -10,6 +10,7 @@ interface DashboardClientLayoutProps {
   locale: string
   userRole: string
   userName: string
+  allowedPages?: string[]
 }
 
 export default function DashboardClientLayout({
@@ -17,6 +18,7 @@ export default function DashboardClientLayout({
   locale,
   userRole,
   userName,
+  allowedPages,
 }: DashboardClientLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -48,6 +50,7 @@ export default function DashboardClientLayout({
         locale={locale}
         userRole={userRole}
         userName={userName}
+        allowedPages={allowedPages}
         isMobileOpen={isMobileMenuOpen}
         onMobileClose={() => setIsMobileMenuOpen(false)}
       />
