@@ -3,6 +3,7 @@ import {
   drawGridLabelPDF,
   drawIndividualLabelPDF,
   type LabelData,
+  type QrMatrix,
 } from '@/lib/pdf-label-core'
 
 /**
@@ -24,7 +25,7 @@ export interface GenerateOptions {
   signal?: AbortSignal
 }
 
-// How many QR codes to render before yielding to the event loop.
+// How many QR codes to build before yielding to the event loop.
 const CHUNK_SIZE = 50
 
 // ---------------------------------------------------------------------------
@@ -60,23 +61,21 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 
 /**
- * Render all QR PNG data-URLs for the given labels, chunked + yielding so the
- * UI thread isn't blocked. Reports progress via onProgress.
+ * Build all QR module matrices for the given labels, chunked + yielding so the
+ * UI thread isn't blocked. Reports progress via onProgress. The matrices are
+ * drawn as vector QR (pure CMYK K) by the shared core — no raster involved.
  */
-async function renderQrDataUrls(
+async function renderQrMatrices(
   labels: LabelData[],
-  width: number,
   opts: GenerateOptions,
-): Promise<string[]> {
-  const qrDataUrls: string[] = new Array(labels.length)
+): Promise<QrMatrix[]> {
+  const qrMatrices: QrMatrix[] = new Array(labels.length)
 
   for (let i = 0; i < labels.length; i++) {
     throwIfAborted(opts.signal)
-    qrDataUrls[i] = await QRCode.toDataURL(labels[i].qrCodeUrl, {
-      width,
-      margin: 1,
+    qrMatrices[i] = QRCode.create(labels[i].qrCodeUrl, {
       errorCorrectionLevel: 'M',
-    })
+    }).modules
 
     if (i % CHUNK_SIZE === 0) {
       opts.onProgress?.(i, labels.length)
@@ -86,7 +85,7 @@ async function renderQrDataUrls(
   }
 
   opts.onProgress?.(labels.length, labels.length)
-  return qrDataUrls
+  return qrMatrices
 }
 
 /**
@@ -98,10 +97,10 @@ export async function generateGridLabelPDFBlob(
   opts: GenerateOptions & { widthMm?: number; heightMm?: number } = {},
 ): Promise<Blob> {
   const bannerDataUrl = await fetchBannerDataUrl()
-  const qrDataUrls = await renderQrDataUrls(labels, 250, opts)
+  const qrMatrices = await renderQrMatrices(labels, opts)
   throwIfAborted(opts.signal)
 
-  const doc = drawGridLabelPDF(labels, qrDataUrls, {
+  const doc = drawGridLabelPDF(labels, qrMatrices, {
     widthMm: opts.widthMm,
     heightMm: opts.heightMm,
     bannerDataUrl,
@@ -119,10 +118,10 @@ export async function generateIndividualLabelPDFBlob(
   opts: GenerateOptions = {},
 ): Promise<Blob> {
   const bannerDataUrl = await fetchBannerDataUrl()
-  const qrDataUrls = await renderQrDataUrls(labels, 400, opts)
+  const qrMatrices = await renderQrMatrices(labels, opts)
   throwIfAborted(opts.signal)
 
-  const doc = drawIndividualLabelPDF(labels, qrDataUrls, { bannerDataUrl })
+  const doc = drawIndividualLabelPDF(labels, qrMatrices, { bannerDataUrl })
 
   return doc.output('blob')
 }

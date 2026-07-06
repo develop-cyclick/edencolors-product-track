@@ -23,6 +23,7 @@ interface VerifyResponse {
     productName: string
     sku: string
     modelSize?: string
+    unit?: { th: string; en: string | null } | null
     category: string
     imageUrl?: string
     lot?: string
@@ -238,6 +239,13 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
   const canActivate = response.data?.canActivate ?? false
   const isFullyActivated = result === 'ACTIVATED' || (response.data?.status === 'ACTIVATED' && !canActivate)
   const isActivated = response.data?.status === 'ACTIVATED'
+  // Product unit (e.g. "ml") shown instead of the generic "ครั้ง"/"uses".
+  // Falls back to "ครั้ง"/"uses" for products without a configured unit.
+  const unitLabel = response.data?.unit
+    ? (locale === 'th' ? response.data.unit.th : (response.data.unit.en || response.data.unit.th))
+    : (locale === 'th' ? 'ครั้ง' : 'uses')
+  // Remaining activatable quantity (used to decide the activate-button label).
+  const remainingCount = (response.data?.maxActivations || 1) - (response.data?.activationCount || 0)
   const isReturned = result === 'RETURNED' || response.data?.status === 'RETURNED'
   const isReprinted = result === 'REPRINTED'
   const isInvalid = ['INVALID_TOKEN', 'NOT_FOUND', 'REVOKED'].includes(result)
@@ -257,8 +265,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
       return {
         title: locale === 'th' ? 'ของแท้' : 'Genuine Product',
         subtitle: locale === 'th'
-          ? `ถูกลงทะเบียนแล้ว ${count}/${max} ครั้ง - ยังสามารถลงทะเบียนได้อีก`
-          : `Registered ${count}/${max} times - Can still be activated`,
+          ? `ถูกลงทะเบียนแล้ว ${count}/${max} ${unitLabel} - ยังสามารถลงทะเบียนได้อีก`
+          : `Registered ${count}/${max} ${unitLabel} - Can still be activated`,
       }
     }
     // Fully activated
@@ -269,8 +277,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
         title: locale === 'th' ? 'สินค้าถูกลงทะเบียนแล้ว' : 'Already Registered',
         subtitle: isPack
           ? (locale === 'th'
-              ? `สินค้านี้ถูกลงทะเบียนครบ ${max} ครั้งแล้ว`
-              : `This product has been registered ${count}/${max} times`)
+              ? `สินค้านี้ถูกลงทะเบียนครบ ${max} ${unitLabel}แล้ว`
+              : `This product has been registered ${count}/${max} ${unitLabel}`)
           : (locale === 'th'
               ? 'สินค้านี้ถูกลงทะเบียนใช้งานแล้ว'
               : 'This product has been registered'),
@@ -445,7 +453,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                     <span className="font-medium text-[var(--color-charcoal)]">
                       {response.data.activationCount || 0}
                     </span>
-                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}</span>
+                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {unitLabel}</span>
                   </span>
                 </div>
               </>
@@ -472,7 +480,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                     <span className="font-bold text-[var(--color-charcoal)]">
                       {response.data.activationCount || 0}
                     </span>
-                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}</span>
+                    <span className="text-[var(--color-foreground-muted)]">/ {response.data.maxActivations} {unitLabel}</span>
                   </span>
                 </div>
               </>
@@ -594,14 +602,13 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
             <div className="p-6 bg-[var(--color-off-white)] border-t border-[var(--color-beige)]">
               {/* PACK Product - Quantity selector or next activation info */}
               {isPack && response.data?.maxActivations && response.data.maxActivations > 1 && (() => {
-                const remainingCount = (response.data?.maxActivations || 1) - (response.data?.activationCount || 0)
                 const showQtySelector = remainingCount > 1
 
                 return showQtySelector ? (
                   /* Quantity selector */
                   <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-[var(--color-gold)]/5 to-[var(--color-gold)]/10 border border-[var(--color-gold)]/20">
                     <p className="text-sm font-medium text-[var(--color-charcoal)] mb-3">
-                      {locale === 'th' ? 'เลือกจำนวนครั้งที่จะเปิดใช้งาน' : 'Choose number of activations'}
+                      {locale === 'th' ? 'เลือกปริมาณที่ต้องการเปิดใช้งาน' : 'Choose quantity to activate'}
                     </p>
                     {/* Stepper */}
                     <div className="flex items-center justify-center gap-3 mb-3">
@@ -646,14 +653,14 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                               : 'bg-white text-[var(--color-charcoal)] border-[var(--color-beige)] hover:border-[var(--color-gold)]'
                           }`}
                         >
-                          {n === remainingCount ? (locale === 'th' ? `ทั้งหมด (${n})` : `All (${n})`) : n}
+                          {n === remainingCount ? (locale === 'th' ? `ทั้งหมด (${n} ${unitLabel})` : `All (${n} ${unitLabel})`) : `${n} ${unitLabel}`}
                         </button>
                       ))}
                     </div>
                     <p className="text-xs text-[var(--color-foreground-muted)] text-center mt-2">
                       {locale === 'th'
-                        ? `เหลืออีก ${remainingCount} ครั้ง`
-                        : `${remainingCount} activations remaining`
+                        ? `เหลืออีก ${remainingCount} ${unitLabel}`
+                        : `${remainingCount} ${unitLabel} remaining`
                       }
                     </p>
                   </div>
@@ -675,8 +682,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                         </p>
                         <p className="text-xs text-[var(--color-foreground-muted)]">
                           {locale === 'th'
-                            ? `เหลืออีก ${remainingCount} ครั้ง`
-                            : `${remainingCount} activations remaining`
+                            ? `เหลืออีก ${remainingCount} ${unitLabel}`
+                            : `${remainingCount} ${unitLabel} remaining`
                           }
                         </p>
                       </div>
@@ -732,8 +739,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {isPack
-                      ? (activateQty > 1
-                        ? (locale === 'th' ? `เปิดใช้งาน ${activateQty} ครั้ง` : `Activate ${activateQty} Uses`)
+                      ? (remainingCount > 1
+                        ? (locale === 'th' ? `เปิดใช้งาน ${activateQty} ${unitLabel}` : `Activate ${activateQty} ${unitLabel}`)
                         : (locale === 'th' ? `เปิดใช้งาน ${(response.data?.activationCount || 0) + 1}${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}` : `Activate #${(response.data?.activationCount || 0) + 1}${response.data?.modelSize ? ` - ${response.data.modelSize}` : ''}`))
                       : dict.activate.activateButton
                     }
@@ -765,8 +772,8 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                     {activationResult.data?.remainingActivations !== undefined && activationResult.data.remainingActivations > 0 && (
                       <p className="text-sm text-[var(--color-foreground-muted)] mt-0.5">
                         {locale === 'th'
-                          ? `ยังใช้ได้อีก ${activationResult.data.remainingActivations} ครั้ง`
-                          : `${activationResult.data.remainingActivations} uses remaining`
+                          ? `ยังใช้ได้อีก ${activationResult.data.remainingActivations} ${unitLabel}`
+                          : `${activationResult.data.remainingActivations} ${unitLabel} remaining`
                         }
                       </p>
                     )}
@@ -807,7 +814,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                           />
                         </div>
                         <p className="text-xs text-center mt-2 text-[var(--color-mint-dark)]">
-                          {activationResult.data.activationNumber} / {activationResult.data.maxActivations} {locale === 'th' ? 'ครั้ง' : 'uses'}
+                          {activationResult.data.activationNumber} / {activationResult.data.maxActivations} {unitLabel}
                         </p>
                       </div>
                     )}

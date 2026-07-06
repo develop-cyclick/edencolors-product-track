@@ -37,17 +37,12 @@ function loadBannerImage(): string | null {
  * Server-side wrapper: renders QR images, loads assets via fs, returns a Buffer.
  */
 export async function generateLabelPDF(labels: LabelData[]): Promise<Buffer> {
-  const qrDataUrls = await Promise.all(
-    labels.map((label) =>
-      QRCode.toDataURL(label.qrCodeUrl, {
-        width: 400,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-      }),
-    ),
+  // Vector QR: inject the module matrix (no raster). See lib/pdf-label-core.ts.
+  const qrMatrices = labels.map(
+    (label) => QRCode.create(label.qrCodeUrl, { errorCorrectionLevel: 'M' }).modules,
   )
 
-  const doc = drawIndividualLabelPDF(labels, qrDataUrls, {
+  const doc = drawIndividualLabelPDF(labels, qrMatrices, {
     bannerDataUrl: loadBannerImage(),
     registerFont: loadSarabunFont,
   })
@@ -71,17 +66,12 @@ export async function generateGridLabelPDF(
   labels: LabelData[],
   opts: { widthMm?: number; heightMm?: number } = {},
 ): Promise<Buffer> {
-  const qrDataUrls = await Promise.all(
-    labels.map((label) =>
-      QRCode.toDataURL(label.qrCodeUrl, {
-        width: 250,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-      }),
-    ),
+  // Vector QR: inject the module matrix (no raster). See lib/pdf-label-core.ts.
+  const qrMatrices = labels.map(
+    (label) => QRCode.create(label.qrCodeUrl, { errorCorrectionLevel: 'M' }).modules,
   )
 
-  const doc = drawGridLabelPDF(labels, qrDataUrls, {
+  const doc = drawGridLabelPDF(labels, qrMatrices, {
     ...opts,
     bannerDataUrl: loadBannerImage(),
     registerFont: loadSarabunFont,

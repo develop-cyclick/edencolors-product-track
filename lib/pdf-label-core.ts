@@ -26,6 +26,17 @@ export interface LabelData {
   expDate?: string
 }
 
+/**
+ * A QR module matrix (structurally compatible with `qrcode`'s BitMatrix). The
+ * callers build it with `QRCode.create(text, ...).modules` and inject it here,
+ * so this core stays free of the `qrcode` dependency. `get(row, col)` returns a
+ * truthy value for a dark module.
+ */
+export interface QrMatrix {
+  size: number
+  get(row: number, col: number): number
+}
+
 // ============================================
 // GRID LAYOUT (A4 sticker sheet) constants
 // ============================================
@@ -140,16 +151,70 @@ interface DrawOpts {
   registerFont?: (doc: jsPDF) => void
 }
 
+// Quiet zone (blank margin) around the QR, in modules. Kept at 1 to match the
+// previous raster path (`margin: 1`) so the physical module size is unchanged.
+const QR_QUIET_MODULES = 1
+
+/**
+ * Draw a QR code as VECTOR rectangles (one filled square per dark module) in
+ * pure CMYK black (K only) instead of embedding a raster PNG.
+ *
+ * Why: print factories convert the PDF to CMYK. A raster RGB black becomes a
+ * muddy "rich black" (looks brown), and the white raster background can be
+ * misread as black by the RIP. Drawing vectors in `0 0 0 1 k` (100% K) prints a
+ * clean black, and leaving white areas UNDRAWN lets the paper show through — no
+ * white pixels to misinterpret. Vectors are also crisp at any print resolution.
+ *
+ * Adjacent dark modules in a row are merged into a single rectangle (run-length)
+ * to avoid hairline seams between squares and to keep the op count down.
+ */
+function drawVectorQr(
+  doc: jsPDF,
+  matrix: QrMatrix,
+  x: number,
+  y: number,
+  sizeMm: number,
+): void {
+  const totalModules = matrix.size + QR_QUIET_MODULES * 2
+  const moduleMm = sizeMm / totalModules
+  const offset = QR_QUIET_MODULES * moduleMm
+
+  doc.setFillColor(0, 0, 0, 1) // CMYK: 0 0 0 1 k => pure K black
+
+  for (let row = 0; row < matrix.size; row++) {
+    let col = 0
+    while (col < matrix.size) {
+      if (!matrix.get(row, col)) {
+        col++
+        continue
+      }
+      // Extend the run over consecutive dark modules, draw them as one rect.
+      let run = 1
+      while (col + run < matrix.size && matrix.get(row, col + run)) run++
+      doc.rect(
+        x + offset + col * moduleMm,
+        y + offset + row * moduleMm,
+        run * moduleMm,
+        moduleMm,
+        'F',
+      )
+      col += run
+    }
+  }
+}
+
 /**
  * Draw QR codes in a grid on A4 paper. `qrDataUrls` must be index-aligned with
  * `labels`. Returns the jsPDF document (caller serializes it).
  */
 export function drawGridLabelPDF(
   labels: LabelData[],
-  qrDataUrls: string[],
+  qrMatrices: QrMatrix[],
   opts: DrawOpts & { widthMm?: number; heightMm?: number } = {},
 ): jsPDF {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  // compress: true => FlateDecode the page content streams. The QR is now drawn
+  // as many small vector rects; compression keeps a 2000-label sheet small.
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
 
   const fontFamily = 'helvetica'
   opts.registerFont?.(doc)
@@ -178,12 +243,6 @@ export function drawGridLabelPDF(
     const x = GRID.MARGIN_MM + col * (cellWidth + GRID.GAP_MM)
     const y = GRID.MARGIN_MM + row * (cellHeight + GRID.GAP_MM)
 
-    // Cell border (light gray, dashed = cutting guide)
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.rect(x, y, cellWidth, cellHeight)
-    doc.setLineDashPattern([], 0)
-
     // Banner on top. Pass a stable alias so jsPDF embeds the banner image only
     // ONCE and references it in every cell — without this, the ~360KB banner is
     // re-embedded per label, bloating a 2000-label PDF to hundreds of MB.
@@ -196,15 +255,13 @@ export function drawGridLabelPDF(
     const qrAreaHeight = cellHeight - bannerHeight - GRID.SERIAL_TEXT_MM
     const qrX = x + (cellWidth - qrSize) / 2
     const qrY = qrAreaTop + Math.max(0, (qrAreaHeight - qrSize) / 2)
-    // 'FAST' => FlateDecode the QR image. Without a compression flag jsPDF
-    // stores each QR as a raw ~180KB bitmap, bloating a 2000-label PDF to
-    // hundreds of MB; QR codes compress ~30x, keeping the file small.
-    doc.addImage(qrDataUrls[i], 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+    // Vector QR in pure CMYK K (see drawVectorQr) — prints clean at the factory.
+    drawVectorQr(doc, qrMatrices[i], qrX, qrY, qrSize)
 
     // Serial number right under the QR (clamped inside the box)
     doc.setFontSize(4)
     doc.setFont(fontFamily, 'bold')
-    doc.setTextColor(0, 0, 0)
+    doc.setTextColor(0, 0, 0, 1) // CMYK K
 
     const serial = labels[i].serialNumber
     const serialY = Math.min(qrY + qrSize + GRID.SERIAL_GAP_MM, y + cellHeight - 1)
@@ -217,7 +274,7 @@ export function drawGridLabelPDF(
     doc.setPage(p + 1)
     doc.setFontSize(6)
     doc.setFont(fontFamily, 'normal')
-    doc.setTextColor(150, 150, 150)
+    doc.setTextColor(0, 0, 0, 0.4) // CMYK K-gray
 
     const startItem = p * itemsPerPage + 1
     const endItem = Math.min((p + 1) * itemsPerPage, labels.length)
@@ -238,7 +295,7 @@ export function drawGridLabelPDF(
  */
 export function drawIndividualLabelPDF(
   labels: LabelData[],
-  qrDataUrls: string[],
+  qrMatrices: QrMatrix[],
   opts: DrawOpts = {},
 ): jsPDF {
   const { LABEL_WIDTH_MM, LABEL_HEIGHT_MM, MARGIN_MM, QR_SIZE_MM } = INDIVIDUAL
@@ -247,6 +304,7 @@ export function drawIndividualLabelPDF(
     orientation: 'portrait',
     unit: 'mm',
     format: [LABEL_WIDTH_MM, LABEL_HEIGHT_MM],
+    compress: true,
   })
 
   const fontFamily = 'helvetica'
@@ -266,6 +324,8 @@ export function drawIndividualLabelPDF(
     const centerX = LABEL_WIDTH_MM / 2
     let yPos = MARGIN_MM
 
+    doc.setTextColor(0, 0, 0, 1) // CMYK K for all text on this label
+
     if (bannerImage) {
       // Stable alias => banner embedded once, referenced on every page.
       doc.addImage(bannerImage, 'JPEG', MARGIN_MM, yPos, bannerWidth, bannerHeight, 'banner', 'FAST')
@@ -278,9 +338,9 @@ export function drawIndividualLabelPDF(
       yPos += 8
     }
 
-    // QR - centered ('FAST' => FlateDecode the QR image; see grid note above)
+    // QR - centered. Vector, pure CMYK K (see drawVectorQr / grid note above).
     const qrX = (LABEL_WIDTH_MM - QR_SIZE_MM) / 2
-    doc.addImage(qrDataUrls[i], 'PNG', qrX, yPos, QR_SIZE_MM, QR_SIZE_MM, undefined, 'FAST')
+    drawVectorQr(doc, qrMatrices[i], qrX, yPos, QR_SIZE_MM)
     yPos += QR_SIZE_MM + 8
 
     // Serial number (prominent)
@@ -321,10 +381,10 @@ export function drawIndividualLabelPDF(
 
     // Footer
     doc.setFontSize(7)
-    doc.setTextColor(128, 128, 128)
+    doc.setTextColor(0, 0, 0, 0.5) // CMYK K-gray
     doc.setFont(fontFamily, 'normal')
     doc.text('Print at actual size (100%)', centerX, LABEL_HEIGHT_MM - MARGIN_MM, { align: 'center' })
-    doc.setTextColor(0, 0, 0)
+    doc.setTextColor(0, 0, 0, 1) // reset to K black
   }
 
   return doc

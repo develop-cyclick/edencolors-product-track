@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
             activationType: true,
             maxActivations: true,
             imageUrl: true,
+            defaultUnit: { select: { nameTh: true, nameEn: true } },
           },
         },
         qrTokens: {
@@ -245,6 +246,13 @@ export async function GET(request: NextRequest) {
       productName: productItem.name,
       sku: productItem.sku,
       modelSize: productItem.modelSize,
+      // Product unit (e.g. "ml"); used on the verify page instead of "ครั้ง".
+      unit: productItem.productMaster?.defaultUnit
+        ? {
+            th: productItem.productMaster.defaultUnit.nameTh,
+            en: productItem.productMaster.defaultUnit.nameEn,
+          }
+        : null,
       category: productItem.category.nameTh,
       imageUrl: productItem.productMaster?.imageUrl || null,
       lot: productItem.lot || null,
