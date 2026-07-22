@@ -42,6 +42,7 @@ interface CreateOutboundInput {
   remarks?: string
   lines?: OutboundLineInput[]  // Legacy format
   linesByProductMaster?: ProductMasterLineInput[]  // New FIFO format
+  excludeItemIds?: number[]  // ProductItem ids the user chose to skip in FIFO selection
 }
 
 // GET /api/warehouse/outbound - List Outbounds
@@ -173,6 +174,11 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       }
     }> = []
 
+    // Items the user explicitly skipped in the preview — excluded from FIFO selection
+    const excludeItemIds = Array.isArray(body.excludeItemIds)
+      ? body.excludeItemIds.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+      : []
+
     if (hasFifoLines) {
       // FIFO selection for each ProductMaster
       for (const pmLine of body.linesByProductMaster!) {
@@ -190,13 +196,24 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           return errorResponse(`ProductMaster ${productMaster.sku} has no unit defined`)
         }
 
-        // Get IN_STOCK items for this ProductMaster, ordered by serial12 (FIFO - oldest first)
+        // Get IN_STOCK items for this ProductMaster.
+        // FEFO → FIFO → serial12: nearest expiry first, then oldest received, then
+        // serial number as a deterministic tiebreaker. The serial tiebreaker is
+        // essential: same-batch items share an identical expDate AND createdAt, so
+        // without it the DB returns an arbitrary (physical/heap) order and the
+        // selection becomes non-deterministic. Must match the edit path in
+        // outbound/[id]/route.ts so create and edit pick the same items.
         const availableItems = await prisma.productItem.findMany({
           where: {
             productMasterId: pmLine.productMasterId,
             status: 'IN_STOCK',
+            ...(excludeItemIds.length > 0 ? { id: { notIn: excludeItemIds } } : {}),
           },
-          orderBy: { serial12: 'asc' }, // FIFO: lowest serial number = oldest
+          orderBy: [
+            { expDate: 'asc' },
+            { createdAt: 'asc' },
+            { serial12: 'asc' },
+          ],
           take: pmLine.quantity,
         })
 

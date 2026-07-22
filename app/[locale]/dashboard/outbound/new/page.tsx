@@ -72,6 +72,32 @@ interface LineItem {
   quantity: number
 }
 
+interface PreviewItem {
+  id: number
+  serial12: string
+  lot: string | null
+  expDate: string | null
+}
+
+interface PreviewLine {
+  productMasterId: number
+  sku: string
+  nameTh: string
+  nameEn: string | null
+  modelSize: string | null
+  unit: { nameTh: string; nameEn: string | null } | null
+  requested: number
+  available: number
+  enough: boolean
+  items: PreviewItem[]
+}
+
+interface ExcludedItem {
+  id: number
+  serial12: string
+  sku: string
+}
+
 export default function NewOutboundPage() {
   const router = useRouter()
   const params = useParams()
@@ -120,6 +146,12 @@ export default function NewOutboundPage() {
   const [lines, setLines] = useState<LineItem[]>([
     { id: crypto.randomUUID(), productMasterId: 0, productMaster: null, quantity: 1 }
   ])
+
+  // Preview of the exact FIFO-selected serials (shown before saving)
+  const [previewLines, setPreviewLines] = useState<PreviewLine[] | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  // Serials the user chose to skip — excluded from FIFO selection on preview and save
+  const [excludedItems, setExcludedItems] = useState<ExcludedItem[]>([])
 
   useEffect(() => {
     // Fetch master data
@@ -287,6 +319,11 @@ export default function NewOutboundPage() {
     }
   }, [clinicId, clinics])
 
+  // Any change to the line items invalidates a shown preview
+  useEffect(() => {
+    setPreviewLines(null)
+  }, [lines])
+
   // Handle PO selection
   const handlePOChange = (poId: number) => {
     setPurchaseOrderId(poId)
@@ -387,6 +424,67 @@ export default function NewOutboundPage() {
     }))
   }
 
+  const formatExp = (dateStr: string | null) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+    })
+  }
+
+  // Fetch the exact serials FIFO will pull for the current lines (no mutation).
+  // excludeOverride lets skip/unskip refetch with the updated list before state settles.
+  const handlePreview = async (excludeOverride?: ExcludedItem[]) => {
+    const validLines = lines.filter((l) => l.productMasterId && l.quantity >= 1)
+    if (validLines.length === 0) {
+      await alert({ title: locale === 'th' ? 'ยังเลือกสินค้าไม่ครบ' : 'Incomplete', message: locale === 'th' ? 'กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการก่อนดูตัวอย่าง' : 'Select at least one product and quantity first', variant: 'warning', icon: 'warning' })
+      return
+    }
+    const excludes = excludeOverride ?? excludedItems
+    setPreviewLoading(true)
+    try {
+      const res = await fetch('/api/warehouse/outbound/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linesByProductMaster: validLines.map((l) => ({ productMasterId: l.productMasterId, quantity: l.quantity })),
+          outboundId: isEditMode ? editingOutboundId : undefined,
+          excludeItemIds: excludes.map((x) => x.id),
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPreviewLines(data.data.lines)
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Error', variant: 'error', icon: 'error' })
+      }
+    } catch {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถโหลดตัวอย่างได้' : 'Failed to load preview', variant: 'error', icon: 'error' })
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  // Skip one serial: exclude it, then re-preview so the next serial takes its place
+  const handleSkipItem = async (pl: PreviewLine, item: PreviewItem) => {
+    if (excludedItems.some((x) => x.id === item.id)) return
+    const next = [...excludedItems, { id: item.id, serial12: item.serial12, sku: pl.sku }]
+    setExcludedItems(next)
+    await handlePreview(next)
+  }
+
+  const handleUnskipItem = async (id: number) => {
+    const next = excludedItems.filter((x) => x.id !== id)
+    setExcludedItems(next)
+    if (previewLines) await handlePreview(next)
+  }
+
+  const handleUnskipAll = async () => {
+    setExcludedItems([])
+    if (previewLines) await handlePreview([])
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -439,6 +537,8 @@ export default function NewOutboundPage() {
           productMasterId: l.productMasterId,
           quantity: l.quantity,
         })),
+        // Serials the user chose to skip — API excludes them from FIFO selection
+        excludeItemIds: excludedItems.map((x) => x.id),
       }
 
       let res
@@ -987,6 +1087,129 @@ export default function NewOutboundPage() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Preview the exact FIFO-selected serials before saving */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => handlePreview()}
+              disabled={previewLoading || totalItems === 0}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--color-charcoal)] bg-white border border-[var(--color-gold)] rounded-xl hover:bg-[var(--color-gold)]/10 disabled:opacity-50 disabled:hover:bg-white transition-all duration-200"
+            >
+              {previewLoading ? (
+                <div className="w-4 h-4 border-2 border-[var(--color-gold)] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              )}
+              {locale === 'th' ? 'ดูตัวอย่าง Serial ที่จะดึง' : 'Preview serials to be pulled'}
+            </button>
+
+            {excludedItems.length > 0 && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-sm font-medium text-amber-800">
+                    {locale === 'th' ? `Serial ที่สั่งข้าม (${excludedItems.length})` : `Skipped serials (${excludedItems.length})`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleUnskipAll}
+                    disabled={previewLoading}
+                    className="text-xs font-medium text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+                  >
+                    {locale === 'th' ? 'เลิกข้ามทั้งหมด' : 'Unskip all'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {excludedItems.map((x) => (
+                    <span key={x.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs bg-white border border-amber-300 rounded-full text-[var(--color-charcoal)]">
+                      <span className="font-mono">{x.serial12}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnskipItem(x.id)}
+                        disabled={previewLoading}
+                        title={locale === 'th' ? 'เลิกข้าม' : 'Unskip'}
+                        className="text-amber-600 hover:text-red-600 font-bold leading-none disabled:opacity-50"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-amber-700">
+                  {locale === 'th'
+                    ? 'ชิ้นเหล่านี้จะไม่ถูกดึงเข้าใบส่งออกนี้ แต่ยังอยู่ในคลังตามปกติ'
+                    : 'These items will not be pulled into this outbound, but remain in stock'}
+                </p>
+              </div>
+            )}
+
+            {previewLines && (
+              <div className="mt-4 space-y-4">
+                {previewLines.length === 0 && (
+                  <p className="text-sm text-[var(--color-foreground-muted)]">
+                    {locale === 'th' ? 'ไม่มีรายการให้แสดง' : 'Nothing to preview'}
+                  </p>
+                )}
+                {previewLines.map((pl) => (
+                  <div key={pl.productMasterId} className="border border-[var(--color-beige)] rounded-xl overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
+                      <div className="text-sm font-medium text-[var(--color-charcoal)]">
+                        {pl.sku} - {locale === 'th' ? pl.nameTh : (pl.nameEn || pl.nameTh)}
+                        {pl.modelSize ? ` (${pl.modelSize})` : ''}
+                      </div>
+                      <div className={`text-xs font-medium px-2.5 py-1 rounded-full ${pl.enough ? 'bg-[var(--color-mint)]/15 text-[var(--color-mint-dark)]' : 'bg-red-100 text-red-700'}`}>
+                        {pl.enough
+                          ? (locale === 'th' ? `จะดึง ${pl.items.length} ชิ้น (คงเหลือ ${pl.available})` : `Pulling ${pl.items.length} (avail ${pl.available})`)
+                          : (locale === 'th' ? `สต็อกไม่พอ! ต้องการ ${pl.requested} มี ${pl.available}` : `Not enough! need ${pl.requested}, have ${pl.available}`)}
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-white">
+                          <tr className="text-left text-xs text-[var(--color-foreground-muted)]">
+                            <th className="px-4 py-2 font-medium">#</th>
+                            <th className="px-4 py-2 font-medium">Serial No.</th>
+                            <th className="px-4 py-2 font-medium">Lot</th>
+                            <th className="px-4 py-2 font-medium">{locale === 'th' ? 'วันหมดอายุ' : 'Exp.'}</th>
+                            <th className="px-4 py-2 font-medium text-right">{locale === 'th' ? 'ข้าม' : 'Skip'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--color-beige)]">
+                          {pl.items.map((it, i) => (
+                            <tr key={it.id} className="hover:bg-[var(--color-off-white)]/50">
+                              <td className="px-4 py-2 text-[var(--color-foreground-muted)]">{i + 1}</td>
+                              <td className="px-4 py-2 font-mono text-[var(--color-charcoal)]">{it.serial12}</td>
+                              <td className="px-4 py-2 text-[var(--color-charcoal)]">{it.lot || '-'}</td>
+                              <td className="px-4 py-2 text-[var(--color-charcoal)]">{formatExp(it.expDate)}</td>
+                              <td className="px-4 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSkipItem(pl, it)}
+                                  disabled={previewLoading}
+                                  title={locale === 'th' ? 'ข้าม Serial นี้ แล้วดึงชิ้นถัดไปแทน' : 'Skip this serial and pull the next one instead'}
+                                  className="px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                                >
+                                  {locale === 'th' ? 'ข้าม' : 'Skip'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-[var(--color-foreground-muted)]">
+                  {locale === 'th'
+                    ? '* Serial ที่แสดงคือชุดที่ระบบจะดึงจริงตามหลัก FIFO ณ ตอนนี้ (อาจเปลี่ยนได้ถ้ามีใบส่งออกอื่นบันทึกแทรกก่อนคุณกดบันทึก)'
+                    : '* These are the exact serials FIFO will pull right now (may change if another outbound is saved before you submit)'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

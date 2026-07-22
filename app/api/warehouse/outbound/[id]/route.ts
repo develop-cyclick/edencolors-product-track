@@ -447,6 +447,12 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
     return errorResponse('At least one product line is required')
   }
 
+  // Items the user explicitly skipped in the preview — excluded from FIFO re-selection.
+  // Must be filtered the same way as the create path so both paths stay in agreement.
+  const excludeItemIds: number[] = Array.isArray(body.excludeItemIds)
+    ? body.excludeItemIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)
+    : []
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Revert all current product items to IN_STOCK
@@ -484,15 +490,22 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
           throw new Error(`Product ${productMaster.sku} has no unit defined`)
         }
 
-        // FIFO selection - get IN_STOCK items ordered by expDate (nearest first), then createdAt
+        // FEFO → FIFO → serial12: nearest expiry first, then oldest received, then
+        // serial number as a deterministic tiebreaker. Without the serial tiebreaker,
+        // same-batch items (identical expDate + createdAt) come back in arbitrary
+        // physical/heap order — which is how an edit could drop a middle block of
+        // serials (e.g. 020–030) even though lower serials were still in stock.
+        // Must match the create path in outbound/route.ts.
         const availableItems = await tx.productItem.findMany({
           where: {
             productMasterId: productMasterId,
             status: 'IN_STOCK',
+            ...(excludeItemIds.length > 0 ? { id: { notIn: excludeItemIds } } : {}),
           },
           orderBy: [
             { expDate: 'asc' },
             { createdAt: 'asc' },
+            { serial12: 'asc' },
           ],
           take: quantity,
         })
@@ -509,8 +522,13 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
               productItemId: item.id,
               sku: productMaster.sku,
               itemName: productMaster.nameTh || productMaster.nameEn || productMaster.sku,
+              modelSize: productMaster.modelSize,
               quantity: 1,
               unitId: productMaster.defaultUnitId!,
+              // Snapshot lot/expDate from the item — same as the create path.
+              // Without these the delivery document shows empty LOT/EXP after an edit.
+              lot: item.lot,
+              expDate: item.expDate,
             },
           })
 
