@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin, withWarehouse } from '@/lib/api-middleware'
+import { withPageAccess, withWarehouse } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 
 // GET /api/admin/clinics - List all clinics
@@ -18,7 +18,7 @@ export const GET = withWarehouse(async () => {
 })
 
 // POST /api/admin/clinics - Create a new clinic
-export const POST = withAdmin(async (request: NextRequest) => {
+export const POST = withPageAccess('clinics', async (request: NextRequest) => {
   try {
     const body = await request.json()
 

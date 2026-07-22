@@ -3,6 +3,8 @@ import { UserRole } from '@prisma/client'
 import { getCurrentUser } from './session'
 import { hasRole, hasMinimumRole, JWTPayload } from './auth'
 import { errors } from './api-response'
+import { canAccessPageKey } from './permissions'
+import { loadPermissionMatrix } from './permissions-server'
 
 type ApiHandler<T = unknown> = (
   request: NextRequest,
@@ -55,6 +57,30 @@ export function withMinRole<T = unknown>(minimumRole: UserRole, handler: ApiHand
     }
 
     if (!hasMinimumRole(user.role, minimumRole)) {
+      return errors.forbidden()
+    }
+
+    return handler(request, { user, params: context?.params })
+  }
+}
+
+/**
+ * Require access to a dashboard page per the admin-configurable role→page
+ * matrix (the same matrix that drives the sidebar and layout guard). Use for
+ * API routes backing a page whose access is granted by ticking roles in
+ * Settings → สิทธิ์การใช้งาน, so granting the page also grants its actions.
+ * ADMIN always passes.
+ */
+export function withPageAccess<T = unknown>(pageKey: string, handler: ApiHandler<T>) {
+  return async (request: NextRequest, context?: { params?: T }) => {
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return errors.unauthorized()
+    }
+
+    const matrix = await loadPermissionMatrix()
+    if (!canAccessPageKey(user.role, pageKey, matrix)) {
       return errors.forbidden()
     }
 

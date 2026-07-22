@@ -72,7 +72,14 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(graphify query *)",
+      "Bash(awk '/^model ProductItem /,/^}/' prisma/schema.prisma)",
+      "Bash(awk '/^model OutboundHeader /,/^}/' prisma/schema.prisma)",
+      "Bash(awk '/^model OutboundLine /,/^}/' prisma/schema.prisma)",
+      "Bash(ssh *)",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)"
     ]
   }
 }

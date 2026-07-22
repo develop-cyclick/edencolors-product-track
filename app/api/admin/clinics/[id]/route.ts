@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin } from '@/lib/api-middleware'
+import { withPageAccess } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 
 type Params = { id: string }
 
 // GET /api/admin/clinics/[id] - Get clinic by ID
-export const GET = withAdmin<Promise<Params>>(async (_request, { params }) => {
+export const GET = withPageAccess<Promise<Params>>('clinics', async (_request, { params }) => {
   try {
     const { id } = await params!
     const clinicId = parseInt(id)
@@ -31,7 +31,7 @@ export const GET = withAdmin<Promise<Params>>(async (_request, { params }) => {
 })
 
 // PATCH /api/admin/clinics/[id] - Update clinic
-export const PATCH = withAdmin<Promise<Params>>(async (request: NextRequest, { params }) => {
+export const PATCH = withPageAccess<Promise<Params>>('clinics', async (request: NextRequest, { params }) => {
   try {
     const { id } = await params!
     const clinicId = parseInt(id)
@@ -74,7 +74,7 @@ export const PATCH = withAdmin<Promise<Params>>(async (request: NextRequest, { p
 
 // DELETE /api/admin/clinics/[id] - Delete clinic
 // Use ?hard=true for permanent deletion, otherwise soft delete
-export const DELETE = withAdmin<Promise<Params>>(async (request: NextRequest, { params }) => {
+export const DELETE = withPageAccess<Promise<Params>>('clinics', async (request: NextRequest, { params }) => {
   try {
     const { id } = await params!
     const clinicId = parseInt(id)

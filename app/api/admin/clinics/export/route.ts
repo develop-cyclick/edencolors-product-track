@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin } from '@/lib/api-middleware'
+import { withPageAccess } from '@/lib/api-middleware'
 import * as XLSX from 'xlsx'
 
 // GET /api/admin/clinics/export - Export clinics to Excel
-export const GET = withAdmin(async (_request: NextRequest) => {
+export const GET = withPageAccess('clinics', async (_request: NextRequest) => {
   try {
     const clinics = await prisma.clinic.findMany({
       orderBy: { name: 'asc' },

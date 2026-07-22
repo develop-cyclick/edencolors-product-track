@@ -1,14 +1,12 @@
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyToken } from '@/lib/auth'
-import prisma from '@/lib/prisma'
 import {
-  PERMISSION_SETTING_KEY,
-  mergePermissions,
   canAccessPageKey,
   allowedPageKeysForRole,
   pageKeyFromPath,
 } from '@/lib/permissions'
+import { loadPermissionMatrix } from '@/lib/permissions-server'
 import DashboardClientLayout from '@/components/dashboard/dashboard-client-layout'
 
 interface DashboardLayoutProps {
@@ -37,18 +35,7 @@ export default async function DashboardLayout({
 
   // Load the effective role → page access matrix (admin-configurable, stored in
   // SystemSetting; defaults reproduce the previous hardcoded behavior).
-  const settingRow = await prisma.systemSetting.findUnique({
-    where: { key: PERMISSION_SETTING_KEY },
-  })
-  let stored: Record<string, unknown> | null = null
-  if (settingRow) {
-    try {
-      stored = JSON.parse(settingRow.value)
-    } catch {
-      stored = null
-    }
-  }
-  const matrix = mergePermissions(stored)
+  const matrix = await loadPermissionMatrix()
 
   // Route guard: if this role may not access the requested page, bounce to the
   // dashboard root (always allowed to every role → no redirect loop).

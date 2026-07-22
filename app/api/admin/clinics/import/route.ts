@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
-import { withAdmin } from '@/lib/api-middleware'
+import { withPageAccess } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import * as XLSX from 'xlsx'
 
@@ -16,7 +16,7 @@ interface ClinicRow {
 }
 
 // POST /api/admin/clinics/import - Import clinics from Excel
-export const POST = withAdmin(async (request: NextRequest) => {
+export const POST = withPageAccess('clinics', async (request: NextRequest) => {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
