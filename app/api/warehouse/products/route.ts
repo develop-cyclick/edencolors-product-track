@@ -67,7 +67,10 @@ async function handleGET(request: NextRequest) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      // serial12 tiebreaker → stable order + stable pagination for same-batch
+      // items (identical createdAt would otherwise return arbitrary heap order,
+      // making the in-stock list look scrambled and pages inconsistent).
+      orderBy: [{ createdAt: 'desc' }, { serial12: 'desc' }],
       skip,
       take: limit,
     }),

@@ -174,7 +174,8 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
           },
         },
       },
-      orderBy: { updatedAt: 'desc' },
+      // serial12 tiebreaker keeps ordering + pagination stable for same-batch items
+      orderBy: [{ updatedAt: 'desc' }, { serial12: 'desc' }],
       skip,
       take: limit,
     }),

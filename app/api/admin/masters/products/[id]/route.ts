@@ -75,11 +75,17 @@ export const GET = withWarehouse(async (request: NextRequest, context: HandlerCo
             take: 1,
           },
         },
+        // serial12 is always the final tiebreaker. Same-batch items share an
+        // identical createdAt, so ordering by createdAt alone returns rows in an
+        // arbitrary physical/heap order — the list looks scrambled (not in serial
+        // order) AND pagination becomes unstable (an item can repeat or vanish
+        // across pages). Adding serial12 makes every sort deterministic and, for
+        // FIFO, makes the in-stock list run in serial-number order.
         orderBy: sort === 'lifo'
-          ? { createdAt: 'desc' }
+          ? [{ createdAt: 'desc' }, { serial12: 'desc' }]
           : sort === 'status'
-            ? [{ status: 'asc' }, { createdAt: 'asc' }]
-            : { createdAt: 'asc' }, // fifo (default)
+            ? [{ status: 'asc' }, { createdAt: 'asc' }, { serial12: 'asc' }]
+            : [{ createdAt: 'asc' }, { serial12: 'asc' }], // fifo (default)
         skip: (page - 1) * limit,
         take: limit,
       }),

@@ -37,6 +37,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       orderBy: [
         { expDate: 'asc' }, // Prioritize items with earlier expiry
         { createdAt: 'asc' }, // Then older items first (FIFO)
+        { serial12: 'asc' }, // Deterministic tiebreaker for same-batch items
       ],
       take: 50, // Limit results
     })
