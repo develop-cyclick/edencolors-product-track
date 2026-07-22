@@ -141,6 +141,7 @@ export default function NewOutboundPage() {
   const [clinicContactName, setClinicContactName] = useState('')
   const [purchaseOrderId, setPurchaseOrderId] = useState<number>(0)
   const [remarks, setRemarks] = useState('')
+  const [shippingTemperature, setShippingTemperature] = useState('')
 
   // Line items - select by SKU + quantity
   const [lines, setLines] = useState<LineItem[]>([
@@ -216,6 +217,7 @@ export default function NewOutboundPage() {
             setClinicContactName(ob.clinicContactName || '')
             setPurchaseOrderId(ob.purchaseOrder?.id || 0)
             setRemarks(ob.remarks || '')
+            setShippingTemperature(ob.shippingTemperature || '')
 
             // Pre-fill lines from existing outbound
             if (ob.lines && ob.lines.length > 0) {
@@ -532,6 +534,7 @@ export default function NewOutboundPage() {
         clinicContactName: clinicContactName || null,
         purchaseOrderId: purchaseOrderId || null,
         remarks: remarks || null,
+        shippingTemperature: shippingTemperature.trim() || null,
         // Send productMasterId + quantity, API will do FIFO selection
         linesByProductMaster: lines.map((l) => ({
           productMasterId: l.productMasterId,
@@ -682,6 +685,19 @@ export default function NewOutboundPage() {
                   </svg>
                 </div>
               </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                {locale === 'th' ? 'อุณหภูมิการส่ง (ถ้ามี)' : 'Shipping Temperature (optional)'}
+              </label>
+              <input
+                type="text"
+                value={shippingTemperature}
+                onChange={(e) => setShippingTemperature(e.target.value)}
+                placeholder={locale === 'th' ? 'เช่น 2-8°C' : 'e.g. 2-8°C'}
+                className={inputClass}
+              />
             </div>
 
             <div>

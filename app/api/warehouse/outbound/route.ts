@@ -40,6 +40,7 @@ interface CreateOutboundInput {
   clinicContactName?: string
   purchaseOrderId?: number | null
   remarks?: string
+  shippingTemperature?: string | null
   lines?: OutboundLineInput[]  // Legacy format
   linesByProductMaster?: ProductMasterLineInput[]  // New FIFO format
   excludeItemIds?: number[]  // ProductItem ids the user chose to skip in FIFO selection
@@ -294,6 +295,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           purchaseOrderId: body.purchaseOrderId || null,
           status: 'PENDING', // Auto submit for approval
           remarks: body.remarks,
+          shippingTemperature: body.shippingTemperature || null,
         },
       })
 

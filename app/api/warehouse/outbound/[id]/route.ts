@@ -562,6 +562,7 @@ async function handlePUT(request: NextRequest, context: HandlerContext) {
           clinicContactName: body.clinicContactName,
           purchaseOrderId: body.purchaseOrderId,
           remarks: body.remarks,
+          shippingTemperature: body.shippingTemperature || null,
         },
         include: {
           warehouse: { select: { id: true, name: true } },

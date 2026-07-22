@@ -412,6 +412,7 @@ model OutboundHeader {
   approvedAt        DateTime?      @map("approved_at")
   rejectReason      String?        @map("reject_reason")
   remarks           String?
+  shippingTemperature String?      @map("shipping_temperature") // อุณหภูมิการส่ง (ถ้ามี) เช่น 2-8°C
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 

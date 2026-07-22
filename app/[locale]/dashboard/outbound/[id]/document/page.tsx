@@ -38,6 +38,7 @@ interface OutboundHeader {
   clinicEmail: string | null;
   clinicContactName: string | null;
   remarks: string | null;
+  shippingTemperature: string | null;
   purchaseOrder: { id: number; poNo: string; billingName: string | null } | null;
   warehouse: { id: number; name: string };
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null;
@@ -519,6 +520,14 @@ export default function OutboundDocumentPage() {
                   </span>
                 </div>
               </div>
+              {outbound.shippingTemperature && (
+                <div className="flex items-end gap-1">
+                  <span>อุณหภูมิการส่ง</span>
+                  <div className="border-b border-gray-800 text-center min-w-[80px]">
+                    <span>{outbound.shippingTemperature}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4">
@@ -537,6 +546,25 @@ export default function OutboundDocumentPage() {
                 </div>
               </div>
             </div>
+            </div>
+
+            <div className="flex justify-center mt-2">
+              <div className="flex gap-4">
+                <div className="flex items-end gap-1">
+                  <span>ผู้จัดสต็อกส่ง</span>
+                  <div className="border-b border-gray-800 text-center min-w-[150px]">
+                    <span>{outbound.createdBy?.displayName || ""}</span>
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span>วันที่</span>
+                  <div className="border-b border-gray-800 text-center min-w-[100px]">
+                    <span>
+                      {formatDate(outbound.shippedAt || outbound.createdAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-4 items-baseline justify-center mt-12 ">
