@@ -271,7 +271,7 @@ export default function OutboundDocumentPage() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[11px]">ลูกค้า</span>
+                  <span className="text-[11px]">ชื่อลูกค้าที่เปิดบิล/คลินิก</span>
                   <div className="flex-1 border-b border-gray-800 text-center">
                     <span className="text-[11px]">
                       {outbound.purchaseOrder?.billingName ||""} / {outbound.clinic?.name || ""}
@@ -281,7 +281,7 @@ export default function OutboundDocumentPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[11px]">ที่อยู่</span>
+                  <span className="text-[11px]">ที่อยู่จัดส่ง</span>
                   <div className="flex-1 border-b border-gray-800 text-center">
                     <span className="text-[11px]">
                       {outbound.clinicAddress ||
@@ -297,7 +297,7 @@ export default function OutboundDocumentPage() {
               <div className="flex-1">
                 <div className="flex items-baseline gap-1">
                   <span className="text-[11px] whitespace-nowrap">
-                    โทรศัพท์/ชื่อผู้ติดต่อ
+                    ชื่อผู้ติดต่อ/เบอร์โทรศัพท์
                   </span>
                   <div className="flex-1 border-b border-gray-800 text-center">
                     <span className="text-[11px]">
@@ -309,7 +309,7 @@ export default function OutboundDocumentPage() {
               </div>
               <div className="flex gap-2">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[11px] whitespace-nowrap">IV No.</span>
+                  <span className="text-[11px] whitespace-nowrap">เลขที่ใบกำกับภาษี</span>
                   <div className="border-b border-gray-800 min-w-[100px] text-center">
                     <span className="text-[11px]">
                       {outbound.deliveryNoteNo}
@@ -318,7 +318,7 @@ export default function OutboundDocumentPage() {
                 </div>
                 <div className="flex items-baseline gap-1">
                   <span className="text-[11px] whitespace-nowrap">
-                    ส่งของวันที่
+                    ส่งที่ส่ง
                   </span>
                   <div className="border-b border-gray-800 min-w-[80px] text-center">
                     <span className="text-[11px]">
@@ -468,14 +468,17 @@ export default function OutboundDocumentPage() {
             <p className=" text-center mt-6">***เมื่อได้รับสินค้าแล้ว กรุณาตรวจเช็คสินค้าว่ามีรายละเอียดและจ านวนตรงกับใบส่งสินค้าที่แนบมาด้วยหรือไม่***</p>
             <p className="font-bold underline">การตรวจเช็คสินค้า</p>
             <p>
-              - ในกรณีมีแมสฯ ไปส่ง Grab Bike / Lalamove
+              1. ในกรณีมีแมสฯ ไปส่ง Grab Bike / Lalamove
               ให้ถ่ายรูปสินค้าที่ได้รับทั้งหมด พร้อมกับแมสฯ
               ที่ไปส่งว่าได้สินค้าครบหรือไม่
             </p>
             <p>
-              - กรณีได้รับสินค้าเป็นพัสดุ Kerry / EMS จะต้องบันทึก VDO
+              2. กรณีได้รับสินค้าเป็นพัสดุ Kerry / EMS จะต้องบันทึก VDO
               ขณะที่ทำการเปิดกล่อง
               และเช็คจำนวนสินค้าว่ามีครบตามที่ใบส่งสินค้าชั่วคราวระบุไว้หรือไม่
+            </p>
+            <p>
+              3.กรณีส่งขนส่ง Inter Express กรุณาตรวจสอบบรรจุภัณฑ์ให้เรียบร้อย และ เช็คจำนวนสินค้าว่าจำนวนครบตามใบส่งสินค้าชั่วคราวที่ระบุไว้หรือไม่
             </p>
           </div>
 
@@ -524,7 +527,7 @@ export default function OutboundDocumentPage() {
                 <div className="flex items-end gap-1">
                   <span>อุณหภูมิการส่ง</span>
                   <div className="border-b border-gray-800 text-center min-w-[80px]">
-                    <span>{outbound.shippingTemperature}</span>
+                    <span>{outbound.shippingTemperature}°C</span>
                   </div>
                 </div>
               )}
