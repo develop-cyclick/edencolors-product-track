@@ -176,21 +176,33 @@ export default function ApprovalBoardPage() {
     totalPending: 0,
   })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'claim' | 'approved'>('all')
+  type TabKey = 'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'claim' | 'approved'
+  const [activeTab, _setActiveTab] = useState<TabKey>('all')
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [expandedGrn, setExpandedGrn] = useState<number | null>(null)
   const [expandedOutbound, setExpandedOutbound] = useState<number | null>(null)
 
+  // Switching tab always restarts at page 1 (updates batch → single fetch)
+  const setActiveTab = (tab: TabKey) => {
+    setPage(1)
+    _setActiveTab(tab)
+  }
+
   useEffect(() => {
     fetchData()
-  }, [activeTab])
+  }, [activeTab, page])
 
   const fetchData = async () => {
     setLoading(true)
     try {
       const type = activeTab === 'approved' ? 'all' : activeTab
       const status = activeTab === 'approved' ? 'APPROVED' : 'PENDING'
-      const res = await fetch(`/api/manager/approval-board?type=${type}&status=${status}`)
+      // Per-type tabs are paginated; 'all'/'approved' stay as a capped overview
+      const paged = type !== 'all'
+      const pageQuery = paged ? `&page=${page}&limit=20` : ''
+      const res = await fetch(`/api/manager/approval-board?type=${type}&status=${status}${pageQuery}`)
       const data = await res.json()
       if (data.success && data.data) {
         setGrnItems(data.data.grn || [])
@@ -199,6 +211,13 @@ export default function ApprovalBoardPage() {
         setBorrowItems(data.data.borrow || [])
         setClaimItems(data.data.claim || [])
         setStats(data.data.stats)
+        const pg = data.data.pagination || null
+        setPagination(paged ? pg : null)
+        // If this page vanished (e.g. approved the last item on the last page), step back
+        if (paged && pg) {
+          const lastPage = Math.max(1, pg.totalPages)
+          if (page > lastPage) setPage(lastPage)
+        }
       }
       window.dispatchEvent(new Event('badges:refresh'))
     } catch (error) {
@@ -1554,6 +1573,33 @@ export default function ApprovalBoardPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pagination — per-type tabs only ('all'/'approved' are capped overviews) */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white rounded-2xl shadow-[var(--shadow-md)] px-6 py-4">
+              <p className="text-sm text-[var(--color-foreground-muted)]">
+                {locale === 'th'
+                  ? `หน้า ${pagination.page} จาก ${pagination.totalPages} (ทั้งหมด ${pagination.total} รายการ)`
+                  : `Page ${pagination.page} of ${pagination.totalPages} (${pagination.total} items)`}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page <= 1 || loading}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-beige)] text-[var(--color-charcoal)] hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-40 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-colors"
+                >
+                  {locale === 'th' ? '← ก่อนหน้า' : '← Previous'}
+                </button>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page >= pagination.totalPages || loading}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-beige)] text-[var(--color-charcoal)] hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-40 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-colors"
+                >
+                  {locale === 'th' ? 'ถัดไป →' : 'Next →'}
+                </button>
               </div>
             </div>
           )}
