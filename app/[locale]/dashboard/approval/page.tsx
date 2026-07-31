@@ -156,6 +156,42 @@ interface Stats {
   totalPending: number
 }
 
+interface PageInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+function Pager({ info, page, onPage, loading, locale, className }: {
+  info: PageInfo
+  page: number
+  onPage: (p: number) => void
+  loading: boolean
+  locale: string
+  className?: string
+}) {
+  if (info.totalPages <= 1) return null
+  const btnClass = 'px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-beige)] text-[var(--color-charcoal)] hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-40 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-colors'
+  return (
+    <div className={`flex items-center justify-between bg-white rounded-2xl shadow-[var(--shadow-md)] px-6 py-4 ${className || ''}`}>
+      <p className="text-sm text-[var(--color-foreground-muted)]">
+        {locale === 'th'
+          ? `หน้า ${info.page} จาก ${info.totalPages} (ทั้งหมด ${info.total} รายการ)`
+          : `Page ${info.page} of ${info.totalPages} (${info.total} items)`}
+      </p>
+      <div className="flex gap-2">
+        <button onClick={() => onPage(page - 1)} disabled={page <= 1 || loading} className={btnClass}>
+          {locale === 'th' ? '← ก่อนหน้า' : '← Previous'}
+        </button>
+        <button onClick={() => onPage(page + 1)} disabled={page >= info.totalPages || loading} className={btnClass}>
+          {locale === 'th' ? 'ถัดไป →' : 'Next →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ApprovalBoardPage() {
   const params = useParams()
   const locale = params.locale as string
@@ -179,7 +215,12 @@ export default function ApprovalBoardPage() {
   type TabKey = 'all' | 'grn' | 'outbound' | 'damaged' | 'borrow' | 'claim' | 'approved'
   const [activeTab, _setActiveTab] = useState<TabKey>('all')
   const [page, setPage] = useState(1)
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number } | null>(null)
+  const [pagination, setPagination] = useState<PageInfo | null>(null)
+  // The approved tab pages its two lists (GRN / outbound) independently
+  const [approvedGrnPage, setApprovedGrnPage] = useState(1)
+  const [approvedOutboundPage, setApprovedOutboundPage] = useState(1)
+  const [approvedGrnPagination, setApprovedGrnPagination] = useState<PageInfo | null>(null)
+  const [approvedOutboundPagination, setApprovedOutboundPagination] = useState<PageInfo | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [expandedGrn, setExpandedGrn] = useState<number | null>(null)
   const [expandedOutbound, setExpandedOutbound] = useState<number | null>(null)
@@ -187,36 +228,60 @@ export default function ApprovalBoardPage() {
   // Switching tab always restarts at page 1 (updates batch → single fetch)
   const setActiveTab = (tab: TabKey) => {
     setPage(1)
+    setApprovedGrnPage(1)
+    setApprovedOutboundPage(1)
     _setActiveTab(tab)
   }
 
   useEffect(() => {
     fetchData()
-  }, [activeTab, page])
+  }, [activeTab, page, approvedGrnPage, approvedOutboundPage])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const type = activeTab === 'approved' ? 'all' : activeTab
-      const status = activeTab === 'approved' ? 'APPROVED' : 'PENDING'
-      // Per-type tabs are paginated; 'all'/'approved' stay as a capped overview
-      const paged = type !== 'all'
-      const pageQuery = paged ? `&page=${page}&limit=20` : ''
-      const res = await fetch(`/api/manager/approval-board?type=${type}&status=${status}${pageQuery}`)
-      const data = await res.json()
-      if (data.success && data.data) {
-        setGrnItems(data.data.grn || [])
-        setOutboundItems(data.data.outbound || [])
-        setDamagedItems(data.data.damaged || [])
-        setBorrowItems(data.data.borrow || [])
-        setClaimItems(data.data.claim || [])
-        setStats(data.data.stats)
-        const pg = data.data.pagination || null
-        setPagination(paged ? pg : null)
-        // If this page vanished (e.g. approved the last item on the last page), step back
-        if (paged && pg) {
-          const lastPage = Math.max(1, pg.totalPages)
-          if (page > lastPage) setPage(lastPage)
+      if (activeTab === 'approved') {
+        // Two independent paginated requests — the API pages one type at a time
+        const [grnRes, outRes] = await Promise.all([
+          fetch(`/api/manager/approval-board?type=grn&status=APPROVED&page=${approvedGrnPage}&limit=20`),
+          fetch(`/api/manager/approval-board?type=outbound&status=APPROVED&page=${approvedOutboundPage}&limit=20`),
+        ])
+        const grnData = await grnRes.json()
+        const outData = await outRes.json()
+        if (grnData.success && grnData.data) {
+          setGrnItems(grnData.data.grn || [])
+          setApprovedGrnPagination(grnData.data.pagination || null)
+          setStats(grnData.data.stats)
+        }
+        if (outData.success && outData.data) {
+          setOutboundItems(outData.data.outbound || [])
+          setApprovedOutboundPagination(outData.data.pagination || null)
+        }
+        setDamagedItems([])
+        setBorrowItems([])
+        setClaimItems([])
+        setPagination(null)
+      } else {
+        const type = activeTab
+        // Per-type tabs are paginated; 'all' stays as a capped overview
+        const paged = type !== 'all'
+        const pageQuery = paged ? `&page=${page}&limit=20` : ''
+        const res = await fetch(`/api/manager/approval-board?type=${type}&status=PENDING${pageQuery}`)
+        const data = await res.json()
+        if (data.success && data.data) {
+          setGrnItems(data.data.grn || [])
+          setOutboundItems(data.data.outbound || [])
+          setDamagedItems(data.data.damaged || [])
+          setBorrowItems(data.data.borrow || [])
+          setClaimItems(data.data.claim || [])
+          setStats(data.data.stats)
+          const pg = data.data.pagination || null
+          setPagination(paged ? pg : null)
+          // If this page vanished (e.g. approved the last item on the last page), step back
+          if (paged && pg) {
+            const lastPage = Math.max(1, pg.totalPages)
+            if (page > lastPage) setPage(lastPage)
+          }
         }
       }
       window.dispatchEvent(new Event('badges:refresh'))
@@ -922,7 +987,7 @@ export default function ApprovalBoardPage() {
                   <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[var(--color-mint)]" />
                     {locale === 'th' ? 'ใบรับสินค้า (GRN) อนุมัติแล้ว' : 'Approved GRN'}
-                    <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({grnItems.length})</span>
+                    <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({approvedGrnPagination?.total ?? grnItems.length})</span>
                   </h2>
                   <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
                     <table className="w-full">
@@ -962,6 +1027,9 @@ export default function ApprovalBoardPage() {
                       </tbody>
                     </table>
                   </div>
+                  {approvedGrnPagination && (
+                    <Pager info={approvedGrnPagination} page={approvedGrnPage} onPage={setApprovedGrnPage} loading={loading} locale={locale} className="mt-4" />
+                  )}
                 </div>
               )}
 
@@ -971,7 +1039,7 @@ export default function ApprovalBoardPage() {
                   <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[var(--color-mint)]" />
                     {locale === 'th' ? 'ใบส่งออก อนุมัติแล้ว' : 'Approved Outbound'}
-                    <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({outboundItems.length})</span>
+                    <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({approvedOutboundPagination?.total ?? outboundItems.length})</span>
                   </h2>
                   <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] overflow-hidden">
                     <table className="w-full">
@@ -1011,6 +1079,9 @@ export default function ApprovalBoardPage() {
                       </tbody>
                     </table>
                   </div>
+                  {approvedOutboundPagination && (
+                    <Pager info={approvedOutboundPagination} page={approvedOutboundPage} onPage={setApprovedOutboundPage} loading={loading} locale={locale} className="mt-4" />
+                  )}
                 </div>
               )}
 
@@ -1577,31 +1648,9 @@ export default function ApprovalBoardPage() {
             </div>
           )}
 
-          {/* Pagination — per-type tabs only ('all'/'approved' are capped overviews) */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white rounded-2xl shadow-[var(--shadow-md)] px-6 py-4">
-              <p className="text-sm text-[var(--color-foreground-muted)]">
-                {locale === 'th'
-                  ? `หน้า ${pagination.page} จาก ${pagination.totalPages} (ทั้งหมด ${pagination.total} รายการ)`
-                  : `Page ${pagination.page} of ${pagination.totalPages} (${pagination.total} items)`}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(page - 1)}
-                  disabled={page <= 1 || loading}
-                  className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-beige)] text-[var(--color-charcoal)] hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-40 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-colors"
-                >
-                  {locale === 'th' ? '← ก่อนหน้า' : '← Previous'}
-                </button>
-                <button
-                  onClick={() => setPage(page + 1)}
-                  disabled={page >= pagination.totalPages || loading}
-                  className="px-4 py-2 text-sm font-medium rounded-xl border border-[var(--color-beige)] text-[var(--color-charcoal)] hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:opacity-40 disabled:hover:border-[var(--color-beige)] disabled:hover:text-[var(--color-charcoal)] transition-colors"
-                >
-                  {locale === 'th' ? 'ถัดไป →' : 'Next →'}
-                </button>
-              </div>
-            </div>
+          {/* Pagination — per-type pending tabs */}
+          {pagination && (
+            <Pager info={pagination} page={page} onPage={setPage} loading={loading} locale={locale} />
           )}
         </div>
       )}
