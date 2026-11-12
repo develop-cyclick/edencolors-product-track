@@ -14,6 +14,11 @@ const authRoutes = ['/api/auth/login']
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // App pages are locale-prefixed (/th/dashboard, /en/login). Strip a leading /<xx> locale
+  // segment so the route lists below match the real paths — without this the dashboard auth
+  // guard never fired (it compared '/dashboard' against '/th/dashboard').
+  const path = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/'
+
   // Expose the current path to server components. The dashboard layout reads
   // `x-pathname` to enforce the admin-configured role → page access matrix
   // (Next.js does not otherwise pass the pathname to a layout).
@@ -22,12 +27,12 @@ export async function middleware(request: NextRequest) {
   const nextWithPath = () => NextResponse.next({ request: { headers: requestHeaders } })
 
   // Allow auth routes
-  if (authRoutes.some((route) => pathname.startsWith(route))) {
+  if (authRoutes.some((route) => path.startsWith(route))) {
     return nextWithPath()
   }
 
   // Allow public routes
-  if (publicRoutes.some((route) => pathname.startsWith(route))) {
+  if (publicRoutes.some((route) => path.startsWith(route))) {
     return nextWithPath()
   }
 
@@ -41,7 +46,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check authentication for protected routes
-  if (protectedRoutes.some((route) => pathname.startsWith(route))) {
+  if (protectedRoutes.some((route) => path.startsWith(route))) {
     const token = request.cookies.get('auth_token')?.value
 
     if (!token) {
@@ -61,11 +66,11 @@ export async function middleware(request: NextRequest) {
     }
 
     // Check role-based access
-    if (pathname.startsWith('/admin') && payload.role !== 'ADMIN') {
+    if (path.startsWith('/admin') && payload.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    if (pathname.startsWith('/manager') && !['ADMIN', 'MANAGER'].includes(payload.role)) {
+    if (path.startsWith('/manager') && !['ADMIN', 'MANAGER'].includes(payload.role)) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }

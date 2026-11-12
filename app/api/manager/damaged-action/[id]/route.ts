@@ -39,16 +39,29 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     }
 
     if (body.action === 'approve') {
-      await prisma.$transaction(async (tx) => {
-        // 1. Update request status
-        await tx.damagedActionRequest.update({
-          where: { id: requestId },
+      const outcome = await prisma.$transaction(async (tx) => {
+        // Re-validate: the item may have changed status since the request was created (e.g.
+        // re-damaged or restored via another flow). Only act if it's still actionable.
+        const currentItem = await tx.productItem.findUnique({
+          where: { id: actionRequest.productItemId },
+          select: { status: true },
+        })
+        if (!currentItem || !['DAMAGED', 'RETURNED'].includes(currentItem.status)) {
+          return { ok: false as const, reason: 'STALE' as const }
+        }
+
+        // 1. Atomically claim PENDING→APPROVED so two managers can't both execute the action.
+        const claim = await tx.damagedActionRequest.updateMany({
+          where: { id: requestId, status: 'PENDING' },
           data: {
             status: 'APPROVED',
             approvedById: user.userId,
             approvedAt: new Date(),
           },
         })
+        if (claim.count === 0) {
+          return { ok: false as const, reason: 'ALREADY_PROCESSED' as const }
+        }
 
         // 2. Execute the actual action on the product
         const newStatus = actionRequest.actionType === 'RESTORE' ? 'IN_STOCK' : 'SCRAPPED'
@@ -165,7 +178,18 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
             },
           },
         })
+
+        return { ok: true as const }
       })
+
+      if (!outcome.ok) {
+        return errorResponse(
+          outcome.reason === 'ALREADY_PROCESSED'
+            ? 'คำขอนี้ถูกดำเนินการไปแล้ว'
+            : 'สถานะสินค้าเปลี่ยนไปแล้ว ไม่สามารถอนุมัติได้',
+          409
+        )
+      }
 
       // Notify the creator
       sendPushToUser(actionRequest.createdById, {

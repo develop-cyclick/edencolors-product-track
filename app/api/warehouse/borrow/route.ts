@@ -86,6 +86,8 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       taxInvoiceRef,
       reason,
       remarks,
+      requisitionType,
+      requisitionTypeOther,
       productItemIds,
     } = body as {
       type: 'BORROW' | 'RETURN'
@@ -97,8 +99,15 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       taxInvoiceRef?: string
       reason?: string
       remarks?: string
+      requisitionType?: string
+      requisitionTypeOther?: string
       productItemIds: number[]
     }
+
+    const VALID_REQUISITION_TYPES = ['DEMON', 'CLAIM', 'MARKETING', 'OTHER']
+    const normalizedRequisitionType = VALID_REQUISITION_TYPES.includes(requisitionType || '')
+      ? (requisitionType as string)
+      : null
 
     // Validation
     if (!type || !['BORROW', 'RETURN'].includes(type)) {
@@ -154,7 +163,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         data: {
           transactionNo,
           type,
-          status: type === 'BORROW' ? BorrowStatus.PENDING : BorrowStatus.APPROVED, // RETURN is auto-approved
+          status: BorrowStatus.PENDING, // BORROW and RETURN both require manager approval now
           borrowerName: borrowerName.trim(),
           clinicName: clinicName?.trim() || null,
           clinicAddress: clinicAddress?.trim() || null,
@@ -163,11 +172,10 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
           taxInvoiceRef: taxInvoiceRef?.trim() || null,
           reason: reason?.trim() || null,
           remarks: remarks?.trim() || null,
+          requisitionType: normalizedRequisitionType,
+          requisitionTypeOther:
+            normalizedRequisitionType === 'OTHER' ? requisitionTypeOther?.trim() || null : null,
           createdById: user.userId,
-          ...(type === 'RETURN' && {
-            approvedById: user.userId,
-            approvedAt: new Date(),
-          }),
         },
       })
 
@@ -193,28 +201,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             remarks: remarks?.trim() || null,
           },
         })
-
-        // For RETURN type, update product status immediately back to IN_STOCK
-        if (type === 'RETURN') {
-          await tx.productItem.update({
-            where: { id: item.id },
-            data: { status: ProductStatus.IN_STOCK },
-          })
-
-          // Log the return event
-          await tx.eventLog.create({
-            data: {
-              eventType: 'BORROW_RETURN',
-              productItemId: item.id,
-              userId: user.userId,
-              details: {
-                transactionNo,
-                borrowerName: borrowerName.trim(),
-                reason: reason?.trim() || null,
-              },
-            },
-          })
-        }
+        // Status changes (IN_STOCK for RETURN) are deferred until manager approval.
       }
 
       return borrowTransaction
@@ -223,7 +210,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     const message =
       type === 'BORROW'
         ? `Borrow request created (pending approval): ${transactionNo}`
-        : `Products returned to stock: ${transactionNo}`
+        : `Return request created (pending approval): ${transactionNo}`
 
     return successResponse(
       {

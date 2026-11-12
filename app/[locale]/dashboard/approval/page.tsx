@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate, formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface GRN {
   id: number
@@ -46,7 +47,19 @@ interface Outbound {
   remarks: string | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string }
-  clinic: { id: number; name: string; address: string; branchName: string | null }
+  clinic: {
+    id: number
+    name: string
+    companyName: string | null
+    address: string
+    branchName: string | null
+    invoiceName: string | null
+    contactName: string | null
+    contactPhone: string | null
+  }
+  clinicAddress: string | null
+  clinicPhone: string | null
+  clinicContactName: string | null
   createdBy: { id: number; displayName: string }
   approvedBy: { id: number; displayName: string } | null
   lines: Array<{
@@ -465,8 +478,8 @@ export default function ApprovalBoardPage() {
 
   const handleApproveBorrow = async (id: number) => {
     const confirmed = await confirm({
-      title: locale === 'th' ? 'อนุมัติคำขอยืมสินค้า' : 'Approve Borrow Request',
-      message: locale === 'th' ? 'ยืนยันอนุมัติคำขอยืมสินค้านี้?' : 'Confirm approve this borrow request?',
+      title: locale === 'th' ? 'อนุมัติคำขอ' : 'Approve Request',
+      message: locale === 'th' ? 'ยืนยันอนุมัติคำขอนี้?' : 'Confirm approve this request?',
       confirmText: locale === 'th' ? 'อนุมัติ' : 'Approve',
       cancelText: locale === 'th' ? 'ยกเลิก' : 'Cancel',
       variant: 'info',
@@ -483,7 +496,7 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติคำขอยืมสำเร็จ' : 'Borrow request approved', variant: 'success', icon: 'success' })
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อนุมัติคำขอสำเร็จ' : 'Request approved', variant: 'success', icon: 'success' })
         fetchData()
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
@@ -508,7 +521,7 @@ export default function ApprovalBoardPage() {
       })
       const data = await res.json()
       if (data.success) {
-        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธคำขอยืมสำเร็จ' : 'Borrow request rejected', variant: 'success', icon: 'success' })
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ปฏิเสธคำขอสำเร็จ' : 'Request rejected', variant: 'success', icon: 'success' })
         fetchData()
       } else {
         await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: `Error: ${data.error}`, variant: 'error', icon: 'error' })
@@ -578,22 +591,12 @@ export default function ApprovalBoardPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return gDateTime(dateStr)
   }
 
   const formatDateShort = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const toggleGrnExpand = (id: number) => {
@@ -699,7 +702,7 @@ export default function ApprovalBoardPage() {
             <span className="text-3xl font-bold text-[var(--color-charcoal)]">{stats.borrow?.PENDING || 0}</span>
           </div>
           <p className="text-sm text-[var(--color-foreground-muted)]">
-            {locale === 'th' ? 'ยืมสินค้า รออนุมัติ' : 'Borrow Pending'}
+            {locale === 'th' ? 'ยืม/คืน/เบิก รออนุมัติ' : 'Requests Pending'}
           </p>
         </button>
 
@@ -753,7 +756,7 @@ export default function ApprovalBoardPage() {
             </p>
           </div>
         </div>
-      ) : grnItems.length === 0 && outboundItems.length === 0 && damagedItems.length === 0 && borrowItems.length === 0 && claimItems.length === 0 ? (
+      ) : activeTab !== 'approved' && grnItems.length === 0 && outboundItems.length === 0 && damagedItems.length === 0 && borrowItems.length === 0 && claimItems.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-mint)]/20 flex items-center justify-center">
             <svg className="w-8 h-8 text-[var(--color-mint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1059,7 +1062,10 @@ export default function ApprovalBoardPage() {
                             <td className="px-5 py-4">
                               <span className="font-medium text-[var(--color-charcoal)]">{ob.deliveryNoteNo}</span>
                             </td>
-                            <td className="px-5 py-4 text-[var(--color-charcoal)]">{ob.clinic.name}</td>
+                            <td className="px-5 py-4 text-[var(--color-charcoal)]">
+                              <div>{ob.clinic.name}</div>
+                              <div className="text-xs text-[var(--color-foreground-muted)] mt-0.5 whitespace-pre-line">{ob.clinicAddress || ob.clinic.address || '-'}</div>
+                            </td>
                             <td className="px-5 py-4 text-[var(--color-charcoal)]">{ob.warehouse.name}</td>
                             <td className="px-5 py-4 text-[var(--color-charcoal)]">{ob._count.lines}</td>
                             <td className="px-5 py-4 text-[var(--color-charcoal)]">{ob.approvedBy?.displayName || '-'}</td>
@@ -1177,6 +1183,32 @@ export default function ApprovalBoardPage() {
                         </div>
                       </div>
 
+                      {/* Shipping Address */}
+                      <div className="p-3 mb-4 bg-purple-50/50 rounded-xl border border-purple-100">
+                        <p className="text-xs text-[var(--color-foreground-muted)] mb-1 flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {locale === 'th' ? 'ที่อยู่จัดส่ง' : 'Shipping Address'}
+                        </p>
+                        <div className="space-y-0.5 text-sm">
+                          <p className="font-medium text-[var(--color-charcoal)]">
+                            {ob.clinic.name}{ob.clinic.branchName ? ` (${ob.clinic.branchName})` : ''}
+                          </p>
+                          {ob.clinic.companyName && (
+                            <p className="text-[var(--color-foreground-muted)]">{ob.clinic.companyName}</p>
+                          )}
+                          <p className="text-[var(--color-charcoal)] whitespace-pre-line">{ob.clinicAddress || ob.clinic.address || '-'}</p>
+                          {(ob.clinicContactName || ob.clinic.contactName || ob.clinicPhone || ob.clinic.contactPhone) && (
+                            <p className="text-xs text-[var(--color-foreground-muted)] pt-0.5">
+                              {locale === 'th' ? 'ผู้ติดต่อ: ' : 'Contact: '}
+                              {[ob.clinicContactName || ob.clinic.contactName, ob.clinicPhone || ob.clinic.contactPhone].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Expand Button */}
                       <button
                         onClick={() => toggleOutboundExpand(ob.id)}
@@ -1217,10 +1249,38 @@ export default function ApprovalBoardPage() {
                                   <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.branchName}</span>
                                 </div>
                               )}
-                              <div>
-                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่:' : 'Address:'}</span>
-                                <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.address}</span>
+                              {ob.clinic.companyName && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'บริษัท:' : 'Company:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.companyName}</span>
+                                </div>
+                              )}
+                              {ob.clinic.invoiceName && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ชื่อออกบิล:' : 'Invoice Name:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinic.invoiceName}</span>
+                                </div>
+                              )}
+                              <div className="md:col-span-2">
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่จัดส่ง:' : 'Shipping Address:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)] whitespace-pre-line">{ob.clinicAddress || ob.clinic.address || '-'}</span>
                               </div>
+                              <div className="md:col-span-2">
+                                <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ที่อยู่คลินิก:' : 'Clinic Address:'}</span>
+                                <span className="ml-2 text-[var(--color-charcoal)] whitespace-pre-line">{ob.clinic.address}</span>
+                              </div>
+                              {(ob.clinicContactName || ob.clinic.contactName) && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'ผู้ติดต่อ:' : 'Contact:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinicContactName || ob.clinic.contactName}</span>
+                                </div>
+                              )}
+                              {(ob.clinicPhone || ob.clinic.contactPhone) && (
+                                <div>
+                                  <span className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เบอร์โทร:' : 'Phone:'}</span>
+                                  <span className="ml-2 text-[var(--color-charcoal)]">{ob.clinicPhone || ob.clinic.contactPhone}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -1320,7 +1380,7 @@ export default function ApprovalBoardPage() {
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-violet-500" />
-                {locale === 'th' ? 'ยืมสินค้า รออนุมัติ' : 'Borrow Pending Approval'}
+                {locale === 'th' ? 'ยืม/คืน/เบิก รออนุมัติ' : 'Requests Pending Approval'}
                 <span className="text-sm font-normal text-[var(--color-foreground-muted)]">({borrowItems.length})</span>
               </h2>
               <div className="space-y-4">
@@ -1332,8 +1392,22 @@ export default function ApprovalBoardPage() {
                           <span className="text-lg font-semibold text-violet-600 font-mono">
                             {txn.transactionNo}
                           </span>
-                          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
-                            {locale === 'th' ? 'ยืมสินค้า' : 'Borrow'}
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            txn.type === 'RETURN'
+                              ? 'bg-green-100 text-green-700'
+                              : txn.type === 'REQUISITION'
+                                ? 'bg-teal-100 text-teal-700'
+                                : txn.type === 'PRODUCT_RETURN'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {txn.type === 'RETURN'
+                              ? (locale === 'th' ? 'คืนของยืม' : 'Return (borrowed)')
+                              : txn.type === 'REQUISITION'
+                                ? (locale === 'th' ? 'เบิกไปใช้' : 'Requisition')
+                                : txn.type === 'PRODUCT_RETURN'
+                                  ? (locale === 'th' ? 'รับคืนสินค้า' : 'Product Return')
+                                  : (locale === 'th' ? 'ยืมสินค้า' : 'Borrow')}
                           </span>
                           <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
                             {locale === 'th' ? 'รออนุมัติ' : 'Pending'}

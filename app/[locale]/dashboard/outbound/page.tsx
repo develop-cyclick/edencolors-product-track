@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { formatDate as gDate } from '@/lib/format-date'
 
 const handleExportOutbound = async (
   locale: string,
@@ -117,11 +118,7 @@ export default function OutboundListPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const getStatusBadge = (status: string, size: 'sm' | 'md' = 'md') => {

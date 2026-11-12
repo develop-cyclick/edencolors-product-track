@@ -57,6 +57,11 @@ RUN mkdir -p node_modules/.bin \
  && ln -sf ../prisma/build/index.js node_modules/.bin/prisma \
  && ln -sf ../tsx/dist/cli.mjs node_modules/.bin/tsx
 
+# The app runs as the non-root `nextjs` user, but files were COPYed in as root.
+# Next.js writes to .next at runtime (image-optimizer cache + prerender segment cache),
+# so that dir must be owned by nextjs or those writes fail with EACCES.
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
+
 USER nextjs
 EXPOSE 3000
 ENV HOSTNAME="0.0.0.0"

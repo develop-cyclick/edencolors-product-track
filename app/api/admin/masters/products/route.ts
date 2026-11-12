@@ -29,6 +29,7 @@ export const GET = withWarehouse(async (request: NextRequest) => {
       include: {
         category: true,
         defaultUnit: true,
+        documentUnit: true,
         _count: {
           select: { productItems: true },
         },
@@ -130,6 +131,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
         modelSize: body.modelSize || null,
         description: body.description || null,
         defaultUnitId: body.defaultUnitId || null,
+        documentUnitId: body.documentUnitId || null,
         activationType: body.activationType || 'SINGLE',
         maxActivations: body.activationType === 'PACK' ? (body.maxActivations || 1) : 1,
         isActive: body.isActive ?? true,
@@ -137,6 +139,7 @@ export const POST = withAdmin(async (request: NextRequest) => {
       include: {
         category: true,
         defaultUnit: true,
+        documentUnit: true,
       },
     })
 
@@ -199,15 +202,24 @@ export const PATCH = withAdmin(async (request: NextRequest) => {
         ...(body.modelSize !== undefined && { modelSize: body.modelSize }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.defaultUnitId !== undefined && { defaultUnitId: body.defaultUnitId }),
+        ...(body.documentUnitId !== undefined && { documentUnitId: body.documentUnitId }),
         ...(body.activationType !== undefined && { activationType: body.activationType }),
         ...(body.maxActivations !== undefined && {
-          maxActivations: body.activationType === 'PACK' ? body.maxActivations : 1
+          // Don't force maxActivations→1 when the caller didn't include activationType: a partial
+          // PATCH of only maxActivations on a PACK product would otherwise silently reset it to 1.
+          maxActivations:
+            body.activationType === undefined
+              ? body.maxActivations
+              : body.activationType === 'PACK'
+                ? body.maxActivations
+                : 1,
         }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
       },
       include: {
         category: true,
         defaultUnit: true,
+        documentUnit: true,
       },
     })
 
@@ -232,8 +244,10 @@ export const DELETE = withAdmin(async (request: NextRequest) => {
       where: { productMasterId: body.id },
     })
 
-    if (itemCount > 0 && !body.force) {
-      // Soft delete - just deactivate
+    if (itemCount > 0) {
+      // Soft delete only — never hard-delete a master that still has items (even with force):
+      // ProductItem.productMasterId is a nullable FK (onDelete SetNull), so a hard delete would
+      // silently orphan real serials. Deactivate instead.
       await prisma.productMaster.update({
         where: { id: body.id },
         data: { isActive: false },

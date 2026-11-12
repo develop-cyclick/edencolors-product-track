@@ -103,6 +103,12 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         const effectiveQty = inputLine.preGeneratedItemIds?.length || inputLine.quantity
         const remaining = planLine.totalQty - planLine.receivedQty
 
+        // Reject non-positive/non-integer quantities: a negative qty passes the `> remaining`
+        // check, creates 0 items, but still decrements receivedQty — corrupting the plan line.
+        if (!Number.isInteger(effectiveQty) || effectiveQty < 1) {
+          throw new Error(`Invalid quantity for plan line ${inputLine.planLineId}: must be a positive whole number`)
+        }
+
         if (effectiveQty > remaining) {
           throw new Error(`Cannot receive ${effectiveQty} items for plan line ${inputLine.planLineId}. Remaining: ${remaining}`)
         }

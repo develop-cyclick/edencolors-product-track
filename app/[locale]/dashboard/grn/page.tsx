@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { formatDate as gDate } from '@/lib/format-date'
 
 const handleExportGRN = async (
   locale: string,
@@ -118,11 +119,7 @@ export default function GRNListPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   return (

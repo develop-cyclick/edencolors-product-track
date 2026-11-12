@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useAlert, useConfirm } from '@/components/ui/confirm-modal'
 import { buildLabelBlob, printBlob } from '@/lib/client/label-print'
+import { formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface PreGenItem {
   id: number
@@ -304,14 +305,7 @@ export default function PreGeneratePage() {
   }
 
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: '2-digit',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return gDateTime(dateStr)
   }
 
   // Label shown on print buttons while the browser is generating the PDF.

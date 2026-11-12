@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { verifyToken } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { formatDate as gDate, formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface DashboardPageProps {
   params: Promise<{ locale: string }>
@@ -132,12 +133,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           </p>
         </div>
         <div className="text-sm text-[var(--color-foreground-muted)]">
-          {new Date().toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
+          {gDate(new Date())}
         </div>
       </div>
 
@@ -422,12 +418,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
                           {locale === 'th' ? eventInfo.th : eventInfo.en}
                         </span>
                         <span className="text-xs text-[var(--color-foreground-muted)]">
-                          {new Date(activity.createdAt).toLocaleString(locale === 'th' ? 'th-TH' : 'en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {gDateTime(activity.createdAt)}
                         </span>
                       </div>
                       {activity.productItem && (

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
+import { logDocumentEvent } from '@/lib/document-history'
 
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
@@ -31,6 +32,11 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
           productItem: {
             include: {
               category: { select: { id: true, nameTh: true, nameEn: true } },
+              productMaster: {
+                select: {
+                  documentUnit: { select: { nameTh: true, nameEn: true } },
+                },
+              },
               qrTokens: {
                 where: { status: 'ACTIVE' },
                 select: { id: true, tokenVersion: true, issuedAt: true },
@@ -109,6 +115,48 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
   const grn = grnResult[0]
 
+  // Handle reopen (un-approve an APPROVED GRN → back to pending for editing).
+  // Must run BEFORE the "Cannot modify approved GRN" guard below, since it operates on approved GRNs.
+  if (body.action === 'reopen') {
+    if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'WAREHOUSE') {
+      return errors.forbidden()
+    }
+    if (!grn.approved_at) {
+      return errorResponse('ดึงกลับมาแก้ได้เฉพาะใบที่อนุมัติแล้ว', 400)
+    }
+    // Guard: block if any received item has moved on (shipped/activated/borrowed/damaged).
+    // GRN approval creates no stock, but editing it after its items left the warehouse is unsafe.
+    const lines = await prisma.gRNLine.findMany({
+      where: { grnHeaderId: grnId },
+      include: { productItem: { select: { serial12: true, status: true } } },
+    })
+    const moved = lines.filter((l) => l.productItem && l.productItem.status !== 'IN_STOCK')
+    if (moved.length > 0) {
+      const serials = moved.map((l) => l.productItem?.serial12).filter(Boolean).slice(0, 10).join(', ')
+      return errorResponse(
+        `ไม่สามารถดึงกลับมาแก้ได้: มีสินค้า ${moved.length} รายการที่ถูกดำเนินการต่อไปแล้ว (ไม่ใช่ "อยู่ในคลัง") — ${serials}`,
+        409
+      )
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE grn_headers
+        SET approved_by_id = NULL, approved_at = NULL, updated_at = ${new Date()}
+        WHERE id = ${grnId}
+      `
+      await logDocumentEvent(tx, {
+        documentType: 'GRN',
+        documentId: grnId,
+        eventType: 'REOPEN',
+        userId: user.userId,
+        details: { reason: typeof body.reason === 'string' ? body.reason.trim() : '' },
+      })
+    })
+
+    return successResponse({ id: grnId, message: 'ดึงกลับมาแก้ไขแล้ว (รออนุมัติใหม่)' })
+  }
+
   // Check if already approved (rejected GRNs CAN be edited)
   if (grn.approved_at) {
     return errorResponse('Cannot modify approved GRN', 400)
@@ -123,12 +171,22 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errors.forbidden()
     }
 
-    const updated = await prisma.gRNHeader.update({
-      where: { id: grnId },
-      data: {
-        approvedById: user.userId,
-        approvedAt: new Date(),
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.gRNHeader.update({
+        where: { id: grnId },
+        data: {
+          approvedById: user.userId,
+          approvedAt: new Date(),
+        },
+      })
+      await logDocumentEvent(tx, {
+        documentType: 'GRN',
+        documentId: grnId,
+        eventType: 'APPROVE',
+        userId: user.userId,
+        details: { grnNo: u.grnNo },
+      })
+      return u
     })
 
     return successResponse({ grn: updated })
@@ -145,18 +203,23 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errorResponse('Reject reason is required', 400)
     }
 
-    // Use raw SQL since Prisma client may not be regenerated yet
-    await prisma.$executeRaw`
-      UPDATE grn_headers
-      SET rejected_by_id = ${user.userId},
-          rejected_at = ${new Date()},
-          reject_reason = ${body.rejectReason},
-          updated_at = ${new Date()}
-      WHERE id = ${grnId}
-    `
-
-    const updated = await prisma.gRNHeader.findUnique({
-      where: { id: grnId },
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE grn_headers
+        SET rejected_by_id = ${user.userId},
+            rejected_at = ${new Date()},
+            reject_reason = ${body.rejectReason},
+            updated_at = ${new Date()}
+        WHERE id = ${grnId}
+      `
+      await logDocumentEvent(tx, {
+        documentType: 'GRN',
+        documentId: grnId,
+        eventType: 'REJECT',
+        userId: user.userId,
+        details: { reason: body.rejectReason },
+      })
+      return tx.gRNHeader.findUnique({ where: { id: grnId } })
     })
 
     return successResponse({ grn: updated })
@@ -165,6 +228,7 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
   // Update header fields
   const allowedFields = [
     'receivedAt',
+    'warehouseId',
     'poNo',
     'supplierName',
     'deliveryNoteNo',
@@ -186,25 +250,57 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     }
   }
 
-  // If GRN was rejected, clear rejection status to reset to pending
-  if (wasRejected) {
-    await prisma.$executeRaw`
-      UPDATE grn_headers
-      SET rejected_by_id = NULL,
-          rejected_at = NULL,
-          reject_reason = NULL,
-          updated_at = ${new Date()}
-      WHERE id = ${grnId}
-    `
-  }
+  // Optional in-place line-field edits (lot / mfgDate / expDate) for EXISTING items,
+  // applied WITHOUT regenerating serials or QR. This is how a GRN whose items are
+  // already pre-generated gets its lot/exp corrected: the full rebuild (PUT) would
+  // mint new serials, so for pre-gen items the UI sends these targeted updates instead.
+  // Each entry carries the existing productItem ids + the new values; we update both
+  // the product items and their matching GRN lines so the two stay in sync.
+  type LineUpdate = { productItemIds?: unknown; lot?: unknown; mfgDate?: unknown; expDate?: unknown }
+  const lineUpdates: LineUpdate[] = Array.isArray(body.lineUpdates) ? body.lineUpdates : []
 
-  const updated = await prisma.gRNHeader.update({
-    where: { id: grnId },
-    data: updateData,
-    include: {
-      warehouse: { select: { id: true, name: true } },
-      receivedBy: { select: { id: true, displayName: true } },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    // If GRN was rejected, clear rejection status to reset to pending
+    if (wasRejected) {
+      await tx.$executeRaw`
+        UPDATE grn_headers
+        SET rejected_by_id = NULL,
+            rejected_at = NULL,
+            reject_reason = NULL,
+            updated_at = ${new Date()}
+        WHERE id = ${grnId}
+      `
+    }
+
+    for (const lu of lineUpdates) {
+      const ids = Array.isArray(lu.productItemIds)
+        ? lu.productItemIds.filter((n): n is number => Number.isInteger(n))
+        : []
+      if (ids.length === 0) continue
+      const lineData = {
+        lot: typeof lu.lot === 'string' && lu.lot ? lu.lot : null,
+        mfgDate: typeof lu.mfgDate === 'string' && lu.mfgDate ? new Date(lu.mfgDate) : null,
+        expDate: typeof lu.expDate === 'string' && lu.expDate ? new Date(lu.expDate) : null,
+      }
+      // Guard: only touch items that actually belong to THIS GRN (confirm via its lines first)
+      const ownLines = await tx.gRNLine.findMany({
+        where: { grnHeaderId: grnId, productItemId: { in: ids } },
+        select: { productItemId: true },
+      })
+      const validIds = ownLines.map((l) => l.productItemId)
+      if (validIds.length === 0) continue
+      await tx.gRNLine.updateMany({ where: { grnHeaderId: grnId, productItemId: { in: validIds } }, data: lineData })
+      await tx.productItem.updateMany({ where: { id: { in: validIds } }, data: lineData })
+    }
+
+    return tx.gRNHeader.update({
+      where: { id: grnId },
+      data: updateData,
+      include: {
+        warehouse: { select: { id: true, name: true } },
+        receivedBy: { select: { id: true, displayName: true } },
+      },
+    })
   })
 
   return successResponse({ grn: updated, statusReset: wasRejected })

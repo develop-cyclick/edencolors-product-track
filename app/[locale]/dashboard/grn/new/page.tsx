@@ -999,6 +999,7 @@ export default function NewGRNPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               receivedAt,
+              warehouseId,
               poNo: poNo || null,
               supplierName,
               deliveryNoteNo: deliveryNoteNo || null,
@@ -1007,6 +1008,16 @@ export default function NewGRNPage() {
               supplierContact: supplierContact || null,
               deliveryDocDate: deliveryDocDate || null,
               remarks: remarks || null,
+              // Persist in-place edits (lot/mfg/exp) to EXISTING pre-gen items WITHOUT
+              // regenerating their serials/QR; brand-new items are handled separately.
+              lineUpdates: lines
+                .filter((l) => l.usePreGen && l.scannedItems.some((it) => it.isExisting))
+                .map((l) => ({
+                  productItemIds: l.scannedItems.filter((it) => it.isExisting).map((it) => it.productItemId),
+                  lot: l.lot || null,
+                  mfgDate: l.mfgDate || null,
+                  expDate: l.expDate || null,
+                })),
             }),
           })
 
@@ -1057,6 +1068,7 @@ export default function NewGRNPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               receivedAt,
+              warehouseId,
               poNo: poNo || null,
               supplierName,
               deliveryNoteNo: deliveryNoteNo || null,
@@ -1065,6 +1077,16 @@ export default function NewGRNPage() {
               supplierContact: supplierContact || null,
               deliveryDocDate: deliveryDocDate || null,
               remarks: remarks || null,
+              // Persist in-place edits (lot/mfg/exp) to EXISTING pre-gen items WITHOUT
+              // regenerating their serials/QR; brand-new items are handled separately.
+              lineUpdates: lines
+                .filter((l) => l.usePreGen && l.scannedItems.some((it) => it.isExisting))
+                .map((l) => ({
+                  productItemIds: l.scannedItems.filter((it) => it.isExisting).map((it) => it.productItemId),
+                  lot: l.lot || null,
+                  mfgDate: l.mfgDate || null,
+                  expDate: l.expDate || null,
+                })),
             }),
           })
 

@@ -199,6 +199,16 @@ export async function GET(request: NextRequest) {
         result = VerifyResult.GENUINE_SHIPPED
         message = 'Genuine product - Shipped'
         break
+      case 'BORROWED':
+        // Item lent out — treat like shipped so it can be activated by the end user
+        result = VerifyResult.GENUINE_SHIPPED
+        message = 'Genuine product - Borrowed / in use'
+        break
+      case 'REQUISITIONED':
+        // Withdrawn for use (e.g. marketing) — treat like shipped so it can be activated
+        result = VerifyResult.GENUINE_SHIPPED
+        message = 'Genuine product - Requisitioned for use'
+        break
       case 'ACTIVATED':
         // For PACK products, check if more activations are available
         if (activationType === 'PACK' && canActivate) {

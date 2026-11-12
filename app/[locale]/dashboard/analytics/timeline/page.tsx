@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { formatDate as gDate } from '@/lib/format-date';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface TimelineData {
@@ -421,10 +422,7 @@ export default function TimelinePage() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-[#666666]">
-                      {new Date(activation.createdAt).toLocaleDateString(
-                        locale === 'th' ? 'th-TH' : 'en-US',
-                        { year: 'numeric', month: 'short', day: 'numeric' }
-                      )}
+                      {gDate(activation.createdAt)}
                     </p>
                     {activation.daysToActivation !== null && (
                       <p className={`text-xs mt-1 ${activation.daysToActivation <= 7 ? 'text-green-600 font-medium' : 'text-[#999999]'}`}>

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { formatDate as gDate, formatDateShort as gDateShort } from '@/lib/format-date';
 import StatsCard from '@/components/analytics/stats-card';
 import ActivationRateBadge from '@/components/analytics/activation-rate-badge';
 import {
@@ -255,11 +256,11 @@ export default function AnalyticsPage() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="date"
-              tickFormatter={(date) => new Date(date).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', { month: 'short', day: 'numeric' })}
+              tickFormatter={(date) => gDateShort(date)}
             />
             <YAxis />
             <Tooltip
-              labelFormatter={(date) => new Date(date).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US')}
+              labelFormatter={(date) => gDate(date)}
             />
             <Legend />
             <Line
@@ -381,7 +382,7 @@ export default function AnalyticsPage() {
               </div>
               <div className="text-right">
                 <p className="text-sm text-[#666666]">
-                  {new Date(activation.createdAt).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US')}
+                  {gDate(activation.createdAt)}
                 </p>
                 {activation.daysToActivation !== null && (
                   <p className="text-xs text-[#999999]">

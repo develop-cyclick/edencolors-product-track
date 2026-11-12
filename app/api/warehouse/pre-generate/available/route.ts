@@ -31,7 +31,10 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
         take: 1,
       },
     },
-    orderBy: { createdAt: 'asc' },
+    // serial12 tiebreaker → deterministic serial-ascending order. Pre-generated batch
+    // items all share an identical createdAt, so ordering by createdAt alone returns
+    // arbitrary/unstable heap order (the "เลือกจาก Batch" modal appeared to skip serials).
+    orderBy: [{ createdAt: 'asc' }, { serial12: 'asc' }],
     take: limit,
   })
 

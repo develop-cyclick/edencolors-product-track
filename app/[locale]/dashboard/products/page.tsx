@@ -19,6 +19,7 @@ interface ProductMaster {
   isActive: boolean
   category: { id: number; nameTh: string; nameEn: string; serialCode: string }
   defaultUnit: { id: number; nameTh: string; nameEn: string } | null
+  documentUnit: { id: number; nameTh: string; nameEn: string } | null
   stats: {
     total: number
     inStock: number
@@ -62,6 +63,7 @@ export default function ProductMasterPage() {
     modelSize: '',
     description: '',
     defaultUnitId: '',
+    documentUnitId: '',
     activationType: 'SINGLE' as 'SINGLE' | 'PACK',
     maxActivations: 1,
   })
@@ -177,6 +179,7 @@ export default function ProductMasterPage() {
       modelSize: '',
       description: '',
       defaultUnitId: '',
+      documentUnitId: '',
       activationType: 'SINGLE',
       maxActivations: 1,
     })
@@ -195,6 +198,7 @@ export default function ProductMasterPage() {
       modelSize: pm.modelSize || '',
       description: pm.description || '',
       defaultUnitId: pm.defaultUnit?.id.toString() || '',
+      documentUnitId: pm.documentUnit?.id.toString() || '',
       activationType: pm.activationType || 'SINGLE',
       maxActivations: pm.maxActivations || 1,
     })
@@ -214,6 +218,7 @@ export default function ProductMasterPage() {
             imageUrl: formData.imageUrl || null,
             categoryId: parseInt(formData.categoryId),
             defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null,
+            documentUnitId: formData.documentUnitId ? parseInt(formData.documentUnitId) : null,
             maxActivations: formData.activationType === 'PACK' ? formData.maxActivations : 1,
           }
         : {
@@ -221,6 +226,7 @@ export default function ProductMasterPage() {
             imageUrl: formData.imageUrl || null,
             categoryId: parseInt(formData.categoryId),
             defaultUnitId: formData.defaultUnitId ? parseInt(formData.defaultUnitId) : null,
+            documentUnitId: formData.documentUnitId ? parseInt(formData.documentUnitId) : null,
             maxActivations: formData.activationType === 'PACK' ? formData.maxActivations : 1,
           }
 
@@ -811,6 +817,26 @@ export default function ProductMasterPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-charcoal)] mb-1">
+                      {locale === 'th' ? 'หน่วยบนเอกสาร' : 'Document Unit'}
+                    </label>
+                    <select
+                      value={formData.documentUnitId}
+                      onChange={(e) => setFormData({ ...formData, documentUnitId: e.target.value })}
+                      className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]"
+                    >
+                      <option value="">{locale === 'th' ? '(ใช้หน่วยเดียวกับด้านบน)' : '(same as unit)'}</option>
+                      {units.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {locale === 'th' ? unit.nameTh : unit.nameEn}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-[var(--color-foreground-muted)] mt-1">
+                      {locale === 'th' ? 'ถ้าตั้ง เอกสาร (ใบยืม/ส่งออก/GRN) จะใช้หน่วยนี้แทน — ฝั่ง activate ยังใช้หน่วยด้านบน' : 'If set, documents use this unit instead'}
+                    </p>
                   </div>
                 </div>
                 <div>

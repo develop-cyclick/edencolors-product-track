@@ -37,7 +37,13 @@ export default async function VerifyPage({
             />
           </Link>
           <Link
-            href={`/${locale === "th" ? "en" : "th"}/verify${token ? `?token=${token}` : ""}`}
+            href={`/${locale === "th" ? "en" : "th"}/verify${
+              serial
+                ? `?serial=${encodeURIComponent(serial)}`
+                : token
+                  ? `?token=${encodeURIComponent(token)}`
+                  : ""
+            }`}
             className="text-sm text-white hover:text-[var(--color-gold)] transition-colors"
           >
             {locale === "th" ? "EN" : "TH"}

@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface ClinicDetail {
   id: number
@@ -118,11 +119,7 @@ export default function ClinicDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const getStatusBadge = (status: string, size: 'sm' | 'md' = 'md') => {

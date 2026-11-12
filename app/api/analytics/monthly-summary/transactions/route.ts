@@ -70,7 +70,10 @@ async function handleGET(request: NextRequest) {
         orderBy: { receivedAt: 'asc' },
       }),
       prisma.outboundHeader.findMany({
-        where: { createdAt: { gte: startDate, lte: endDate } },
+        // Only APPROVED outbounds actually leave stock. The running balance subtracts every row
+        // returned here, and the opening balance counts only APPROVED, so including
+        // DRAFT/PENDING/REJECTED here would understate the balance.
+        where: { status: 'APPROVED', createdAt: { gte: startDate, lte: endDate } },
         include: {
           warehouse: { select: { name: true } },
           clinic: { select: { name: true } },

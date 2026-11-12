@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface Clinic {
   id: number
@@ -346,11 +347,7 @@ export default function PurchaseOrdersPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const getStatusBadge = (status: string) => {

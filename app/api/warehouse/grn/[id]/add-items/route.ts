@@ -192,6 +192,20 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             },
           })
         }
+
+        // Keep the plan line's receivedQty in sync so the Reconcile view / over-receive guard
+        // isn't stale (add-items previously linked items without ever updating receivedQty).
+        if (line.preGeneratedItemIds.length > 0) {
+          const planLine = await tx.gRNPlanLine.findFirst({
+            where: { grnHeaderId: grnId, productMasterId: line.productMasterId },
+          })
+          if (planLine) {
+            await tx.gRNPlanLine.update({
+              where: { id: planLine.id },
+              data: { receivedQty: { increment: line.preGeneratedItemIds.length } },
+            })
+          }
+        }
       }
 
       return { linesCreated: createdLines.length }

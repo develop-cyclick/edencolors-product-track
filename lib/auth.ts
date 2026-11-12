@@ -2,9 +2,20 @@ import { SignJWT, jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import { UserRole } from '@prisma/client'
 
-// JWT Secret - must be at least 32 characters
+// JWT Secret - must be at least 32 characters.
+// In production a missing/short secret is fatal: silently falling back to a public constant
+// would let anyone forge an admin token. We skip the check during `next build`
+// (NEXT_PHASE === 'phase-production-build'), where env secrets aren't needed to compile.
+const jwtSecretEnv = process.env.JWT_SECRET
+if (
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PHASE !== 'phase-production-build' &&
+  (!jwtSecretEnv || jwtSecretEnv.length < 32)
+) {
+  throw new Error('JWT_SECRET must be set to at least 32 characters in production')
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'default-secret-change-in-production-32chars'
+  jwtSecretEnv || 'default-secret-change-in-production-32chars'
 )
 
 const JWT_EXPIRES_IN = '7d' // 7 days

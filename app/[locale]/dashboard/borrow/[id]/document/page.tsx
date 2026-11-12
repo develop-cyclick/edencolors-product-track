@@ -17,6 +17,9 @@ interface BorrowLine {
     id: number;
     serial12: string;
     status: string;
+    productMaster: {
+      documentUnit: { nameTh: string; nameEn: string | null } | null;
+    } | null;
   };
   unit: { id: number; nameTh: string; nameEn: string } | null;
 }
@@ -24,7 +27,7 @@ interface BorrowLine {
 interface BorrowTransaction {
   id: number;
   transactionNo: string;
-  type: "BORROW" | "RETURN";
+  type: "BORROW" | "RETURN" | "REQUISITION" | "PRODUCT_RETURN";
   status: "PENDING" | "APPROVED" | "REJECTED" | "RETURNED";
   borrowerName: string;
   clinicName: string | null;
@@ -34,6 +37,8 @@ interface BorrowTransaction {
   taxInvoiceRef: string | null;
   reason: string | null;
   remarks: string | null;
+  requisitionType: string | null;
+  requisitionTypeOther: string | null;
   createdAt: string;
   approvedAt: string | null;
   createdBy: { id: number; displayName: string; username: string };
@@ -131,12 +136,12 @@ export default function BorrowDocumentPage() {
   if (!transaction) {
     return (
       <div className="text-center py-12">
-        <p className="text-[var(--color-foreground-muted)]">ไม่พบข้อมูล</p>
+        <p className="text-[var(--color-foreground-muted)]">{locale === "th" ? "ไม่พบข้อมูล" : "Not found"}</p>
         <Link
           href={`/${locale}/dashboard/damaged-products`}
           className="text-[var(--color-gold)] mt-4 inline-block"
         >
-          กลับหน้ารายการ
+          {locale === "th" ? "กลับหน้ารายการ" : "Back to list"}
         </Link>
       </div>
     );
@@ -202,7 +207,7 @@ export default function BorrowDocumentPage() {
           <div className="flex justify-center gap-8 mb-6 text-[12px]">
             <label className="flex items-center gap-2">
               <div className="w-4 h-4 border border-gray-800 flex items-center justify-center">
-                {/* รับคืน - not used for borrow/return */}
+                {transaction.type === "PRODUCT_RETURN" && <span className="font-bold">X</span>}
               </div>
               <span>รับคืน</span>
             </label>
@@ -217,6 +222,12 @@ export default function BorrowDocumentPage() {
                 {transaction.type === "RETURN" && <span className="font-bold">X</span>}
               </div>
               <span>คืนสินค้า</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <div className="w-4 h-4 border border-gray-800 flex items-center justify-center">
+                {transaction.type === "REQUISITION" && <span className="font-bold">X</span>}
+              </div>
+              <span>เบิกไปใช้</span>
             </label>
           </div>
 
@@ -299,6 +310,32 @@ export default function BorrowDocumentPage() {
                 <span>{transaction.reason || ""}</span>
               </div>
             </div>
+
+            {/* Row 6: Requisition Type (checkboxes) */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="whitespace-nowrap">ประเภทการเบิก</span>
+              {([
+                { value: "DEMON", label: "Demon" },
+                { value: "CLAIM", label: "Claim" },
+                { value: "MARKETING", label: "Marketing" },
+              ] as const).map((opt) => (
+                <label key={opt.value} className="flex items-center gap-1.5">
+                  <div className="w-4 h-4 border border-gray-800 flex items-center justify-center">
+                    {transaction.requisitionType === opt.value && <span className="font-bold">X</span>}
+                  </div>
+                  <span>{opt.label}</span>
+                </label>
+              ))}
+              <label className="flex items-center gap-1.5">
+                <div className="w-4 h-4 border border-gray-800 flex items-center justify-center">
+                  {transaction.requisitionType === "OTHER" && <span className="font-bold">X</span>}
+                </div>
+                <span className="whitespace-nowrap">Other (ระบุ)</span>
+                {transaction.requisitionType === "OTHER" && transaction.requisitionTypeOther && (
+                  <span className="border-b border-gray-800 px-2">{transaction.requisitionTypeOther}</span>
+                )}
+              </label>
+            </div>
           </div>
 
           {/* Items Table */}
@@ -354,6 +391,13 @@ export default function BorrowDocumentPage() {
                       const firstLine = group.lines[0];
                       const serialRanges = formatSerialRanges(group.lines.map(l => l.productItem.serial12));
                       const uniqueRemarks = [...new Set(group.lines.map(l => l.remarks).filter(Boolean))];
+                      const documentUnit = firstLine.productItem?.productMaster?.documentUnit;
+                      const existingUnit = locale === "th"
+                        ? (firstLine.unit?.nameTh || "")
+                        : (firstLine.unit?.nameEn || firstLine.unit?.nameTh || "");
+                      const displayUnit = locale === "th"
+                        ? (documentUnit?.nameTh ?? existingUnit)
+                        : (documentUnit?.nameEn ?? existingUnit);
                       return (
                         <tr key={`${firstLine.sku}-${firstLine.lot}-${firstLine.expDate}-${index}`} className="border border-gray-800">
                           <td className="border border-gray-800 px-1 py-1 text-center">
@@ -376,7 +420,7 @@ export default function BorrowDocumentPage() {
                             {group.totalQuantity}
                           </td>
                           <td className="border border-gray-800 px-1 py-1 text-center">
-                            {firstLine.unit?.nameTh || ""}
+                            {displayUnit}
                           </td>
                           <td className="border border-gray-800 px-1 py-1">
                             {uniqueRemarks.join(", ")}

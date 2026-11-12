@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface ProductMaster {
   id: number
@@ -47,6 +48,9 @@ interface Pagination {
 
 const statusLabels: Record<string, { th: string; en: string; color: string }> = {
   IN_STOCK: { th: 'ในคลัง', en: 'In Stock', color: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]' },
+  REQUISITIONED: { th: 'เบิกใช้', en: 'Requisitioned', color: 'bg-teal-100 text-teal-700' },
+  BORROWED: { th: 'ยืมอยู่', en: 'Borrowed', color: 'bg-indigo-100 text-indigo-700' },
+  PENDING_LINK: { th: 'รอเชื่อมโยง', en: 'Pending Link', color: 'bg-slate-100 text-slate-700' },
   PENDING_OUT: { th: 'รอส่งออก', en: 'Pending Out', color: 'bg-amber-100 text-amber-700' },
   SHIPPED: { th: 'ส่งออกแล้ว', en: 'Shipped', color: 'bg-blue-100 text-blue-700' },
   ACTIVATED: { th: 'เปิดใช้แล้ว', en: 'Activated', color: 'bg-purple-100 text-purple-700' },
@@ -105,7 +109,7 @@ export default function ProductMasterDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US')
+    return gDate(dateStr)
   }
 
   if (loading) {

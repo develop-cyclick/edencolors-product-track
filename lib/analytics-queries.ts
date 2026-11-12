@@ -133,7 +133,7 @@ export async function getClinicStats(filters?: {
 }): Promise<ClinicStats[]> {
   const provinceFilter = filters?.province ? Prisma.sql`AND c.province = ${filters.province}` : Prisma.empty;
   const dateFilter = filters?.startDate && filters?.endDate
-    ? Prisma.sql`AND oh.shipped_at >= ${filters.startDate}::date AND oh.shipped_at <= ${filters.endDate}::date`
+    ? Prisma.sql`AND oh.shipped_at >= ${filters.startDate}::date AND oh.shipped_at < ${filters.endDate}::date + INTERVAL '1 day'`
     : Prisma.empty;
 
   const result: any[] = await prisma.$queryRaw`

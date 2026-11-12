@@ -17,6 +17,7 @@ type HandlerContext = { user: JWTPayload };
 let cache: {
   data: any;
   timestamp: number;
+  trendDays: number;
 } | null = null;
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -29,7 +30,9 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
 
     // Check cache
     const now = Date.now();
-    if (cache && now - cache.timestamp < CACHE_TTL) {
+    // trend depends on trendDays, so the cache must be keyed by it — otherwise a ?trendDays=7
+    // request could be served a cached 30-day trend.
+    if (cache && cache.trendDays === trendDays && now - cache.timestamp < CACHE_TTL) {
       return successResponse(cache.data);
     }
 
@@ -63,6 +66,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     cache = {
       data: responseData,
       timestamp: now,
+      trendDays,
     };
 
     return successResponse(responseData);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { Dictionary } from '@/i18n/get-dictionary'
+import { formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface ActivateFormProps {
   token?: string
@@ -241,7 +242,7 @@ export default function ActivateForm({ token, dict, locale }: ActivateFormProps)
               <div className="pt-4 border-t border-[var(--color-beige)]">
                 <InfoRow
                   label={locale === 'th' ? 'ลงทะเบียนเมื่อ' : 'Registered at'}
-                  value={new Date(result.data.activatedAt).toLocaleString(locale === 'th' ? 'th-TH' : 'en-US')}
+                  value={gDateTime(result.data.activatedAt)}
                 />
               </div>
             </div>

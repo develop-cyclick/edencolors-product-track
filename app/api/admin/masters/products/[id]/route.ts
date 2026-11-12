@@ -170,25 +170,54 @@ export const PATCH = withAdmin(async (request: NextRequest, context: HandlerCont
       }
     }
 
+    // Validate and check serialCode uniqueness if updating
+    let serialCodeUpdate: string | undefined
+    if (body.serialCode !== undefined) {
+      serialCodeUpdate = (body.serialCode as string).toUpperCase()
+      if (!/^[A-Z0-9]{5}$/.test(serialCodeUpdate)) {
+        return errors.badRequest('Serial Code must be exactly 5 uppercase alphanumeric characters')
+      }
+      const existingSerialCode = await prisma.productMaster.findFirst({
+        where: {
+          serialCode: serialCodeUpdate,
+          NOT: { id: parseInt(id) },
+        },
+      })
+      if (existingSerialCode) {
+        return errors.badRequest('Serial Code already exists')
+      }
+    }
+
     const productMaster = await prisma.productMaster.update({
       where: { id: parseInt(id) },
       data: {
         ...(body.sku && { sku: body.sku }),
+        ...(serialCodeUpdate && { serialCode: serialCodeUpdate }),
         ...(body.nameTh && { nameTh: body.nameTh }),
         ...(body.nameEn !== undefined && { nameEn: body.nameEn }),
+        ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl }),
         ...(body.categoryId && { categoryId: body.categoryId }),
         ...(body.modelSize !== undefined && { modelSize: body.modelSize }),
         ...(body.description !== undefined && { description: body.description }),
         ...(body.defaultUnitId !== undefined && { defaultUnitId: body.defaultUnitId }),
+        ...(body.documentUnitId !== undefined && { documentUnitId: body.documentUnitId }),
         ...(body.activationType !== undefined && { activationType: body.activationType }),
         ...(body.maxActivations !== undefined && {
-          maxActivations: body.activationType === 'PACK' ? body.maxActivations : 1
+          // Don't force maxActivations→1 when the caller didn't include activationType: a partial
+          // PATCH of only maxActivations on a PACK product would otherwise silently reset it to 1.
+          maxActivations:
+            body.activationType === undefined
+              ? body.maxActivations
+              : body.activationType === 'PACK'
+                ? body.maxActivations
+                : 1,
         }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
       },
       include: {
         category: true,
         defaultUnit: true,
+        documentUnit: true,
       },
     })
 

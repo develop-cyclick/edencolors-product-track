@@ -110,7 +110,7 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       }
 
       return reprinted
-    })
+    }, { timeout: 30000, maxWait: 10000 })
 
     // Backward compatible: single item returns flat object, batch returns array
     if (!body.productItemIds && results.length === 1) {

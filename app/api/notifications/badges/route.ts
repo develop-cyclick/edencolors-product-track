@@ -21,7 +21,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         `.then((r) => Number(r[0]?.count || 0)),
         prisma.outboundHeader.count({ where: { status: 'PENDING' } }),
         prisma.damagedActionRequest.count({ where: { status: 'PENDING' } }),
-        prisma.borrowTransaction.count({ where: { type: 'BORROW', status: 'PENDING' } }),
+        prisma.borrowTransaction.count({ where: { type: { in: ['BORROW', 'RETURN', 'REQUISITION', 'PRODUCT_RETURN'] }, status: 'PENDING' } }),
         prisma.damagedClaim.count({ where: { status: 'PENDING' } }),
       ])
 

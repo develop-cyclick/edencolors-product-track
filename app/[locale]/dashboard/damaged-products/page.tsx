@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate, formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface DamagedProduct {
   id: number
@@ -111,6 +112,7 @@ interface BorrowSearchResult {
     modelSize: string | null
     defaultUnitId: number | null
   }
+  assignedClinic?: { id: number; name: string; address?: string } | null
 }
 
 export default function DamagedProductsPage() {
@@ -157,6 +159,7 @@ export default function DamagedProductsPage() {
   const [showReturnModal, setShowReturnModal] = useState(false)
   const [showLotReturnModal, setShowLotReturnModal] = useState(false)
   const [returnReason, setReturnReason] = useState('')
+  const [returnReasonOther, setReturnReasonOther] = useState('')
   const [returnNotes, setReturnNotes] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -179,6 +182,8 @@ export default function DamagedProductsPage() {
   const [borrowTaxInvoice, setBorrowTaxInvoice] = useState('')
   const [borrowReason, setBorrowReason] = useState('')
   const [borrowRemarks, setBorrowRemarks] = useState('')
+  const [borrowRequisitionType, setBorrowRequisitionType] = useState<'' | 'DEMON' | 'CLAIM' | 'MARKETING' | 'OTHER'>('')
+  const [borrowRequisitionOther, setBorrowRequisitionOther] = useState('')
   const [borrowContactName, setBorrowContactName] = useState('')
   const [borrowContactPhone, setBorrowContactPhone] = useState('')
   const [isBorrowSubmitting, setIsBorrowSubmitting] = useState(false)
@@ -212,6 +217,18 @@ export default function DamagedProductsPage() {
   const [convertRemarks, setConvertRemarks] = useState('')
   const [isConverting, setIsConverting] = useState(false)
   const [convertClinicSearch, setConvertClinicSearch] = useState('')
+
+  // "เบิกไปใช้" (requisition out) modal state
+  const [showRequisitionModal, setShowRequisitionModal] = useState(false)
+  const [requisitionType, setRequisitionType] = useState<'' | 'DEMON' | 'CLAIM' | 'MARKETING' | 'OTHER'>('')
+  const [requisitionOther, setRequisitionOther] = useState('')
+  const [requisitionBorrower, setRequisitionBorrower] = useState('')
+  const [requisitionClinicName, setRequisitionClinicName] = useState('')
+  const [requisitionClinicAddress, setRequisitionClinicAddress] = useState('')
+  const [requisitionClinicId, setRequisitionClinicId] = useState(0)
+  const [requisitionClinics, setRequisitionClinics] = useState<{ id: number; name: string; address: string; branchName?: string | null }[]>([])
+  const [requisitionRemarks, setRequisitionRemarks] = useState('')
+  const [isRequisitioning, setIsRequisitioning] = useState(false)
 
   // --- Claim Tab ---
   const [claimClinics, setClaimClinics] = useState<{ id: number; name: string; address: string }[]>([])
@@ -384,7 +401,10 @@ export default function DamagedProductsPage() {
     setSelectedLotProducts([])
 
     try {
-      const res = await fetch(`/api/warehouse/products?lot=${encodeURIComponent(searchLot.trim())}&status=SHIPPED,ACTIVATED`)
+      // Fetch the ENTIRE lot — the products API defaults to limit=50, which silently
+      // truncated large lots (e.g. lot with 411 returnable items showed only 50, so
+      // "return whole lot" missed the rest). Pass a high limit to load every item.
+      const res = await fetch(`/api/warehouse/products?lot=${encodeURIComponent(searchLot.trim())}&status=SHIPPED,ACTIVATED&limit=100000`)
 
       if (!res.ok) {
         setLotError(locale === 'th' ? `เกิดข้อผิดพลาด: ${res.status}` : `Error: ${res.status}`)
@@ -434,6 +454,12 @@ export default function DamagedProductsPage() {
   // Process individual return
   const handleReturn = async () => {
     if (!searchResult || !returnReason.trim()) return
+    if (returnReason === 'อื่นๆ' && !returnReasonOther.trim()) {
+      await alert({ title: locale === 'th' ? 'กรุณาระบุเหตุผล' : 'Reason required', message: locale === 'th' ? 'กรุณาระบุเหตุผลการรับคืน (อื่นๆ)' : 'Please specify the return reason', variant: 'warning', icon: 'warning' })
+      return
+    }
+    // Fold the free-text into the reason so it lands on the document/PDF (transaction.reason)
+    const effectiveReason = returnReason === 'อื่นๆ' ? `อื่นๆ: ${returnReasonOther.trim()}` : returnReason
 
     setIsProcessing(true)
     try {
@@ -442,7 +468,7 @@ export default function DamagedProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productItemId: searchResult.id,
-          reason: returnReason,
+          reason: effectiveReason,
           notes: returnNotes || undefined,
         }),
       })
@@ -450,11 +476,12 @@ export default function DamagedProductsPage() {
       const data = await res.json()
 
       if (data.success) {
-        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'รับคืนสินค้าสำเร็จ' : 'Product returned successfully', variant: 'success', icon: 'success' })
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ส่งคำขอรับคืนสินค้าสำเร็จ รออนุมัติ' : 'Return request created - pending approval', variant: 'success', icon: 'success' })
         setShowReturnModal(false)
         setSearchResult(null)
         setSearchSerial('')
         setReturnReason('')
+        setReturnReasonOther('')
         setReturnNotes('')
         fetchItems()
         window.dispatchEvent(new Event('badges:refresh'))
@@ -472,6 +499,12 @@ export default function DamagedProductsPage() {
   // Process lot return
   const handleLotReturn = async () => {
     if (selectedLotProducts.length === 0 || !returnReason.trim()) return
+    if (returnReason === 'อื่นๆ' && !returnReasonOther.trim()) {
+      await alert({ title: locale === 'th' ? 'กรุณาระบุเหตุผล' : 'Reason required', message: locale === 'th' ? 'กรุณาระบุเหตุผลการรับคืน (อื่นๆ)' : 'Please specify the return reason', variant: 'warning', icon: 'warning' })
+      return
+    }
+    // Fold the free-text into the reason so it lands on the document/PDF (transaction.reason)
+    const effectiveReason = returnReason === 'อื่นๆ' ? `อื่นๆ: ${returnReasonOther.trim()}` : returnReason
 
     setIsProcessing(true)
     try {
@@ -480,7 +513,7 @@ export default function DamagedProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productItemIds: selectedLotProducts,
-          reason: returnReason,
+          reason: effectiveReason,
           notes: returnNotes || undefined,
         }),
       })
@@ -489,14 +522,15 @@ export default function DamagedProductsPage() {
 
       if (data.success) {
         const message = locale === 'th'
-          ? `รับคืนสินค้าสำเร็จ ${data.data.returnedCount} รายการ`
-          : `${data.data.returnedCount} products returned successfully`
+          ? `ส่งคำขอรับคืนสินค้าสำเร็จ ${data.data.returnedCount} รายการ รออนุมัติ`
+          : `Return request created (${data.data.returnedCount} items) - pending approval`
         await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         setShowLotReturnModal(false)
         setLotProducts([])
         setSelectedLotProducts([])
         setSearchLot('')
         setReturnReason('')
+        setReturnReasonOther('')
         setReturnNotes('')
         fetchItems()
         window.dispatchEvent(new Event('badges:refresh'))
@@ -513,13 +547,7 @@ export default function DamagedProductsPage() {
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return gDateTime(dateStr)
   }
 
   // Borrow tab functions
@@ -590,6 +618,13 @@ export default function DamagedProductsPage() {
       fetchBorrowProducts()
     }
   }, [activeTab, borrowProductsPagination.page, borrowProductsFilter])
+
+  // Clear the product selection whenever the tab changes. The 'borrow' tab lists IN_STOCK
+  // items while 'return_borrowed' lists BORROWED items; without this, a selection made on one
+  // tab would carry over and be submitted against the other flow (wrong-status items).
+  useEffect(() => {
+    setSelectedBorrowProducts([])
+  }, [activeTab])
 
   // --- Claim Tab Logic ---
   useEffect(() => {
@@ -672,6 +707,8 @@ export default function DamagedProductsPage() {
     setBorrowTaxInvoice('')
     setBorrowReason('')
     setBorrowRemarks('')
+    setBorrowRequisitionType('')
+    setBorrowRequisitionOther('')
     setBorrowContactName('')
     setBorrowContactPhone('')
     setBorrowProductsFilter('')
@@ -704,6 +741,9 @@ export default function DamagedProductsPage() {
           taxInvoiceRef: borrowTaxInvoice.trim() || undefined,
           reason: borrowReason.trim() || undefined,
           remarks: borrowRemarks.trim() || undefined,
+          requisitionType: borrowRequisitionType || undefined,
+          requisitionTypeOther:
+            borrowRequisitionType === 'OTHER' ? borrowRequisitionOther.trim() || undefined : undefined,
           productItemIds: selectedBorrowProducts,
         }),
       })
@@ -717,8 +757,8 @@ export default function DamagedProductsPage() {
               ? `สร้างคำขอยืมสินค้าสำเร็จ (${data.data.transactionNo}) รออนุมัติ`
               : `Borrow request created (${data.data.transactionNo}) - pending approval`
             : locale === 'th'
-              ? `คืนสินค้าเข้าคลังสำเร็จ (${data.data.transactionNo})`
-              : `Products returned to stock (${data.data.transactionNo})`
+              ? `ส่งคำขอคืนสินค้าสำเร็จ (${data.data.transactionNo}) รออนุมัติ`
+              : `Return request created (${data.data.transactionNo}) - pending approval`
         await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message, variant: 'success', icon: 'success' })
         clearBorrowForm()
         fetchBorrowHistory()
@@ -771,6 +811,71 @@ export default function DamagedProductsPage() {
     } catch (error) {
       console.error('Failed to load master data:', error)
       await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถโหลดข้อมูลได้' : 'Failed to load data', variant: 'error', icon: 'error' })
+    }
+  }
+
+  const openRequisitionModal = async () => {
+    setRequisitionType('')
+    setRequisitionOther('')
+    setRequisitionBorrower('')
+    setRequisitionRemarks('')
+    // Pre-fill the clinic these items were borrowed to (so it shows on the requisition + approval)
+    const selected = borrowProductsList.filter((p) => selectedBorrowProducts.includes(p.id))
+    const withClinic = selected.find((p) => p.assignedClinic)
+    setRequisitionClinicName(withClinic?.assignedClinic?.name || '')
+    setRequisitionClinicAddress(withClinic?.assignedClinic?.address || '')
+    setRequisitionClinicId(withClinic?.assignedClinic?.id || 0)
+    // Load registered clinics for the autocomplete
+    try {
+      const res = await fetch('/api/admin/clinics?limit=999')
+      const data = await res.json()
+      setRequisitionClinics(data.success ? (data.data?.clinics || data.data || []) : [])
+    } catch {
+      setRequisitionClinics([])
+    }
+    setShowRequisitionModal(true)
+  }
+
+  const handleRequisitionSubmit = async () => {
+    if (selectedBorrowProducts.length === 0) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'กรุณาเลือกสินค้าอย่างน้อย 1 รายการ' : 'Please select at least 1 product', variant: 'warning', icon: 'warning' })
+      return
+    }
+
+    setIsRequisitioning(true)
+    try {
+      const res = await fetch('/api/warehouse/borrow/requisition-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productItemIds: selectedBorrowProducts,
+          requisitionType: requisitionType || undefined,
+          requisitionTypeOther: requisitionType === 'OTHER' ? requisitionOther.trim() || undefined : undefined,
+          borrowerName: requisitionBorrower.trim() || undefined,
+          clinicName: requisitionClinicName.trim() || undefined,
+          clinicAddress: requisitionClinicAddress.trim() || undefined,
+          remarks: requisitionRemarks.trim() || undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        const msg = locale === 'th'
+          ? `ส่งคำขอเบิกไปใช้สำเร็จ (${data.data.transactionNo}) รออนุมัติ\nจำนวน ${data.data.itemCount} รายการ`
+          : `Requisition request created (${data.data.transactionNo}) - pending approval\n${data.data.itemCount} items`
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: msg, variant: 'success', icon: 'success' })
+        setShowRequisitionModal(false)
+        setSelectedBorrowProducts([])
+        fetchBorrowProducts()
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || (locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred'), variant: 'error', icon: 'error' })
+      }
+    } catch (error) {
+      console.error('Requisition error:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'ไม่สามารถเบิกไปใช้ได้' : 'Failed to requisition', variant: 'error', icon: 'error' })
+    } finally {
+      setIsRequisitioning(false)
     }
   }
 
@@ -858,6 +963,9 @@ export default function DamagedProductsPage() {
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'ในคลัง', labelEn: 'In Stock' },
+      REQUISITIONED: { bg: 'bg-teal-100 text-teal-700', dot: 'bg-teal-500', label: 'เบิกใช้', labelEn: 'Requisitioned' },
+      BORROWED: { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500', label: 'ยืมอยู่', labelEn: 'Borrowed' },
+      PENDING_LINK: { bg: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500', label: 'รอเชื่อมโยง', labelEn: 'Pending Link' },
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้แล้ว', labelEn: 'Activated' },
@@ -1617,7 +1725,7 @@ export default function DamagedProductsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-[var(--color-foreground-muted)]">
-                          {new Date(claim.createdAt).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {gDate(claim.createdAt)}
                         </td>
                         <td className="px-4 py-3 text-center">
                           {claim.attachments.length > 0 ? (
@@ -1881,6 +1989,40 @@ export default function DamagedProductsPage() {
                       />
                     </div>
                     <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-2">
+                        {locale === 'th' ? 'ประเภทการเบิก' : 'Requisition Type'}
+                      </label>
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                        {([
+                          { value: 'DEMON', label: 'Demon' },
+                          { value: 'CLAIM', label: 'Claim' },
+                          { value: 'MARKETING', label: 'Marketing' },
+                          { value: 'OTHER', label: locale === 'th' ? 'Other (ระบุ)' : 'Other' },
+                        ] as const).map((opt) => (
+                          <label key={opt.value} className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={borrowRequisitionType === opt.value}
+                              onChange={() =>
+                                setBorrowRequisitionType((prev) => (prev === opt.value ? '' : opt.value))
+                              }
+                              className="w-4 h-4 accent-[var(--color-gold)] cursor-pointer"
+                            />
+                            <span className="text-sm">{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {borrowRequisitionType === 'OTHER' && (
+                        <input
+                          type="text"
+                          value={borrowRequisitionOther}
+                          onChange={(e) => setBorrowRequisitionOther(e.target.value)}
+                          className="mt-2 w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
+                          placeholder={locale === 'th' ? 'ระบุประเภทการเบิก' : 'Specify requisition type'}
+                        />
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
                       <label className="block text-sm font-medium mb-1">
                         {locale === 'th' ? 'หมายเหตุ' : 'Remarks'}
                       </label>
@@ -1913,6 +2055,18 @@ export default function DamagedProductsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       {locale === 'th' ? 'สร้าง PO & ใบส่งสินค้า' : 'Create PO & Outbound'}
+                    </button>
+                  )}
+                  {activeTab === 'return_borrowed' && (
+                    <button
+                      onClick={openRequisitionModal}
+                      disabled={selectedBorrowProducts.length === 0}
+                      className="px-6 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                      {locale === 'th' ? 'เบิกไปใช้' : 'Requisition Out'}
                     </button>
                   )}
                   <button
@@ -2022,9 +2176,21 @@ export default function DamagedProductsPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                txn.type === 'BORROW' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                                txn.type === 'BORROW'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : txn.type === 'REQUISITION'
+                                    ? 'bg-teal-100 text-teal-700'
+                                    : txn.type === 'PRODUCT_RETURN'
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-green-100 text-green-700'
                               }`}>
-                                {txn.type === 'BORROW' ? (locale === 'th' ? 'ยืม' : 'Borrow') : (locale === 'th' ? 'คืน' : 'Return')}
+                                {txn.type === 'BORROW'
+                                  ? (locale === 'th' ? 'ยืม' : 'Borrow')
+                                  : txn.type === 'REQUISITION'
+                                    ? (locale === 'th' ? 'เบิกใช้' : 'Requisition')
+                                    : txn.type === 'PRODUCT_RETURN'
+                                      ? (locale === 'th' ? 'รับคืน' : 'Product Return')
+                                      : (locale === 'th' ? 'คืน' : 'Return')}
                               </span>
                             </td>
                         <td className="px-5 py-4">
@@ -2270,6 +2436,21 @@ export default function DamagedProductsPage() {
               </select>
             </div>
 
+            {returnReason === 'อื่นๆ' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  {locale === 'th' ? 'ระบุเหตุผล' : 'Specify reason'} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={returnReasonOther}
+                  onChange={(e) => setReturnReasonOther(e.target.value)}
+                  placeholder={locale === 'th' ? 'ระบุเหตุผลการรับคืน' : 'Specify the return reason'}
+                  className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
+                />
+              </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
                 {locale === 'th' ? 'หมายเหตุ' : 'Notes'}
@@ -2294,6 +2475,7 @@ export default function DamagedProductsPage() {
                 onClick={() => {
                   setShowReturnModal(false)
                   setReturnReason('')
+                  setReturnReasonOther('')
                   setReturnNotes('')
                 }}
                 className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
@@ -2351,6 +2533,21 @@ export default function DamagedProductsPage() {
               </select>
             </div>
 
+            {returnReason === 'อื่นๆ' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  {locale === 'th' ? 'ระบุเหตุผล' : 'Specify reason'} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={returnReasonOther}
+                  onChange={(e) => setReturnReasonOther(e.target.value)}
+                  placeholder={locale === 'th' ? 'ระบุเหตุผลการรับคืน' : 'Specify the return reason'}
+                  className="w-full px-3 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(201,163,90,0.15)] transition-all duration-200"
+                />
+              </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
                 {locale === 'th' ? 'หมายเหตุ' : 'Notes'}
@@ -2375,6 +2572,7 @@ export default function DamagedProductsPage() {
                 onClick={() => {
                   setShowLotReturnModal(false)
                   setReturnReason('')
+                  setReturnReasonOther('')
                   setReturnNotes('')
                 }}
                 className="px-4 py-2 border border-[var(--color-beige)] rounded-lg"
@@ -2387,6 +2585,141 @@ export default function DamagedProductsPage() {
       )}
 
       {/* Convert to PO & Outbound Modal */}
+      {showRequisitionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-1">{locale === 'th' ? 'เบิกไปใช้' : 'Requisition Out'}</h3>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
+              {locale === 'th'
+                ? `เบิกสินค้าออกจากคลังถาวร (ไม่ทำ PO/ใบส่ง) — ${selectedBorrowProducts.length} รายการ`
+                : `Withdraw items out of stock permanently (no PO/outbound) — ${selectedBorrowProducts.length} items`}
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">{locale === 'th' ? 'ประเภทการเบิก' : 'Requisition Type'}</label>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                {([
+                  { value: 'DEMON', label: 'Demon' },
+                  { value: 'CLAIM', label: 'Claim' },
+                  { value: 'MARKETING', label: 'Marketing' },
+                  { value: 'OTHER', label: locale === 'th' ? 'Other (ระบุ)' : 'Other' },
+                ] as const).map((opt) => (
+                  <label key={opt.value} className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={requisitionType === opt.value}
+                      onChange={() => setRequisitionType((prev) => (prev === opt.value ? '' : opt.value))}
+                      className="w-4 h-4 accent-[var(--color-gold)] cursor-pointer"
+                    />
+                    <span className="text-sm">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              {requisitionType === 'OTHER' && (
+                <input
+                  type="text"
+                  value={requisitionOther}
+                  onChange={(e) => setRequisitionOther(e.target.value)}
+                  className="mt-2 w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white transition-all duration-200"
+                  placeholder={locale === 'th' ? 'ระบุประเภทการเบิก' : 'Specify requisition type'}
+                />
+              )}
+            </div>
+
+            <div className="mb-4 relative">
+              <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'ชื่อคลินิก/ผู้รับ' : 'Clinic / Recipient'}</label>
+              <input
+                type="text"
+                value={requisitionClinicName}
+                onChange={(e) => {
+                  setRequisitionClinicName(e.target.value)
+                  if (requisitionClinicId) {
+                    setRequisitionClinicId(0)
+                    setRequisitionClinicAddress('')
+                  }
+                }}
+                placeholder={locale === 'th' ? 'กรอกชื่อคลินิก/ผู้รับ' : 'Enter clinic or recipient name'}
+                className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white transition-all duration-200"
+              />
+              {requisitionClinicId > 0 && (
+                <span className="absolute right-3 top-[34px] text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
+                  {locale === 'th' ? 'เชื่อมกับคลินิกในระบบ' : 'Linked'}
+                </span>
+              )}
+              {requisitionClinicName.length >= 2 && requisitionClinicId === 0 && (() => {
+                const q = requisitionClinicName.toLowerCase()
+                const matches = requisitionClinics.filter((c) =>
+                  c.name.toLowerCase().includes(q) ||
+                  c.address?.toLowerCase().includes(q) ||
+                  c.branchName?.toLowerCase().includes(q)
+                ).slice(0, 5)
+                return matches.length > 0 ? (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-[var(--color-beige)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                    {matches.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setRequisitionClinicId(c.id)
+                          setRequisitionClinicName(c.name)
+                          setRequisitionClinicAddress(c.address || '')
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors border-b border-[var(--color-beige)] last:border-b-0"
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        {c.branchName && <span className="text-xs text-[var(--color-foreground-muted)] ml-1">({c.branchName})</span>}
+                        {c.address && <div className="text-xs text-[var(--color-foreground-muted)] truncate">{c.address}</div>}
+                      </button>
+                    ))}
+                  </div>
+                ) : null
+              })()}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'ผู้เบิก' : 'Requested by'}</label>
+              <input
+                type="text"
+                value={requisitionBorrower}
+                onChange={(e) => setRequisitionBorrower(e.target.value)}
+                className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white transition-all duration-200"
+                placeholder={locale === 'th' ? 'ชื่อผู้เบิก' : 'Name'}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</label>
+              <textarea
+                value={requisitionRemarks}
+                onChange={(e) => setRequisitionRemarks(e.target.value)}
+                rows={2}
+                className="w-full px-4 py-2 bg-[var(--color-off-white)] border border-[var(--color-beige)] rounded-xl focus:outline-none focus:border-[var(--color-gold)] focus:bg-white transition-all duration-200"
+                placeholder={locale === 'th' ? 'เหตุผล/รายละเอียด' : 'Reason / details'}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowRequisitionModal(false)}
+                disabled={isRequisitioning}
+                className="px-5 py-2.5 border border-[var(--color-beige)] rounded-lg font-medium hover:bg-[var(--color-off-white)] transition-colors disabled:opacity-50"
+              >
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleRequisitionSubmit}
+                disabled={isRequisitioning || selectedBorrowProducts.length === 0}
+                className="px-5 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                {isRequisitioning
+                  ? (locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...')
+                  : (locale === 'th' ? 'ยืนยันเบิกไปใช้' : 'Confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showConvertModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">

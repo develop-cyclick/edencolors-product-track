@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface Clinic {
   id: number
@@ -340,11 +341,7 @@ export default function ClinicsPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   // Import functions
@@ -568,28 +565,28 @@ export default function ClinicsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[880px]">
                 <thead>
                   <tr className="bg-[var(--color-off-white)] border-b border-[var(--color-beige)]">
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'ชื่อคลินิก' : 'Clinic Name'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'บริษัท' : 'Company'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'ที่อยู่' : 'Address'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'สาขา' : 'Branch'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'ผู้ติดต่อ' : 'Contact'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'สถานะ' : 'Status'}
                     </th>
-                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)]">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-[var(--color-charcoal)] whitespace-nowrap">
                       {locale === 'th' ? 'สร้างเมื่อ' : 'Created'}
                     </th>
                     <th className="px-5 py-4"></th>
@@ -606,7 +603,9 @@ export default function ClinicsPage() {
                           <span className="text-[var(--color-foreground-muted)]">-</span>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-[var(--color-charcoal)]">{clinic.address}</td>
+                      <td className="px-5 py-4 text-[var(--color-charcoal)] align-top">
+                        <div className="max-w-[260px] whitespace-normal break-words">{clinic.address}</div>
+                      </td>
                       <td className="px-5 py-4 text-[var(--color-charcoal)]">
                         {clinic.branchName || (
                           <span className="text-[var(--color-foreground-muted)]">-</span>

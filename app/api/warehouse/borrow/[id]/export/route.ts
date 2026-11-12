@@ -27,7 +27,16 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         approvedBy: { select: { displayName: true } },
         lines: {
           include: {
-            productItem: { select: { serial12: true } },
+            productItem: {
+              select: {
+                serial12: true,
+                productMaster: {
+                  select: {
+                    documentUnit: { select: { nameTh: true, nameEn: true } },
+                  },
+                },
+              },
+            },
             unit: { select: { nameTh: true } },
           },
         },
@@ -41,13 +50,15 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
     // Prepare data for PDF generation
     const pdfData = {
       transactionNo: transaction.transactionNo,
-      type: transaction.type as 'BORROW' | 'RETURN',
+      type: transaction.type as 'BORROW' | 'RETURN' | 'REQUISITION' | 'PRODUCT_RETURN',
       borrowerName: transaction.borrowerName,
       clinicName: transaction.clinicName,
       clinicAddress: transaction.clinicAddress,
       taxInvoiceRef: transaction.taxInvoiceRef,
       reason: transaction.reason,
       remarks: transaction.remarks,
+      requisitionType: transaction.requisitionType,
+      requisitionTypeOther: transaction.requisitionTypeOther,
       createdAt: transaction.createdAt.toISOString(),
       approvedAt: transaction.approvedAt?.toISOString() || null,
       approvedBy: transaction.approvedBy?.displayName || null,
@@ -60,7 +71,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         lot: line.lot,
         expDate: line.expDate?.toISOString() || null,
         serial12: line.productItem.serial12,
-        unit: line.unit?.nameTh || null,
+        unit: line.productItem?.productMaster?.documentUnit?.nameTh ?? line.unit?.nameTh ?? null,
         remarks: line.remarks,
       })),
     }

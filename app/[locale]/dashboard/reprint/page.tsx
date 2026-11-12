@@ -60,6 +60,9 @@ export default function ReprintPage() {
 
   const fetchProducts = async (serial?: string) => {
     setLoading(true)
+    // Clear any prior selection: the list is about to be replaced, and keeping stale IDs would
+    // let "select all" math and batch-reprint act on items no longer shown.
+    setSelectedIds(new Set())
     try {
       const url = serial
         ? `/api/warehouse/reprint?serial=${encodeURIComponent(serial)}`
@@ -185,6 +188,9 @@ export default function ReprintPage() {
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'ในคลัง', labelEn: 'In Stock' },
+      REQUISITIONED: { bg: 'bg-teal-100 text-teal-700', dot: 'bg-teal-500', label: 'เบิกใช้', labelEn: 'Requisitioned' },
+      BORROWED: { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500', label: 'ยืมอยู่', labelEn: 'Borrowed' },
+      PENDING_LINK: { bg: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500', label: 'รอเชื่อมโยง', labelEn: 'Pending Link' },
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้แล้ว', labelEn: 'Activated' },

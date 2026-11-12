@@ -63,10 +63,10 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
     damagedStatusCounts[stat.status] = stat._count.status
   }
 
-  // Get Borrow Transaction stats (only BORROW type needs approval, RETURN is auto-approved)
+  // Borrow Transaction stats — BORROW / RETURN / REQUISITION all require approval
   const borrowStats = await prisma.borrowTransaction.groupBy({
     by: ['status'],
-    where: { type: 'BORROW' },
+    where: { type: { in: ['BORROW', 'RETURN', 'REQUISITION', 'PRODUCT_RETURN'] } },
     _count: { status: true },
   })
 
@@ -183,7 +183,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       include: {
         warehouse: { select: { id: true, name: true } },
         shippingMethod: { select: { id: true, nameTh: true } },
-        clinic: { select: { id: true, name: true, address: true, branchName: true } },
+        clinic: { select: { id: true, name: true, companyName: true, address: true, branchName: true, invoiceName: true, contactName: true, contactPhone: true } },
         createdBy: { select: { id: true, displayName: true } },
         approvedBy: { select: { id: true, displayName: true } },
         lines: {
@@ -256,7 +256,7 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
 
     borrowItems = await prisma.borrowTransaction.findMany({
       where: {
-        type: 'BORROW',
+        type: { in: ['BORROW', 'RETURN', 'REQUISITION', 'PRODUCT_RETURN'] },
         status: filterBorrowStatus,
       },
       include: {

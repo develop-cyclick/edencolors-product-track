@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import type { Dictionary } from '@/i18n/get-dictionary'
+import { formatDate as gDate } from '@/lib/format-date'
 import QRScanner from '@/components/qr-scanner'
 
 interface VerifyResultProps {
@@ -370,6 +371,10 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                 width={150}
                 height={150}
                 className="object-contain"
+                // Public customer page: load the R2 image directly in the browser instead of
+                // through the Next server-side optimizer, so it never depends on container→R2
+                // egress (which the prod firewall intermittently drops) or the optimizer cache.
+                unoptimized
               />
               {/* Icon */}
               <div className={`w-10 h-10 rounded-full absolute -bottom-2 -right-2 ${statusConfig.iconBg} flex items-center justify-center shadow-lg`}>
@@ -587,10 +592,7 @@ export default function VerifyResult({ token, serial, dict, locale }: VerifyResu
                 <div className="mt-2">
                   <InfoRow
                     label={locale === 'th' ? 'วันที่ลงทะเบียน' : 'Registration date'}
-                    value={new Date(response.data.activatedAt).toLocaleDateString(
-                      locale === 'th' ? 'th-TH' : 'en-US',
-                      { year: 'numeric', month: 'long', day: 'numeric' }
-                    )}
+                    value={gDate(response.data.activatedAt)}
                   />
                 </div>
               </div>

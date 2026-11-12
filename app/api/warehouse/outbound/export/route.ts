@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import { generateExcelBuffer } from '@/lib/excel-export'
+import { formatDate as gDate } from '@/lib/format-date'
 import type { OutboundStatus } from '@prisma/client'
 import type { JWTPayload } from '@/lib/auth'
 
@@ -70,9 +71,7 @@ async function handlePOST(request: NextRequest, _context: HandlerContext) {
 
     const formatDate = (date: Date | null) => {
       if (!date) return '-'
-      return new Date(date).toLocaleDateString('th-TH', {
-        year: 'numeric', month: 'short', day: 'numeric',
-      })
+      return gDate(date)
     }
 
     // Sheet 1: Outbound Summary

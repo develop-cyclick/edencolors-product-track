@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface Clinic {
   id: number
@@ -131,6 +132,9 @@ export default function NewOutboundPage() {
   const [warehouseId, setWarehouseId] = useState<number>(0)
   const [shippingMethodId, setShippingMethodId] = useState<number>(0)
   const [clinicId, setClinicId] = useState<number>(0)
+  // true only when the USER picks a clinic from the dropdown, so programmatic setClinicId
+  // (edit / PO / URL prefill) doesn't overwrite a saved custom ship-to address.
+  const clinicChangedByUser = useRef(false)
   const [deliveryNoteNo, setDeliveryNoteNo] = useState('')
   const [contractNo, setContractNo] = useState('')
   const [salesPersonName, setSalesPersonName] = useState('')
@@ -314,7 +318,10 @@ export default function NewOutboundPage() {
   }, [clinicId, urlPoId, productMasters])
 
   useEffect(() => {
-    // Update address when clinic changes
+    // Only auto-fill the address on a genuine user clinic pick — not on edit/PO/URL prefill,
+    // which would clobber a saved custom ship-to address.
+    if (!clinicChangedByUser.current) return
+    clinicChangedByUser.current = false
     const clinic = clinics.find((c) => c.id === clinicId)
     if (clinic) {
       setClinicAddress(`${clinic.name}, ${clinic.address}${clinic.branchName ? ` (${clinic.branchName})` : ''}`)
@@ -428,11 +435,7 @@ export default function NewOutboundPage() {
 
   const formatExp = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: '2-digit',
-      month: '2-digit',
-      day: '2-digit',
-    })
+    return gDate(dateStr)
   }
 
   // Fetch the exact serials FIFO will pull for the current lines (no mutation).
@@ -747,6 +750,7 @@ export default function NewOutboundPage() {
                             c.id === clinicId ? 'bg-[var(--color-gold)]/10 text-[var(--color-gold-dark)]' : 'text-[var(--color-charcoal)]'
                           }`}
                           onClick={() => {
+                            clinicChangedByUser.current = true
                             setClinicId(c.id)
                             setClinicSearch('')
                             setClinicDropdownOpen(false)

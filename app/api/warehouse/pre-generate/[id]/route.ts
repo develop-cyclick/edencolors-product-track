@@ -28,7 +28,7 @@ async function handleGET(request: NextRequest, context: HandlerContext) {
             take: 1,
           },
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { serial12: 'asc' }], // serial12 tiebreaker: batch items share createdAt
       },
       printLogs: {
         include: { user: { select: { id: true, displayName: true } } },

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { formatDate as gDate, formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface GRNDetail {
   id: number
@@ -36,6 +37,9 @@ interface GRNDetail {
       serial12: string
       status: string
       category: { id: number; nameTh: string }
+      productMaster: {
+        documentUnit: { nameTh: string; nameEn: string | null } | null
+      } | null
     }
   }>
 }
@@ -68,20 +72,12 @@ export default function GRNDocumentPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const formatDateShort = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
+    return gDate(dateStr)
   }
 
   const handlePrint = () => {
@@ -226,7 +222,7 @@ export default function GRNDocumentPage() {
                     <td className="border border-gray-300 px-3 py-2 text-center">{line.lot || '-'}</td>
                     <td className="border border-gray-300 px-3 py-2 text-center text-xs">{formatDateShort(line.expDate)}</td>
                     <td className="border border-gray-300 px-3 py-2 text-center">{line.quantity}</td>
-                    <td className="border border-gray-300 px-3 py-2 text-center">{line.unit?.nameTh || '-'}</td>
+                    <td className="border border-gray-300 px-3 py-2 text-center">{(locale === 'th' ? (line.productItem?.productMaster?.documentUnit?.nameTh ?? line.unit?.nameTh) : (line.productItem?.productMaster?.documentUnit?.nameEn ?? line.unit?.nameTh)) || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -282,7 +278,7 @@ export default function GRNDocumentPage() {
           {/* Footer */}
           <div className="mt-8 pt-4 border-t text-center text-xs text-gray-400">
             <p>เอกสารนี้ออกโดยระบบ Edencolors Inventory Management System</p>
-            <p>พิมพ์เมื่อ: {new Date().toLocaleString('th-TH')}</p>
+            <p>พิมพ์เมื่อ: {gDateTime(new Date())}</p>
           </div>
         </div>
       </div>

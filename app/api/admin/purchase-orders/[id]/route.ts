@@ -134,6 +134,18 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
 
     if (body.status !== undefined) updateData.status = body.status
     if (body.remarks !== undefined) updateData.remarks = body.remarks
+    // Delivery / clinic info (partial-safe: only overwrite fields actually provided,
+    // so a status-only PATCH never wipes delivery details)
+    if (body.clinicId !== undefined) updateData.clinicId = body.clinicId
+    if (body.deliveryNoteNo !== undefined) updateData.deliveryNoteNo = body.deliveryNoteNo
+    if (body.contractNo !== undefined) updateData.contractNo = body.contractNo
+    if (body.salesPersonName !== undefined) updateData.salesPersonName = body.salesPersonName
+    if (body.companyContact !== undefined) updateData.companyContact = body.companyContact
+    if (body.clinicAddress !== undefined) updateData.clinicAddress = body.clinicAddress
+    if (body.clinicPhone !== undefined) updateData.clinicPhone = body.clinicPhone
+    if (body.clinicEmail !== undefined) updateData.clinicEmail = body.clinicEmail
+    if (body.clinicContactName !== undefined) updateData.clinicContactName = body.clinicContactName
+    if (body.billingName !== undefined) updateData.billingName = body.billingName
 
     // Update lines if provided
     if (body.lines && Array.isArray(body.lines)) {

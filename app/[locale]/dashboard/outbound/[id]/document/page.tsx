@@ -18,6 +18,9 @@ interface OutboundLine {
     serial12: string;
     status: string;
     category: { id: number; nameTh: string; nameEn: string };
+    productMaster: {
+      documentUnit: { nameTh: string; nameEn: string | null } | null;
+    } | null;
   };
   unit: { id: number; nameTh: string; nameEn: string };
 }
@@ -394,6 +397,7 @@ export default function OutboundDocumentPage() {
                     lot: string | null;
                     expDate: string | null;
                     unit: { nameTh: string; nameEn: string } | null;
+                    documentUnit: { nameTh: string; nameEn: string | null } | null;
                     serials: string[];
                     totalQty: number;
                   }> = [];
@@ -413,6 +417,7 @@ export default function OutboundDocumentPage() {
                         lot: line.lot,
                         expDate: line.expDate,
                         unit: line.unit,
+                        documentUnit: line.productItem?.productMaster?.documentUnit ?? null,
                         serials: [line.productItem.serial12],
                         totalQty: line.quantity,
                       });
@@ -441,7 +446,9 @@ export default function OutboundDocumentPage() {
                         {group.totalQty}
                       </td>
                       <td className="border border-gray-800 px-1 py-1 text-center align-top">
-                        {group.unit?.nameTh || ""}
+                        {locale === "th"
+                          ? (group.documentUnit?.nameTh ?? group.unit?.nameTh ?? "")
+                          : (group.documentUnit?.nameEn ?? group.unit?.nameTh ?? "")}
                       </td>
                       <td className="border border-gray-800 px-1 py-1 align-top">
                         {outbound.remarks || ""}

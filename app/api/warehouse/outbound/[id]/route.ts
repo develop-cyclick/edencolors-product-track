@@ -4,6 +4,7 @@ import { withRoles } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
 import { sendPushToUser } from '@/lib/push-notification'
+import { logDocumentEvent } from '@/lib/document-history'
 
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
@@ -64,6 +65,11 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
           productItem: {
             include: {
               category: { select: { id: true, nameTh: true, nameEn: true } },
+              productMaster: {
+                select: {
+                  documentUnit: { select: { nameTh: true, nameEn: true } },
+                },
+              },
               qrTokens: {
                 where: { status: 'ACTIVE' },
                 select: { id: true, tokenVersion: true },
@@ -147,9 +153,11 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Update outbound status
-      const updated = await tx.outboundHeader.update({
-        where: { id: outboundId },
+      // Atomic PENDING→APPROVED: updateMany flips the row only while it is still PENDING, so a
+      // concurrent or double-clicked approval affects 0 rows and bails out here — preventing
+      // the PO shippedQuantity increment below from being counted twice.
+      const transition = await tx.outboundHeader.updateMany({
+        where: { id: outboundId, status: 'PENDING' },
         data: {
           status: 'APPROVED',
           approvedById: user.userId,
@@ -157,6 +165,13 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
           shippedAt: new Date(),
         },
       })
+      if (transition.count === 0) {
+        return null
+      }
+      const updated = await tx.outboundHeader.findUnique({ where: { id: outboundId } })
+      // Record the exact PO increments applied, so a later "reopen" can reverse them precisely
+      // (the increment is capped, so a naive re-count on reverse could over/under-decrement).
+      const poIncApplied: Record<number, number> = {}
 
       // Update all product items to SHIPPED
       for (const line of outbound.lines) {
@@ -198,12 +213,19 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
         for (const poLine of poLines) {
           const shipped = shippedByProductMaster[poLine.productMasterId] || 0
           if (shipped > 0) {
-            await tx.purchaseOrderLine.update({
-              where: { id: poLine.id },
-              data: {
-                shippedQuantity: { increment: shipped },
-              },
-            })
+            // Cap the increment at the PO line's remaining so shippedQuantity can never exceed
+            // the ordered quantity (over-shipping must not inflate the PO totals).
+            const remaining = Math.max(0, poLine.quantity - poLine.shippedQuantity)
+            const inc = Math.min(shipped, remaining)
+            if (inc > 0) {
+              await tx.purchaseOrderLine.update({
+                where: { id: poLine.id },
+                data: {
+                  shippedQuantity: { increment: inc },
+                },
+              })
+              poIncApplied[poLine.id] = inc
+            }
             // Deduct from what we're tracking so we don't double-count
             shippedByProductMaster[poLine.productMasterId] -= shipped
           }
@@ -230,8 +252,25 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
         })
       }
 
+      // Document-level APPROVE event + reversal snapshot (for the history timeline + reopen).
+      await logDocumentEvent(tx, {
+        documentType: 'OUTBOUND',
+        documentId: outboundId,
+        eventType: 'APPROVE',
+        userId: user.userId,
+        details: {
+          deliveryNoteNo: outbound.deliveryNoteNo,
+          itemIds: outbound.lines.map((l) => l.productItemId),
+          poIncrements: poIncApplied,
+        },
+      })
+
       return updated
     })
+
+    if (!result) {
+      return errorResponse('ใบส่งนี้ถูกอนุมัติหรือดำเนินการไปแล้ว', 409)
+    }
 
     // Notify the warehouse user who created the outbound
     if (outbound.createdById) {
@@ -244,6 +283,80 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     }
 
     return successResponse(result)
+  }
+
+  // Handle reopen (un-approve → back to PENDING for full editing, then re-approve)
+  if (body.action === 'reopen') {
+    if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'WAREHOUSE') {
+      return errors.forbidden()
+    }
+    if (outbound.status !== 'APPROVED') {
+      return errorResponse('ดึงกลับมาแก้ได้เฉพาะใบที่อนุมัติแล้ว', 400)
+    }
+    // Guard: block if any item moved beyond SHIPPED (e.g. a customer already activated it).
+    const moved = outbound.lines.filter((l) => l.productItem && l.productItem.status !== 'SHIPPED')
+    if (moved.length > 0) {
+      const serials = moved.map((l) => l.productItem?.serial12).filter(Boolean).join(', ')
+      return errorResponse(
+        `ไม่สามารถดึงกลับมาแก้ได้: มีสินค้า ${moved.length} รายการที่ถูกดำเนินการต่อไปแล้ว (ไม่ใช่สถานะ "ส่งออกแล้ว") — ${serials}`,
+        409
+      )
+    }
+
+    // Read the latest APPROVE snapshot to reverse the PO increments by the exact amounts applied.
+    const lastApprove = await prisma.eventLog.findFirst({
+      where: { documentType: 'OUTBOUND', documentId: outboundId, eventType: 'APPROVE' },
+      orderBy: { createdAt: 'desc' },
+    })
+    const snap = (lastApprove?.details as { poIncrements?: Record<string, number> } | null) || {}
+    const poIncrements = snap.poIncrements || {}
+
+    const result = await prisma.$transaction(async (tx) => {
+      const transition = await tx.outboundHeader.updateMany({
+        where: { id: outboundId, status: 'APPROVED' },
+        data: { status: 'PENDING', approvedById: null, approvedAt: null, shippedAt: null },
+      })
+      if (transition.count === 0) return null
+
+      // Items SHIPPED → PENDING_OUT (keep assignedClinic; the doc still targets that clinic)
+      await tx.productItem.updateMany({
+        where: { id: { in: outbound.lines.map((l) => l.productItemId) }, status: 'SHIPPED' },
+        data: { status: 'PENDING_OUT' },
+      })
+
+      // Reverse PO shippedQuantity by the exact recorded increments, then recompute PO status.
+      if (outbound.purchaseOrderId && Object.keys(poIncrements).length > 0) {
+        for (const [poLineId, inc] of Object.entries(poIncrements)) {
+          await tx.purchaseOrderLine.update({
+            where: { id: Number(poLineId) },
+            data: { shippedQuantity: { decrement: inc } },
+          })
+        }
+        const poLines = await tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: outbound.purchaseOrderId } })
+        const allShipped = poLines.every((l) => l.shippedQuantity >= l.quantity)
+        const someShipped = poLines.some((l) => l.shippedQuantity > 0)
+        const newStatus: 'CONFIRMED' | 'PARTIAL' | 'COMPLETED' = allShipped ? 'COMPLETED' : someShipped ? 'PARTIAL' : 'CONFIRMED'
+        await tx.purchaseOrder.update({ where: { id: outbound.purchaseOrderId }, data: { status: newStatus } })
+      }
+
+      await logDocumentEvent(tx, {
+        documentType: 'OUTBOUND',
+        documentId: outboundId,
+        eventType: 'REOPEN',
+        userId: user.userId,
+        details: {
+          deliveryNoteNo: outbound.deliveryNoteNo,
+          reason: typeof body.reason === 'string' ? body.reason.trim() : '',
+        },
+      })
+
+      return await tx.outboundHeader.findUnique({ where: { id: outboundId } })
+    })
+
+    if (!result) {
+      return errorResponse('ใบส่งนี้ถูกดำเนินการไปแล้ว', 409)
+    }
+    return successResponse({ id: result.id, status: result.status, message: 'ดึงกลับมาแก้ไขแล้ว (รออนุมัติใหม่)' })
   }
 
   // Handle rejection
@@ -346,6 +459,90 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
     })
 
     return successResponse(result)
+  }
+
+  // Edit document-LABEL fields after creation/approval (e.g. correct the tax-invoice / IV number
+  // or the ship-to text). Deliberately does NOT touch line items, stock, the PO linkage, the
+  // recipient clinic (clinicId) or the source warehouse — only text printed on the document.
+  if (body.action === 'edit-document') {
+    if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'WAREHOUSE') {
+      return errors.forbidden()
+    }
+    if (!['DRAFT', 'PENDING', 'APPROVED'].includes(outbound.status)) {
+      return errorResponse('แก้ข้อมูลเอกสารได้เฉพาะใบที่ยังไม่ถูกปฏิเสธหรือยกเลิก')
+    }
+
+    const data: Record<string, unknown> = {}
+    const setText = (key: string, raw: unknown) => {
+      data[key] = typeof raw === 'string' && raw.trim() ? raw.trim() : null
+    }
+
+    if (body.deliveryNoteNo !== undefined) {
+      const v = String(body.deliveryNoteNo).trim()
+      if (!v) {
+        return errorResponse('เลขที่ใบกำกับภาษีห้ามว่าง')
+      }
+      // deliveryNoteNo is @unique — make sure the new value isn't used by another outbound.
+      const dup = await prisma.outboundHeader.findFirst({
+        where: { deliveryNoteNo: v, NOT: { id: outboundId } },
+        select: { id: true },
+      })
+      if (dup) {
+        return errorResponse(`เลขที่ใบกำกับภาษี "${v}" ซ้ำกับใบอื่น`, 409)
+      }
+      data.deliveryNoteNo = v
+    }
+    if (body.contractNo !== undefined) setText('contractNo', body.contractNo)
+    if (body.salesPersonName !== undefined) setText('salesPersonName', body.salesPersonName)
+    if (body.companyContact !== undefined) setText('companyContact', body.companyContact)
+    if (body.clinicAddress !== undefined) setText('clinicAddress', body.clinicAddress)
+    if (body.clinicPhone !== undefined) setText('clinicPhone', body.clinicPhone)
+    if (body.clinicEmail !== undefined) setText('clinicEmail', body.clinicEmail)
+    if (body.clinicContactName !== undefined) setText('clinicContactName', body.clinicContactName)
+    if (body.shippingTemperature !== undefined) setText('shippingTemperature', body.shippingTemperature)
+    if (body.remarks !== undefined) setText('remarks', body.remarks)
+    if (body.shippingMethodId !== undefined && body.shippingMethodId) {
+      data.shippingMethodId = Number(body.shippingMethodId)
+    }
+
+    if (Object.keys(data).length === 0) {
+      return errorResponse('ไม่มีข้อมูลที่จะแก้ไข')
+    }
+
+    // Build a before→after diff for the audit trail (JSON-safe string values).
+    const norm = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+    const changes: Record<string, { from: string | null; to: string | null }> = {}
+    for (const key of Object.keys(data)) {
+      const before = norm((outbound as unknown as Record<string, unknown>)[key])
+      const after = norm(data[key])
+      if (before !== after) {
+        changes[key] = { from: before, to: after }
+      }
+    }
+
+    const updatedDoc = await prisma.$transaction(async (tx) => {
+      const u = await tx.outboundHeader.update({ where: { id: outboundId }, data })
+      await tx.eventLog.create({
+        data: {
+          eventType: 'OUTBOUND_EDIT',
+          productItemId: null,
+          userId: user.userId,
+          details: {
+            deliveryNoteNo: u.deliveryNoteNo,
+            outboundStatus: String(outbound.status),
+            editedBy: user.displayName,
+            changes,
+          },
+        },
+      })
+      return u
+    })
+
+    return successResponse({
+      id: updatedDoc.id,
+      deliveryNoteNo: updatedDoc.deliveryNoteNo,
+      message: 'อัปเดตข้อมูลเอกสารแล้ว',
+    })
   }
 
   // Update header fields (only for DRAFT status)

@@ -4,6 +4,7 @@ import { errors } from '@/lib/api-response'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { generateExcelBuffer } from '@/lib/excel-export'
+import { formatDate as gDate } from '@/lib/format-date'
 
 async function handlePOST(request: NextRequest) {
   try {
@@ -100,7 +101,7 @@ async function handlePOST(request: NextRequest) {
           r.customer_province || '-',
           r.income || '-',
           r.discovery_channel || '-',
-          new Date(r.created_at).toLocaleDateString('th-TH'),
+          gDate(r.created_at),
           r.days_to_activation ? Math.round(parseFloat(r.days_to_activation) * 10) / 10 : '-',
         ]),
       },

@@ -49,7 +49,15 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     const { token, serial, customerName, age, gender, province, phone, income, discoveryChannel, consent, quantity: rawQty } = body
-    const quantity = Math.max(1, Math.floor(rawQty || 1))
+    // Coerce + validate: JSON is untyped, so a non-numeric quantity ("abc") would become NaN,
+    // slip past `quantity > remaining` and later 500 the request. Reject it up front.
+    const quantity = Math.floor(Number(rawQty ?? 1))
+    if (!Number.isFinite(quantity) || quantity < 1) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid quantity', code: 'INVALID_QUANTITY' },
+        { status: 400 }
+      )
+    }
 
     // Either token or serial must be provided
     if (!token && !serial) {
@@ -226,8 +234,21 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Check product status - must be SHIPPED or ACTIVATED (for PACK) to activate
-    const allowedStatuses = activationType === 'PACK' ? ['SHIPPED', 'ACTIVATED'] : ['SHIPPED']
+    // Pre-generated items not yet linked to a real product must look identical to a
+    // non-existent serial (mirror verify), so activation never reveals the serial exists.
+    if (productItem.status === 'PENDING_LINK') {
+      return NextResponse.json(
+        { success: false, error: 'Product not found', code: 'NOT_FOUND' },
+        { status: 404 }
+      )
+    }
+
+    // Check product status - must be SHIPPED/BORROWED/REQUISITIONED (or ACTIVATED for PACK) to activate.
+    // BORROWED (item lent out) and REQUISITIONED (withdrawn for use, e.g. marketing) can be activated
+    // because they have effectively left the warehouse and may be used/given to an end user.
+    const allowedStatuses = activationType === 'PACK'
+      ? ['SHIPPED', 'ACTIVATED', 'BORROWED', 'REQUISITIONED']
+      : ['SHIPPED', 'BORROWED', 'REQUISITIONED']
     if (!allowedStatuses.includes(productItem.status)) {
       let errorMessage = 'This product cannot be activated'
 
@@ -320,6 +341,15 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
+    // Two near-simultaneous activations of the same item both read the same count and try to
+    // insert the same activationNumber → unique-constraint violation (P2002). Return a graceful
+    // "already activated" instead of a 500.
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2002') {
+      return NextResponse.json(
+        { success: false, error: 'This product was just activated. Please refresh and try again.', code: 'ALREADY_ACTIVATED' },
+        { status: 409 }
+      )
+    }
     console.error('Activation error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

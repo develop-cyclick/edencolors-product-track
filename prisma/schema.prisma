@@ -30,6 +30,7 @@ enum ProductStatus {
   RETURNED      // คืนสินค้า
   DAMAGED       // เสียหาย รอซ่อม
   BORROWED      // ยืมสินค้า
+  REQUISITIONED // เบิกไปใช้ (ออกจากคลังถาวร ไม่ผ่าน PO/ใบส่ง เช่น marketing เบิกให้ดาราใช้)
   SCRAPPED      // ทิ้ง/ทำลายแล้ว
 }
 
@@ -88,6 +89,7 @@ model ProductMaster {
   modelSize       String?        @map("model_size")
   description     String?        @db.Text
   defaultUnitId   Int?           @map("default_unit_id")
+  documentUnitId  Int?           @map("document_unit_id") // หน่วยที่แสดงบนเอกสาร (ถ้าไม่ตั้ง = ใช้หน่วยฐาน)
   activationType  ActivationType @default(SINGLE) @map("activation_type")
   maxActivations  Int            @default(1) @map("max_activations")
   isActive        Boolean        @default(true) @map("is_active")
@@ -95,7 +97,8 @@ model ProductMaster {
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
   category            ProductCategory     @relation(fields: [categoryId], references: [id])
-  defaultUnit         Unit?               @relation(fields: [defaultUnitId], references: [id])
+  defaultUnit         Unit?               @relation("ProductDefaultUnit", fields: [defaultUnitId], references: [id])
+  documentUnit        Unit?               @relation("ProductDocumentUnit", fields: [documentUnitId], references: [id])
   productItems        ProductItem[]
   purchaseOrderLines  PurchaseOrderLine[]
   preGeneratedBatches PreGeneratedBatch[]
@@ -132,7 +135,8 @@ model Unit {
 
   grnLines              GRNLine[]
   outboundLines         OutboundLine[]
-  productMastersDefault ProductMaster[]
+  productMastersDefault  ProductMaster[] @relation("ProductDefaultUnit")
+  productMastersDocument ProductMaster[] @relation("ProductDocumentUnit")
   borrowLines           BorrowTransactionLine[]
   grnPlanLines          GRNPlanLine[]
 
@@ -497,8 +501,12 @@ model ScanLog {
 
 model EventLog {
   id            Int      @id @default(autoincrement())
-  eventType     String   @map("event_type") // INBOUND, OUTBOUND, APPROVE, REJECT, REPRINT, RETURN, ACTIVATE
+  eventType     String   @map("event_type") // INBOUND, OUTBOUND, APPROVE, REJECT, REOPEN, REPRINT, RETURN, ACTIVATE
   productItemId Int?     @map("product_item_id")
+  // Document-level link (for per-document history timeline, e.g. OUTBOUND/GRN/BORROW/...).
+  // Nullable so existing item-only events still work.
+  documentType  String?  @map("document_type")
+  documentId    Int?     @map("document_id")
   userId        Int?     @map("user_id")
   details       Json?
   createdAt     DateTime @default(now()) @map("created_at")
@@ -508,6 +516,7 @@ model EventLog {
 
   @@index([eventType])
   @@index([createdAt])
+  @@index([documentType, documentId])
   @@map("event_logs")
 }
 
@@ -651,6 +660,8 @@ model BorrowTransaction {
   contactPhone      String?       @map("contact_phone")
   reason            String?
   remarks           String?
+  requisitionType      String?    @map("requisition_type")       // 'DEMON' | 'CLAIM' | 'MARKETING' | 'OTHER'
+  requisitionTypeOther String?    @map("requisition_type_other") // free text when requisitionType = 'OTHER'
   createdById       Int           @map("created_by_id")
   approvedById      Int?          @map("approved_by_id")
   approvedAt        DateTime?     @map("approved_at")

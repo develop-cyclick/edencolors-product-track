@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { formatDate as gDate } from '@/lib/format-date';
 import ActivationRateBadge from '@/components/analytics/activation-rate-badge';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -389,16 +390,12 @@ export default function ClinicDetailPage() {
                   </td>
                   <td className="py-3 px-4 text-center text-sm text-[#666666]">
                     {product.shippedDate
-                      ? new Date(product.shippedDate).toLocaleDateString(
-                          locale === 'th' ? 'th-TH' : 'en-US'
-                        )
+                      ? gDate(product.shippedDate)
                       : '-'}
                   </td>
                   <td className="py-3 px-4 text-center text-sm text-[#666666]">
                     {product.activatedDate
-                      ? new Date(product.activatedDate).toLocaleDateString(
-                          locale === 'th' ? 'th-TH' : 'en-US'
-                        )
+                      ? gDate(product.activatedDate)
                       : '-'}
                   </td>
                   <td className="py-3 px-4 text-right text-sm">

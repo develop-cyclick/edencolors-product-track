@@ -3,6 +3,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import ThaiDateInput from '@/components/thai-date-input'
+import { formatDateTimeSec as gDateTimeSec } from '@/lib/format-date'
 
 interface EventLog {
   id: number
@@ -152,14 +153,7 @@ export default function EventLogsPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
+    return gDateTimeSec(dateStr)
   }
 
   const formatDetails = (details: Record<string, unknown> | null) => {

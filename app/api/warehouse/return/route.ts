@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma'
 import { withWarehouse } from '@/lib/api-middleware'
 import { successResponse, errorResponse } from '@/lib/api-response'
 import type { JWTPayload } from '@/lib/auth'
+import { BorrowStatus } from '@prisma/client'
+import { generateBorrowNumber } from '@/lib/serial-generator'
 
 type HandlerContext = { user: JWTPayload }
 
@@ -72,61 +74,54 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     return errorResponse('No products available for return (must be SHIPPED or ACTIVATED)')
   }
 
-  const now = new Date()
+  // Create a PENDING approval request (BorrowTransaction, type PRODUCT_RETURN).
+  // Items stay SHIPPED/ACTIVATED until a manager approves; approval sets them to RETURNED.
+  const transactionNo = await generateBorrowNumber()
+  const defaultUnit = await prisma.unit.findFirst({ where: { nameTh: 'ชิ้น' } })
+  const defaultUnitId = defaultUnit?.id || 1
+  const borrowerName =
+    returnableItems.find((p) => p.assignedClinic?.name)?.assignedClinic?.name || 'รับคืนสินค้า'
 
   try {
-    // Transaction: update status and log events for all items
-    const results = await prisma.$transaction(async (tx) => {
-      const updated = []
+    const txn = await prisma.$transaction(async (tx) => {
+      const created = await tx.borrowTransaction.create({
+        data: {
+          transactionNo,
+          type: 'PRODUCT_RETURN',
+          status: BorrowStatus.PENDING,
+          borrowerName,
+          reason: reason?.trim() || null,
+          remarks: notes?.trim() || null,
+          createdById: user.userId,
+        },
+      })
 
       for (const productItem of returnableItems) {
-        // Update product status
-        const result = await tx.productItem.update({
-          where: { id: productItem.id },
-          data: { status: 'RETURNED' },
-        })
-
-        // Log event
-        await tx.eventLog.create({
+        await tx.borrowTransactionLine.create({
           data: {
-            eventType: 'RETURN',
+            borrowTransactionId: created.id,
             productItemId: productItem.id,
-            userId: user.userId,
-            details: {
-              previousStatus: productItem.status,
-              wasActivated: productItem.activations.length > 0,
-              clinicId: productItem.assignedClinicId,
-              clinicName: productItem.assignedClinic?.name,
-              lot: productItem.lot || null,
-              reason,
-              notes: notes || null,
-              returnedAt: now.toISOString(),
-              bulkReturn: returnableItems.length > 1,
-            },
+            sku: productItem.sku,
+            itemName: productItem.name,
+            modelSize: productItem.modelSize,
+            quantity: 1,
+            unitId: defaultUnitId,
+            lot: productItem.lot,
+            expDate: productItem.expDate,
           },
-        })
-
-        updated.push({
-          productItemId: result.id,
-          serial12: result.serial12,
-          previousStatus: productItem.status,
-          newStatus: result.status,
-          wasActivated: productItem.activations.length > 0,
         })
       }
 
-      return updated
+      return created
     })
 
     const skippedCount = productItems.length - returnableItems.length
 
     return successResponse({
-      returnedCount: results.length,
+      transactionNo: txn.transactionNo,
+      returnedCount: returnableItems.length, // items included in the pending request (UI compat)
       skippedCount,
-      items: results,
-      message: results.length === 1
-        ? 'Product returned successfully'
-        : `${results.length} products returned successfully${skippedCount > 0 ? ` (${skippedCount} skipped - not returnable)` : ''}`,
+      message: `Return request created (pending approval): ${txn.transactionNo}${skippedCount > 0 ? ` (${skippedCount} skipped - not returnable)` : ''}`,
     })
   } catch (error) {
     console.error('Return error:', error)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withWarehouse } from '@/lib/api-middleware'
 import { generateExcelBuffer } from '@/lib/excel-export'
+import { formatDate as gDate } from '@/lib/format-date'
 
 type Params = { id: string }
 
@@ -86,9 +87,7 @@ export const GET = withWarehouse<Promise<Params>>(async (request: NextRequest, {
 
     const formatDate = (d: Date | string | null) => {
       if (!d) return '-'
-      return new Date(d).toLocaleDateString(th ? 'th-TH' : 'en-US', {
-        year: 'numeric', month: 'short', day: 'numeric',
-      })
+      return gDate(d)
     }
 
     // Sheet 1: Clinic Info + Stats

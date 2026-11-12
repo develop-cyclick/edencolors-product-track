@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate } from '@/lib/format-date'
 import { buildLabelBlob, downloadBlob } from '@/lib/client/label-print'
+import DocumentHistoryTimeline from '@/components/DocumentHistoryTimeline'
 
 interface GRNDetail {
   id: number
@@ -90,9 +92,15 @@ export default function GRNDetailPage() {
   const [damageReason, setDamageReason] = useState('')
   const [damageNote, setDamageNote] = useState('')
   const [damageLoading, setDamageLoading] = useState(false)
+  const [showReopenModal, setShowReopenModal] = useState(false)
+  const [reopenReason, setReopenReason] = useState('')
+  const [reopenLoading, setReopenLoading] = useState(false)
+  const [historyRefresh, setHistoryRefresh] = useState(0)
 
   // Check if user can approve (ADMIN or MANAGER only)
   const canApprove = userRole === 'ADMIN' || userRole === 'MANAGER'
+  // Reopen an approved GRN is also allowed for warehouse staff (not just approvers)
+  const canEditApproved = canApprove || userRole === 'WAREHOUSE'
 
   useEffect(() => {
     fetchGRN()
@@ -122,6 +130,32 @@ export default function GRNDetailPage() {
       console.error('Failed to fetch GRN:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleReopen = async () => {
+    setReopenLoading(true)
+    try {
+      const res = await fetch(`/api/warehouse/grn/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reopen', reason: reopenReason.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setShowReopenModal(false)
+        setReopenReason('')
+        setHistoryRefresh((n) => n + 1)
+        fetchGRN()
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ดึงกลับมาแก้ไขแล้ว (รออนุมัติใหม่)' : 'Reopened for editing (pending re-approval)', variant: 'success', icon: 'success' })
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Failed to reopen', variant: 'error', icon: 'error' })
+      }
+    } catch (error) {
+      console.error('Failed to reopen:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred', variant: 'error', icon: 'error' })
+    } finally {
+      setReopenLoading(false)
     }
   }
 
@@ -248,16 +282,15 @@ export default function GRNDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'ในคลัง', labelEn: 'In Stock' },
+      REQUISITIONED: { bg: 'bg-teal-100 text-teal-700', dot: 'bg-teal-500', label: 'เบิกใช้', labelEn: 'Requisitioned' },
+      BORROWED: { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500', label: 'ยืมอยู่', labelEn: 'Borrowed' },
+      PENDING_LINK: { bg: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500', label: 'รอเชื่อมโยง', labelEn: 'Pending Link' },
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending Out' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
@@ -360,6 +393,18 @@ export default function GRNDetailPage() {
               </svg>
               {locale === 'th' ? 'แก้ไข' : 'Edit'}
             </Link>
+          )}
+          {/* Reopen Button - pull an approved GRN back to pending for editing */}
+          {grn.approvedAt && canEditApproved && (
+            <button
+              onClick={() => setShowReopenModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 border-2 border-amber-500 text-amber-600 rounded-xl font-medium hover:bg-amber-50 transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4" />
+              </svg>
+              {locale === 'th' ? 'ดึงกลับมาแก้ไข' : 'Reopen & Edit'}
+            </button>
           )}
           {/* Receive More Button - Only when approved + partial (Reconcile) */}
           {grn.approvedAt && grn.receivingStatus === 'PARTIAL' && (
@@ -672,6 +717,17 @@ export default function GRNDetailPage() {
         </div>
       )}
 
+      {/* Approval / edit history */}
+      <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6">
+        <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {locale === 'th' ? 'ประวัติการอนุมัติ/แก้ไข' : 'Approval / Edit History'}
+        </h2>
+        <DocumentHistoryTimeline documentType="GRN" documentId={id} locale={locale} refreshKey={historyRefresh} />
+      </div>
+
       {/* Receiving Timeline - only show if sessions exist */}
       {grn.receivingSessions && grn.receivingSessions.length > 0 && (
         <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6">
@@ -858,6 +914,36 @@ export default function GRNDetailPage() {
           </table>
         </div>
       </div>
+
+      {/* Reopen Modal */}
+      {showReopenModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-1">{locale === 'th' ? 'ดึงกลับมาแก้ไข' : 'Reopen for Editing'}</h3>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
+              {locale === 'th'
+                ? 'ใบรับสินค้าจะกลับไปสถานะ "รออนุมัติ" เพื่อแก้ไข แล้วอนุมัติใหม่ (สต็อกที่รับแล้วไม่ถูกแตะ)'
+                : 'The GRN returns to PENDING for editing, then re-approve. Received stock is not touched.'}
+            </p>
+            <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'เหตุผล (ไม่บังคับ)' : 'Reason (optional)'}</label>
+            <textarea
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+              placeholder={locale === 'th' ? 'เช่น แก้ชื่อผู้ส่ง/เลขเอกสารผิด' : 'e.g. wrong supplier / doc no.'}
+            />
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowReopenModal(false)} disabled={reopenLoading} className="px-5 py-2.5 border border-[var(--color-beige)] rounded-lg font-medium hover:bg-[var(--color-off-white)] disabled:opacity-50">
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button onClick={handleReopen} disabled={reopenLoading} className="px-5 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50">
+                {reopenLoading ? (locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...') : (locale === 'th' ? 'ยืนยันดึงกลับ' : 'Confirm Reopen')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Damage Report Modal */}
       {showDamageModal && damageItem && (

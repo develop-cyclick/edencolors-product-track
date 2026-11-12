@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDateTime as gDateTime } from '@/lib/format-date'
 import { buildLabelBlob, downloadBlob } from '@/lib/client/label-print'
+import DocumentHistoryTimeline from '@/components/DocumentHistoryTimeline'
 
 interface OutboundLine {
   id: number
@@ -71,6 +73,7 @@ interface OutboundHeader {
   clinicEmail: string | null
   clinicContactName: string | null
   remarks: string | null
+  shippingTemperature: string | null
   purchaseOrder: POSummary | null
   warehouse: { id: number; name: string }
   shippingMethod: { id: number; nameTh: string; nameEn: string } | null
@@ -93,6 +96,20 @@ export default function OutboundDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  // "Reopen" (pull an approved doc back to pending for editing) + history timeline refresh key
+  const [showReopenModal, setShowReopenModal] = useState(false)
+  const [reopenReason, setReopenReason] = useState('')
+  const [reopenLoading, setReopenLoading] = useState(false)
+  const [historyRefresh, setHistoryRefresh] = useState(0)
+  // "Edit document info" (correct the IV number / ship-to text after approval)
+  const [showEditDocModal, setShowEditDocModal] = useState(false)
+  const [editDocLoading, setEditDocLoading] = useState(false)
+  const [shippingMethods, setShippingMethods] = useState<{ id: number; nameTh: string; nameEn: string }[]>([])
+  const [editDoc, setEditDoc] = useState({
+    deliveryNoteNo: '', contractNo: '', salesPersonName: '', companyContact: '',
+    clinicAddress: '', clinicPhone: '', clinicEmail: '', clinicContactName: '',
+    shippingMethodId: 0, shippingTemperature: '', remarks: '',
+  })
   const [userRole, setUserRole] = useState<string | null>(null)
   const [printingItemId, setPrintingItemId] = useState<number | null>(null)
 
@@ -150,6 +167,8 @@ export default function OutboundDetailPage() {
 
   // Check if user can approve/reject (ADMIN or MANAGER only)
   const canApprove = userRole === 'ADMIN' || userRole === 'MANAGER'
+  // Reopen / edit-an-approved-document is also allowed for warehouse staff (not just approvers)
+  const canEditApproved = canApprove || userRole === 'WAREHOUSE'
 
   const handleApprove = async () => {
     const confirmed = await confirm({
@@ -207,6 +226,85 @@ export default function OutboundDetailPage() {
       console.error('Failed to reject:', error)
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const openEditDoc = async () => {
+    if (!outbound) return
+    setEditDoc({
+      deliveryNoteNo: outbound.deliveryNoteNo || '',
+      contractNo: outbound.contractNo || '',
+      salesPersonName: outbound.salesPersonName || '',
+      companyContact: outbound.companyContact || '',
+      clinicAddress: outbound.clinicAddress || '',
+      clinicPhone: outbound.clinicPhone || '',
+      clinicEmail: outbound.clinicEmail || '',
+      clinicContactName: outbound.clinicContactName || '',
+      shippingMethodId: outbound.shippingMethod?.id || 0,
+      shippingTemperature: outbound.shippingTemperature || '',
+      remarks: outbound.remarks || '',
+    })
+    try {
+      const res = await fetch('/api/admin/masters/shipping-methods')
+      const data = await res.json()
+      setShippingMethods(data.success ? (data.data?.shippingMethods || data.data || []) : [])
+    } catch {
+      setShippingMethods([])
+    }
+    setShowEditDocModal(true)
+  }
+
+  const handleEditDocSubmit = async () => {
+    if (!editDoc.deliveryNoteNo.trim()) {
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เลขที่ใบกำกับภาษีห้ามว่าง' : 'Tax invoice no. is required', variant: 'warning', icon: 'warning' })
+      return
+    }
+    setEditDocLoading(true)
+    try {
+      const res = await fetch(`/api/warehouse/outbound/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'edit-document', ...editDoc }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setShowEditDocModal(false)
+        fetchOutbound()
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'อัปเดตข้อมูลเอกสารแล้ว' : 'Document info updated', variant: 'success', icon: 'success' })
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Failed to update', variant: 'error', icon: 'error' })
+      }
+    } catch (error) {
+      console.error('Failed to edit document:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred', variant: 'error', icon: 'error' })
+    } finally {
+      setEditDocLoading(false)
+    }
+  }
+
+  const handleReopen = async () => {
+    setReopenLoading(true)
+    try {
+      const res = await fetch(`/api/warehouse/outbound/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reopen', reason: reopenReason.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setShowReopenModal(false)
+        setReopenReason('')
+        setHistoryRefresh((n) => n + 1)
+        fetchOutbound()
+        await alert({ title: locale === 'th' ? 'สำเร็จ' : 'Success', message: locale === 'th' ? 'ดึงกลับมาแก้ไขแล้ว (รออนุมัติใหม่)' : 'Reopened for editing (pending re-approval)', variant: 'success', icon: 'success' })
+      } else {
+        await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: data.error || 'Failed to reopen', variant: 'error', icon: 'error' })
+      }
+    } catch (error) {
+      console.error('Failed to reopen:', error)
+      await alert({ title: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'Error', message: locale === 'th' ? 'เกิดข้อผิดพลาด' : 'An error occurred', variant: 'error', icon: 'error' })
+    } finally {
+      setReopenLoading(false)
     }
   }
 
@@ -302,13 +400,7 @@ export default function OutboundDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return gDateTime(dateStr)
   }
 
   const getStatusBadge = (status: string) => {
@@ -330,6 +422,9 @@ export default function OutboundDetailPage() {
   const getItemStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'ในคลัง', labelEn: 'In Stock' },
+      REQUISITIONED: { bg: 'bg-teal-100 text-teal-700', dot: 'bg-teal-500', label: 'เบิกใช้', labelEn: 'Requisitioned' },
+      BORROWED: { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500', label: 'ยืมอยู่', labelEn: 'Borrowed' },
+      PENDING_LINK: { bg: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500', label: 'รอเชื่อมโยง', labelEn: 'Pending Link' },
       PENDING_OUT: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'รอส่งออก', labelEn: 'Pending Out' },
       SHIPPED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },
       ACTIVATED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-gold)]', dot: 'bg-[var(--color-gold)]', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
@@ -396,7 +491,7 @@ export default function OutboundDetailPage() {
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-display text-2xl font-bold text-[var(--color-charcoal)]">
-                {outbound.outboundNo}
+                {outbound.deliveryNoteNo}
               </h1>
               {getStatusBadge(outbound.status)}
               {outbound.purchaseOrder && (
@@ -444,6 +539,30 @@ export default function OutboundDetailPage() {
               </svg>
               {locale === 'th' ? 'สร้างใบส่งเพิ่ม' : 'Ship More'}
             </Link>
+          )}
+          {/* Edit Document Info - correct the IV number / ship-to text after approval (manager/admin) */}
+          {outbound.status === 'APPROVED' && canEditApproved && (
+            <button
+              onClick={openEditDoc}
+              className="flex items-center gap-2 px-4 py-2.5 border-2 border-[var(--color-gold)] text-[var(--color-gold)] rounded-xl font-medium hover:bg-[var(--color-gold)]/10 transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              {locale === 'th' ? 'แก้ข้อมูลเอกสาร' : 'Edit Document Info'}
+            </button>
+          )}
+          {/* Reopen (pull an approved outbound back to PENDING for full editing) */}
+          {outbound.status === 'APPROVED' && canEditApproved && (
+            <button
+              onClick={() => setShowReopenModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 border-2 border-amber-500 text-amber-600 rounded-xl font-medium hover:bg-amber-50 transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4" />
+              </svg>
+              {locale === 'th' ? 'ดึงกลับมาแก้ไข' : 'Reopen & Edit'}
+            </button>
           )}
           {/* View Document Button */}
           <Link
@@ -526,7 +645,7 @@ export default function OutboundDetailPage() {
           <dl className="space-y-3">
             <div className="flex justify-between">
               <dt className="text-[var(--color-foreground-muted)]">{locale === 'th' ? 'เลขที่ส่งออก' : 'Outbound No'}</dt>
-              <dd className="font-medium text-[var(--color-charcoal)]">{outbound.outboundNo}</dd>
+              <dd className="font-medium text-[var(--color-charcoal)]">{outbound.deliveryNoteNo}</dd>
             </div>
             {outbound.deliveryNoteNo && (
               <div className="flex justify-between">
@@ -685,6 +804,17 @@ export default function OutboundDetailPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Approval / edit history */}
+      <div className="bg-white rounded-2xl shadow-[var(--shadow-md)] p-6">
+        <h2 className="text-lg font-semibold text-[var(--color-charcoal)] mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-[var(--color-gold)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {locale === 'th' ? 'ประวัติการอนุมัติ/แก้ไข' : 'Approval / Edit History'}
+        </h2>
+        <DocumentHistoryTimeline documentType="OUTBOUND" documentId={id} locale={locale} refreshKey={historyRefresh} />
       </div>
 
       {/* PO Shipping Plan Summary */}
@@ -942,6 +1072,109 @@ export default function OutboundDetailPage() {
           </table>
         </div>
       </div>
+
+      {/* Edit Document Info Modal */}
+      {showEditDocModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-1">{locale === 'th' ? 'แก้ข้อมูลเอกสาร' : 'Edit Document Info'}</h3>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
+              {locale === 'th'
+                ? 'แก้เฉพาะข้อความบนเอกสาร — ไม่กระทบรายการสินค้า/สต็อก/คลินิกผู้รับ/PO'
+                : 'Edits document text only — does not affect items, stock, recipient clinic or PO'}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'เลขที่ใบกำกับภาษี' : 'Tax Invoice No.'} <span className="text-red-500">*</span></label>
+                <input type="text" value={editDoc.deliveryNoteNo} onChange={(e) => setEditDoc({ ...editDoc, deliveryNoteNo: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'เลขที่สัญญา' : 'Contract No.'}</label>
+                <input type="text" value={editDoc.contractNo} onChange={(e) => setEditDoc({ ...editDoc, contractNo: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'ชื่อผู้ขาย/เซลล์' : 'Salesperson'}</label>
+                <input type="text" value={editDoc.salesPersonName} onChange={(e) => setEditDoc({ ...editDoc, salesPersonName: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'บริษัท/ผู้ติดต่อ' : 'Company / Contact'}</label>
+                <input type="text" value={editDoc.companyContact} onChange={(e) => setEditDoc({ ...editDoc, companyContact: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'ที่อยู่จัดส่ง' : 'Ship-to Address'}</label>
+                <textarea rows={2} value={editDoc.clinicAddress} onChange={(e) => setEditDoc({ ...editDoc, clinicAddress: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'ชื่อผู้ติดต่อ' : 'Contact Name'}</label>
+                <input type="text" value={editDoc.clinicContactName} onChange={(e) => setEditDoc({ ...editDoc, clinicContactName: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'เบอร์โทร' : 'Phone'}</label>
+                <input type="text" value={editDoc.clinicPhone} onChange={(e) => setEditDoc({ ...editDoc, clinicPhone: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'อีเมล' : 'Email'}</label>
+                <input type="text" value={editDoc.clinicEmail} onChange={(e) => setEditDoc({ ...editDoc, clinicEmail: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'วิธีจัดส่ง' : 'Shipping Method'}</label>
+                <select value={editDoc.shippingMethodId} onChange={(e) => setEditDoc({ ...editDoc, shippingMethodId: Number(e.target.value) })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]">
+                  <option value={0}>{locale === 'th' ? '— ไม่เปลี่ยน —' : '— Keep current —'}</option>
+                  {shippingMethods.map((m) => (
+                    <option key={m.id} value={m.id}>{locale === 'th' ? m.nameTh : m.nameEn}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'อุณหภูมิจัดส่ง' : 'Shipping Temp.'}</label>
+                <input type="text" value={editDoc.shippingTemperature} onChange={(e) => setEditDoc({ ...editDoc, shippingTemperature: e.target.value })} placeholder={locale === 'th' ? 'เช่น 2-8°C' : 'e.g. 2-8°C'} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'หมายเหตุ' : 'Remarks'}</label>
+                <textarea rows={2} value={editDoc.remarks} onChange={(e) => setEditDoc({ ...editDoc, remarks: e.target.value })} className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowEditDocModal(false)} disabled={editDocLoading} className="px-5 py-2.5 border border-[var(--color-beige)] rounded-lg font-medium hover:bg-[var(--color-off-white)] transition-colors disabled:opacity-50">
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button onClick={handleEditDocSubmit} disabled={editDocLoading} className="px-5 py-2.5 bg-[var(--color-gold)] text-white rounded-lg font-medium hover:bg-[var(--color-gold-dark)] disabled:opacity-50 transition-colors">
+                {editDocLoading ? (locale === 'th' ? 'กำลังบันทึก...' : 'Saving...') : (locale === 'th' ? 'บันทึก' : 'Save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reopen Modal */}
+      {showReopenModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-1">{locale === 'th' ? 'ดึงกลับมาแก้ไข' : 'Reopen for Editing'}</h3>
+            <p className="text-sm text-[var(--color-foreground-muted)] mb-4">
+              {locale === 'th'
+                ? 'ใบส่งจะกลับไปสถานะ "รออนุมัติ" — สินค้าถูกดึงกลับ (ส่งออกแล้ว→รอส่งออก) และยอด PO ปรับคืน จากนั้นแก้ไขแล้วอนุมัติใหม่'
+                : 'The outbound returns to PENDING — items revert (shipped→pending-out) and PO totals roll back. Then edit and re-approve.'}
+            </p>
+            <label className="block text-sm font-medium mb-1">{locale === 'th' ? 'เหตุผล (ไม่บังคับ)' : 'Reason (optional)'}</label>
+            <textarea
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-[var(--color-beige)] rounded-lg focus:outline-none focus:border-[var(--color-gold)]"
+              placeholder={locale === 'th' ? 'เช่น แก้เลขที่ใบกำกับภาษีผิด' : 'e.g. wrong tax invoice no.'}
+            />
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowReopenModal(false)} disabled={reopenLoading} className="px-5 py-2.5 border border-[var(--color-beige)] rounded-lg font-medium hover:bg-[var(--color-off-white)] disabled:opacity-50">
+                {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button onClick={handleReopen} disabled={reopenLoading} className="px-5 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50">
+                {reopenLoading ? (locale === 'th' ? 'กำลังดำเนินการ...' : 'Processing...') : (locale === 'th' ? 'ยืนยันดึงกลับ' : 'Confirm Reopen')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reject Modal */}
       {showRejectModal && (

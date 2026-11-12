@@ -40,6 +40,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
                     nameEn: true,
                     modelSize: true,
                     category: { select: { nameTh: true, nameEn: true } },
+                    documentUnit: { select: { nameTh: true, nameEn: true } },
                   },
                 },
               },
@@ -106,13 +107,41 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       return errorResponse(`Transaction is already ${transaction.status}`)
     }
 
-    // Only BORROW type requires approval
-    if (transaction.type !== 'BORROW') {
-      return errorResponse('Only borrow transactions require approval')
+    // BORROW / RETURN / REQUISITION / PRODUCT_RETURN all go through approval now
+    if (!['BORROW', 'RETURN', 'REQUISITION', 'PRODUCT_RETURN'].includes(transaction.type)) {
+      return errorResponse('This transaction type does not require approval')
     }
 
     if (action === 'reject' && !rejectedReason?.trim()) {
       return errorResponse('Rejection reason is required')
+    }
+
+    // Re-validate at approval time: the item status change is deferred to approval, so a
+    // request can go stale (the item's status changed via another flow after the request was
+    // created) or the same item can sit in two pending requests. Approving blindly would then
+    // corrupt stock (e.g. flip an item that was already returned back to REQUISITIONED). Guard
+    // by requiring every line's item to still be in the expected SOURCE status for this type.
+    if (action === 'approve') {
+      const sourceByType: Record<string, ProductStatus[]> = {
+        BORROW: [ProductStatus.IN_STOCK],
+        RETURN: [ProductStatus.BORROWED],
+        REQUISITION: [ProductStatus.BORROWED],
+        PRODUCT_RETURN: [ProductStatus.SHIPPED, ProductStatus.ACTIVATED],
+      }
+      const allowedSource = sourceByType[transaction.type]
+      if (allowedSource) {
+        const mismatched = transaction.lines.filter(
+          (line) => !allowedSource.includes(line.productItem.status)
+        )
+        if (mismatched.length > 0) {
+          const serials = mismatched.map((l) => l.productItem.serial12).join(', ')
+          return errorResponse(
+            `ไม่สามารถอนุมัติได้: มีสินค้า ${mismatched.length} รายการที่สถานะเปลี่ยนไปแล้ว ` +
+              `(ต้องเป็น ${allowedSource.join('/')}) — คำขออาจถูกดำเนินการไปแล้วหรือหมดอายุ: ${serials}`,
+            400
+          )
+        }
+      }
     }
 
     // Update transaction
@@ -128,23 +157,62 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
           },
         })
 
-        // Update all product items to BORROWED status
-        for (const line of transaction.lines) {
-          await tx.productItem.update({
-            where: { id: line.productItemId },
-            data: { status: ProductStatus.BORROWED },
-          })
+        // Apply the item status change that matches this transaction type (deferred until approval)
+        const statusByType: Record<string, ProductStatus> = {
+          BORROW: ProductStatus.BORROWED,
+          RETURN: ProductStatus.IN_STOCK,
+          REQUISITION: ProductStatus.REQUISITIONED,
+          PRODUCT_RETURN: ProductStatus.RETURNED,
+        }
+        const eventByType: Record<string, string> = {
+          BORROW: 'BORROW',
+          RETURN: 'BORROW_RETURN',
+          REQUISITION: 'REQUISITION_OUT',
+          PRODUCT_RETURN: 'RETURN',
+        }
+        const targetStatus = statusByType[transaction.type] ?? ProductStatus.BORROWED
+        const eventType = eventByType[transaction.type] ?? 'BORROW'
 
-          // Log the borrow event
+        // Allowed source status per type, re-checked atomically here (not just in the pre-flight
+        // guard above) so two concurrent approvals of pending requests for the SAME item can't
+        // both flip it — the losing one's conditional update matches 0 rows and aborts the tx.
+        const sourceByType: Record<string, ProductStatus[]> = {
+          BORROW: [ProductStatus.IN_STOCK],
+          RETURN: [ProductStatus.BORROWED],
+          REQUISITION: [ProductStatus.BORROWED],
+          PRODUCT_RETURN: [ProductStatus.SHIPPED, ProductStatus.ACTIVATED],
+        }
+        const allowedSource = sourceByType[transaction.type]
+
+        for (const line of transaction.lines) {
+          if (allowedSource) {
+            const flipped = await tx.productItem.updateMany({
+              where: { id: line.productItemId, status: { in: allowedSource } },
+              data: { status: targetStatus },
+            })
+            if (flipped.count === 0) {
+              throw new Error('STALE_ITEM')
+            }
+          } else {
+            await tx.productItem.update({
+              where: { id: line.productItemId },
+              data: { status: targetStatus },
+            })
+          }
+
           await tx.eventLog.create({
             data: {
-              eventType: 'BORROW',
+              eventType,
               productItemId: line.productItemId,
               userId: user.userId,
               details: {
                 transactionNo: transaction.transactionNo,
+                type: transaction.type,
                 borrowerName: transaction.borrowerName,
                 approvedBy: user.displayName,
+                ...(transaction.requisitionType ? { requisitionType: transaction.requisitionType } : {}),
+                ...(transaction.reason ? { reason: transaction.reason } : {}),
+                ...(transaction.remarks ? { notes: transaction.remarks } : {}),
               },
             },
           })
@@ -177,6 +245,9 @@ async function handlePATCH(request: NextRequest, context: HandlerContext) {
       message,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'STALE_ITEM') {
+      return errorResponse('สถานะสินค้าบางรายการเปลี่ยนไปแล้ว (อาจถูกดำเนินการโดยคำขออื่น) กรุณาตรวจสอบแล้วลองใหม่', 409)
+    }
     console.error('Approve/Reject borrow transaction error:', error)
     return errors.internalError()
   }

@@ -24,13 +24,15 @@ interface BorrowTransactionLine {
 
 interface BorrowTransactionData {
   transactionNo: string
-  type: 'BORROW' | 'RETURN'
+  type: 'BORROW' | 'RETURN' | 'REQUISITION' | 'PRODUCT_RETURN'
   borrowerName: string
   clinicName: string | null
   clinicAddress: string | null
   taxInvoiceRef: string | null
   reason: string | null
   remarks: string | null
+  requisitionType: string | null // 'DEMON' | 'CLAIM' | 'MARKETING' | 'OTHER'
+  requisitionTypeOther: string | null
   createdAt: string
   approvedAt: string | null
   approvedBy: string | null
@@ -95,9 +97,10 @@ export async function generateBorrowTransactionPDF(data: BorrowTransactionData):
       doc.text(label, x + 6, y)
     }
 
-    drawCheckbox(50, checkY, false, 'รับคืน')
+    drawCheckbox(50, checkY, data.type === 'PRODUCT_RETURN', 'รับคืน')
     drawCheckbox(85, checkY, data.type === 'BORROW', 'ยืมสินค้า')
     drawCheckbox(130, checkY, data.type === 'RETURN', 'คืนสินค้า')
+    drawCheckbox(165, checkY, data.type === 'REQUISITION', 'เบิกไปใช้')
 
     // === FORM FIELDS ===
     const startY = 42
@@ -141,8 +144,21 @@ export async function generateBorrowTransactionPDF(data: BorrowTransactionData):
     doc.line(15 + 40, row5Y, 195, row5Y)
     doc.text(data.reason || '', 15 + 42, row5Y)
 
+    // Row 6: Requisition type (checkboxes) — ประเภทการเบิก
+    const row6Y = row5Y + 10
+    doc.text('ประเภทการเบิก', 15, row6Y)
+    drawCheckbox(50, row6Y, data.requisitionType === 'DEMON', 'Demon')
+    drawCheckbox(80, row6Y, data.requisitionType === 'CLAIM', 'Claim')
+    drawCheckbox(110, row6Y, data.requisitionType === 'MARKETING', 'Marketing')
+    const otherLabel =
+      'Other (ระบุ)' +
+      (data.requisitionType === 'OTHER' && data.requisitionTypeOther
+        ? `  ${data.requisitionTypeOther}`
+        : '')
+    drawCheckbox(150, row6Y, data.requisitionType === 'OTHER', otherLabel)
+
     // === ITEMS TABLE ===
-    const tableStartY = row5Y + 10
+    const tableStartY = row6Y + 10
 
     const tableData = data.lines.map((line, index) => [
       (index + 1).toString(),
@@ -190,7 +206,7 @@ export async function generateBorrowTransactionPDF(data: BorrowTransactionData):
     })
 
     // Get final Y position after table
-    const finalY = (doc as any).lastAutoTable.finalY + 15
+    const finalY = doc.lastAutoTable.finalY + 15
 
     // === SIGNATURE SECTION ===
     // Re-set font after autoTable (autoTable may reset the font)

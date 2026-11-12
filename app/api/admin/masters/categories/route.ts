@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { ProductStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { withAdmin, withWarehouse } from '@/lib/api-middleware'
 import { successResponse, errorResponse, errors } from '@/lib/api-response'
@@ -86,6 +87,22 @@ export const PATCH = withAdmin(async (request: NextRequest) => {
       })
       if (current && current.serialCode !== newSerialCode) {
         oldSerialCode = current.serialCode
+      }
+    }
+
+    // Changing serialCode rewrites serial12 of EVERY item in this category (below), including
+    // SHIPPED/ACTIVATED units whose QR labels are already printed and in customers' hands —
+    // which would break verification of already-distributed products. Block it when the
+    // category has any item that has left PENDING_LINK, unless an explicit `force` flag is sent.
+    if (oldSerialCode && newSerialCode) {
+      const distributedCount = await prisma.productItem.count({
+        where: { categoryId: body.id, status: { not: ProductStatus.PENDING_LINK } },
+      })
+      if (distributedCount > 0 && !body.force) {
+        return errorResponse(
+          `ไม่สามารถเปลี่ยนรหัส Serial ของหมวดนี้ได้: มีสินค้า ${distributedCount} รายการที่ผูก serial แล้ว (ออกจากคลัง/ใช้งานแล้ว) — การเปลี่ยนจะทำให้ serial12 และ QR ที่พิมพ์/แจกไปแล้วใช้ไม่ได้`,
+          400
+        )
       }
     }
 

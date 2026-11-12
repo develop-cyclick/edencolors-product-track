@@ -12,8 +12,7 @@ interface ThaiDateInputProps {
 function formatThaiDate(isoDate: string): string {
   if (!isoDate) return '';
   const [year, month, day] = isoDate.split('-');
-  const buddhistYear = parseInt(year) + 543;
-  return `${day}/${month}/${buddhistYear}`;
+  return `${day}/${month}/${year}`;
 }
 
 export default function ThaiDateInput({ value, onChange, className, required }: ThaiDateInputProps) {

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { withRoles } from '@/lib/api-middleware'
 import * as XLSX from 'xlsx'
 import type { JWTPayload } from '@/lib/auth'
+import { formatDate as gDate } from '@/lib/format-date'
 
 type RouteParams = Promise<{ id: string }>
 type HandlerContext = { user: JWTPayload; params?: RouteParams }
@@ -32,6 +33,11 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
             productItem: {
               include: {
                 category: { select: { id: true, nameTh: true } },
+                productMaster: {
+                  select: {
+                    documentUnit: { select: { nameTh: true, nameEn: true } },
+                  },
+                },
               },
             },
             unit: { select: { id: true, nameTh: true } },
@@ -52,21 +58,21 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       ['ใบรับสินค้า (GRN)'],
       [],
       ['เลขที่ GRN', grn.grnNo],
-      ['วันที่รับ', grn.receivedAt ? new Date(grn.receivedAt).toLocaleDateString('th-TH') : '-'],
+      ['วันที่รับ', grn.receivedAt ? gDate(grn.receivedAt) : '-'],
       ['คลังสินค้า', grn.warehouse.name],
       ['เลขที่ PO', grn.poNo || '-'],
       [],
       ['ข้อมูลผู้จัดส่ง'],
       ['ชื่อผู้ขาย', grn.supplierName],
       ['Delivery Note No.', grn.deliveryNoteNo || '-'],
-      ['วันที่เอกสาร', grn.deliveryDocDate ? new Date(grn.deliveryDocDate).toLocaleDateString('th-TH') : '-'],
+      ['วันที่เอกสาร', grn.deliveryDocDate ? gDate(grn.deliveryDocDate) : '-'],
       ['เบอร์โทร', grn.supplierPhone || '-'],
       ['ผู้ติดต่อ', grn.supplierContact || '-'],
       ['ที่อยู่', grn.supplierAddress || '-'],
       [],
       ['ผู้ตรวจรับ', grn.receivedBy.displayName],
       ['ผู้อนุมัติ', grn.approvedBy?.displayName || '-'],
-      ['วันที่อนุมัติ', grn.approvedAt ? new Date(grn.approvedAt).toLocaleDateString('th-TH') : '-'],
+      ['วันที่อนุมัติ', grn.approvedAt ? gDate(grn.approvedAt) : '-'],
       ['หมายเหตุ', grn.remarks || '-'],
     ]
     const headerSheet = XLSX.utils.aoa_to_sheet(headerData)
@@ -82,9 +88,9 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
       'หมวดหมู่': line.productItem?.category?.nameTh || '-',
       'รุ่น/ขนาด': line.modelSize || '-',
       'Lot': line.lot || '-',
-      'วันผลิต': line.mfgDate ? new Date(line.mfgDate).toLocaleDateString('th-TH') : '-',
-      'วันหมดอายุ': line.expDate ? new Date(line.expDate).toLocaleDateString('th-TH') : '-',
-      'หน่วย': line.unit?.nameTh || '-',
+      'วันผลิต': line.mfgDate ? gDate(line.mfgDate) : '-',
+      'วันหมดอายุ': line.expDate ? gDate(line.expDate) : '-',
+      'หน่วย': line.productItem?.productMaster?.documentUnit?.nameTh ?? line.unit?.nameTh ?? '-',
       'หมายเหตุ': line.remarks || '-',
     }))
     const linesSheet = XLSX.utils.json_to_sheet(linesData)

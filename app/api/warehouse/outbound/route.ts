@@ -181,8 +181,16 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
       : []
 
     if (hasFifoLines) {
+      // Aggregate the requested quantity per ProductMaster BEFORE selecting: duplicate line
+      // rows for the same product would otherwise each pull the SAME FIFO serials, double-
+      // booking stock and over-allocating beyond what's actually available.
+      const fifoQtyByPm = new Map<number, number>()
+      for (const l of body.linesByProductMaster!) {
+        fifoQtyByPm.set(l.productMasterId, (fifoQtyByPm.get(l.productMasterId) || 0) + l.quantity)
+      }
+      const aggregatedFifoLines = Array.from(fifoQtyByPm, ([productMasterId, quantity]) => ({ productMasterId, quantity }))
       // FIFO selection for each ProductMaster
-      for (const pmLine of body.linesByProductMaster!) {
+      for (const pmLine of aggregatedFifoLines) {
         // Get ProductMaster info
         const productMaster = await prisma.productMaster.findUnique({
           where: { id: pmLine.productMasterId },
@@ -299,7 +307,20 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
         },
       })
 
-      // Create outbound lines and update product status
+      // Atomically reserve the selected items. updateMany only flips rows that are STILL
+      // IN_STOCK; if a concurrent outbound (or a duplicate line in this request) already took
+      // some, the affected count won't equal the number we intend to reserve and we abort the
+      // whole transaction — preventing double-allocation and overselling.
+      const selectedItemIds = selectedItems.map((s) => s.productItem.id)
+      const reserved = await tx.productItem.updateMany({
+        where: { id: { in: selectedItemIds }, status: 'IN_STOCK' },
+        data: { status: 'PENDING_OUT', assignedClinicId: body.clinicId },
+      })
+      if (reserved.count !== selectedItems.length) {
+        throw new Error('STOCK_CONFLICT')
+      }
+
+      // Create outbound lines
       const createdLines = []
 
       for (const selected of selectedItems) {
@@ -327,15 +348,6 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
             lot: productItem.lot,
             expDate: productItem.expDate,
             itemStatus: 'ปกติ',
-          },
-        })
-
-        // Update product status to PENDING_OUT and assign clinic
-        await tx.productItem.update({
-          where: { id: productItem.id },
-          data: {
-            status: 'PENDING_OUT',
-            assignedClinicId: body.clinicId,
           },
         })
 
@@ -374,6 +386,9 @@ async function handlePOST(request: NextRequest, context: HandlerContext) {
     }, 201)
   } catch (error: unknown) {
     console.error('Create Outbound error:', error)
+    if (error instanceof Error && error.message === 'STOCK_CONFLICT') {
+      return errorResponse('สินค้าบางรายการถูกจอง/จ่ายออกโดยรายการอื่นแล้ว กรุณาตรวจสอบสต็อกแล้วลองใหม่', 409)
+    }
     // Handle unique constraint violation on delivery_note_no
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return errorResponse('เลขที่ใบส่งสินค้า (IV No.) ซ้ำ กรุณาเว้นว่างเพื่อให้ระบบสร้างอัตโนมัติ หรือระบุเลขใหม่', 409)

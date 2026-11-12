@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { loadSarabunFont } from './fonts/sarabun-font';
 import { MonthlySummary } from './analytics-queries';
+import { formatDate as gDate, formatMonth as gMonth } from './format-date';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -19,20 +20,15 @@ interface MonthlySummaryPDFOptions {
 /**
  * Format month for display
  */
-function formatMonth(month: string, locale: string): string {
-  const date = new Date(`${month}-01`);
-  if (locale === 'th') {
-    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
-  }
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+function formatMonth(month: string): string {
+  return gMonth(`${month}-01`);
 }
 
 /**
  * Format month for Thai display (separate function for consistency)
  */
 function formatMonthThai(month: string): string {
-  const date = new Date(`${month}-01`);
-  return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
+  return gMonth(`${month}-01`);
 }
 
 /**
@@ -81,16 +77,8 @@ export async function generateMonthlySummaryPDF(
 
     // Add generation date
     const genDate = options.locale === 'th'
-      ? `สร้างเมื่อ: ${new Date().toLocaleDateString('th-TH', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        })}`
-      : `Generated: ${new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        })}`;
+      ? `สร้างเมื่อ: ${gDate(new Date())}`
+      : `Generated: ${gDate(new Date())}`;
     doc.setFontSize(10);
     doc.text(genDate, 148.5, 28, { align: 'center' });
 
@@ -120,7 +108,7 @@ export async function generateMonthlySummaryPDF(
         ];
 
     const rows = summaries.map(s => [
-      formatMonth(s.month, options.locale),
+      formatMonth(s.month),
       s.grnCount.toString(),
       s.itemsReceived.toString(),
       s.poCount.toString(),

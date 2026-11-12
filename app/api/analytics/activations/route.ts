@@ -62,11 +62,14 @@ async function handleGET(request: NextRequest, _context: HandlerContext) {
       where.province = province;
     }
 
-    // Date range filter
-    if (startDate && endDate) {
+    // Date range filter — apply start/end independently, and make the end date day-INCLUSIVE
+    // (lt endDate+1day) so activations later than midnight on the end day aren't dropped.
+    if (startDate || endDate) {
+      const endExclusive = endDate ? new Date(endDate) : null;
+      if (endExclusive) endExclusive.setDate(endExclusive.getDate() + 1);
       where.createdAt = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        ...(startDate ? { gte: new Date(startDate) } : {}),
+        ...(endExclusive ? { lt: endExclusive } : {}),
       };
     }
 

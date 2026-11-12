@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useConfirm, useAlert } from '@/components/ui/confirm-modal'
+import { formatDate as gDate } from '@/lib/format-date'
 
 interface User {
   id: number
@@ -309,11 +310,7 @@ export default function UsersPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return gDate(dateStr)
   }
 
   const getRoleBadge = (role: string) => {

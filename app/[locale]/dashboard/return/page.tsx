@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useAlert } from '@/components/ui/confirm-modal'
+import { formatDateTime as gDateTime } from '@/lib/format-date'
 
 interface ReturnedProduct {
   id: number
@@ -152,7 +153,9 @@ export default function ReturnPage() {
     setSelectedLotProducts([])
 
     try {
-      const res = await fetch(`/api/warehouse/products?lot=${encodeURIComponent(searchLot.trim())}&status=SHIPPED,ACTIVATED`)
+      // Fetch the ENTIRE lot — the products API defaults to limit=50, which would
+      // silently truncate large lots so "select all → return whole lot" drops items.
+      const res = await fetch(`/api/warehouse/products?lot=${encodeURIComponent(searchLot.trim())}&status=SHIPPED,ACTIVATED&limit=100000`)
 
       if (!res.ok) {
         const errorText = await res.text()
@@ -321,18 +324,15 @@ export default function ReturnPage() {
   // Format date
   const formatDate = (dateStr: string | undefined) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(locale === 'th' ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return gDateTime(dateStr)
   }
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; dot: string; label: string; labelEn: string }> = {
       IN_STOCK: { bg: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'ในคลัง', labelEn: 'In Stock' },
+      REQUISITIONED: { bg: 'bg-teal-100 text-teal-700', dot: 'bg-teal-500', label: 'เบิกใช้', labelEn: 'Requisitioned' },
+      BORROWED: { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500', label: 'ยืมอยู่', labelEn: 'Borrowed' },
+      PENDING_LINK: { bg: 'bg-slate-100 text-slate-700', dot: 'bg-slate-500', label: 'รอเชื่อมโยง', labelEn: 'Pending Link' },
       PENDING_OUT: { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'รอส่งออก', labelEn: 'Pending' },
       ACTIVATED: { bg: 'bg-[var(--color-mint)]/10 text-[var(--color-mint-dark)]', dot: 'bg-[var(--color-mint)]', label: 'เปิดใช้งานแล้ว', labelEn: 'Activated' },
       SHIPPED: { bg: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500', label: 'ส่งออกแล้ว', labelEn: 'Shipped' },

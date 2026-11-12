@@ -4,6 +4,7 @@ import { errors } from '@/lib/api-response';
 import { getMonthlySummary } from '@/lib/analytics-queries';
 import { generateMonthlySummaryPDF } from '@/lib/pdf-monthly-summary';
 import { generateExcelBuffer } from '@/lib/excel-export';
+import { formatDate as gDate, formatMonth as gMonth } from '@/lib/format-date';
 import prisma from '@/lib/prisma';
 
 interface TransactionItem {
@@ -130,10 +131,7 @@ async function handlePOST(request: NextRequest) {
         };
       });
 
-      const formatDT = (d: string) =>
-        new Date(d).toLocaleDateString(th ? 'th-TH' : 'en-US', {
-          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-        });
+      const formatDT = (d: string) => gDate(d);
 
       const sheets = [
         {
@@ -184,11 +182,7 @@ async function handlePOST(request: NextRequest) {
     }
 
     if (format === 'excel') {
-      const monthName = (m: string) => {
-        const [y, mo] = m.split('-');
-        const date = new Date(parseInt(y), parseInt(mo) - 1);
-        return date.toLocaleDateString(th ? 'th-TH' : 'en-US', { year: 'numeric', month: 'short' });
-      };
+      const monthName = (m: string) => gMonth(`${m}-01`);
 
       const sheets = [
         {

@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { createToken, verifyToken, JWTPayload } from './auth'
+import prisma from './prisma'
 
 const COOKIE_NAME = 'auth_token'
 const COOKIE_OPTIONS = {
@@ -30,7 +31,29 @@ export async function getCurrentUser(): Promise<JWTPayload | null> {
     return null
   }
 
-  return verifyToken(token)
+  const payload = await verifyToken(token)
+  if (!payload) {
+    return null
+  }
+
+  // Re-validate the token against the DB on every request. The JWT is long-lived (7 days)
+  // and has no server-side revocation, so without this a deactivated or demoted user would
+  // keep full access until the token expires. Reject if the account is gone/disabled, and
+  // always authorize with the CURRENT role from the DB, not the (possibly stale) token role.
+  const dbUser = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { isActive: true, role: true, username: true, displayName: true },
+  })
+  if (!dbUser || !dbUser.isActive) {
+    return null
+  }
+
+  return {
+    ...payload,
+    role: dbUser.role,
+    username: dbUser.username,
+    displayName: dbUser.displayName,
+  }
 }
 
 /**

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAlert } from '@/components/ui/confirm-modal';
+import { formatDate as gDate, formatMonth as gMonth } from '@/lib/format-date';
 
 interface MonthlySummary {
   month: string;
@@ -191,29 +192,15 @@ export default function MonthlySummaryPage() {
   };
 
   const formatMonth = (month: string) => {
-    const date = new Date(`${month}-01`);
-    return date.toLocaleDateString(th ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'long',
-    });
+    return gMonth(`${month}-01`);
   };
 
   const formatDate = () => {
-    return new Date().toLocaleDateString(th ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return gDate(new Date());
   };
 
   const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(th ? 'th-TH' : 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return gDate(dateStr);
   };
 
   const getStatusLabel = (type: string, status: string) => {

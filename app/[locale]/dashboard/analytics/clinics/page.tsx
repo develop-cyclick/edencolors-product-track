@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { formatDate as gDate } from '@/lib/format-date';
 import ActivationRateBadge from '@/components/analytics/activation-rate-badge';
 
 interface Clinic {
@@ -297,9 +298,7 @@ export default function ClinicsPage() {
                   </td>
                   <td className="py-3 px-4 text-right text-[#666666] text-sm">
                     {clinic.lastActivationDate
-                      ? new Date(clinic.lastActivationDate).toLocaleDateString(
-                          locale === 'th' ? 'th-TH' : 'en-US'
-                        )
+                      ? gDate(clinic.lastActivationDate)
                       : '-'}
                   </td>
                 </tr>

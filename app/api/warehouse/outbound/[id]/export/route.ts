@@ -35,6 +35,11 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
             productItem: {
               include: {
                 category: { select: { id: true, nameTh: true, nameEn: true } },
+                productMaster: {
+                  select: {
+                    documentUnit: { select: { nameTh: true, nameEn: true } },
+                  },
+                },
               },
             },
             unit: { select: { id: true, nameTh: true, nameEn: true } },
@@ -69,7 +74,7 @@ async function handleGET(_request: NextRequest, context: HandlerContext) {
         lot: line.lot,
         expDate: line.expDate ? line.expDate.toISOString() : null,
         serial12: line.productItem?.serial12 || '',
-        unit: line.unit?.nameTh || null,
+        unit: line.productItem?.productMaster?.documentUnit?.nameTh ?? line.unit?.nameTh ?? null,
       })),
       remarks: outbound.remarks,
     }

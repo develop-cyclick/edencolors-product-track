@@ -3,6 +3,7 @@ import { withAnalytics } from '@/lib/api-middleware'
 import { errors } from '@/lib/api-response'
 import { getClinicStats } from '@/lib/analytics-queries'
 import { generateExcelBuffer } from '@/lib/excel-export'
+import { formatDate as gDate } from '@/lib/format-date'
 
 async function handlePOST(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ async function handlePOST(request: NextRequest) {
           c.totalActivated,
           c.activationRate,
           c.avgDaysToActivation,
-          c.lastActivationDate ? new Date(c.lastActivationDate).toLocaleDateString('th-TH') : '-',
+          c.lastActivationDate ? gDate(c.lastActivationDate) : '-',
         ]),
       },
     ]
